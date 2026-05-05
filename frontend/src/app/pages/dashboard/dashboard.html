@@ -1,0 +1,185 @@
+<section class="max-w-7xl mx-auto px-6 py-10">
+  <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight">Dashboard</h1>
+      <p class="text-slate-400 mt-1">
+        Apuestas con valor (EV positivo) detectadas en partidos próximos. Calculamos la
+        probabilidad real con el bookie de menor margen y la comparamos contra el resto.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button (click)="reload()"
+              [disabled]="loading() || refreshing()"
+              class="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700 transition-colors text-sm disabled:opacity-50">
+        Recalcular
+      </button>
+      <button (click)="refreshDaily()"
+              [disabled]="refreshingDaily()"
+              class="px-4 py-2 rounded-lg bg-cyan-500/10 border border-cyan-400/40 text-cyan-300 hover:bg-cyan-500/20 transition-colors text-sm disabled:opacity-50 flex items-center gap-2"
+              title="Actualiza resultados de partidos jugados + estadísticas post-partido (xG, tiros, córners…). Sin coste.">
+        @if (refreshingDaily()) {
+          <span class="inline-block w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></span>
+          <span>Pipeline diario…</span>
+        } @else {
+          <span>Pipeline diario</span>
+          <span class="text-xs text-cyan-400/70">gratis · resultados + stats</span>
+        }
+      </button>
+      <button (click)="refreshAll()"
+              [disabled]="refreshing()"
+              class="px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-400/40 text-emerald-300 hover:bg-emerald-500/20 transition-colors text-sm disabled:opacity-50 flex items-center gap-2">
+        @if (refreshing()) {
+          <span class="inline-block w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></span>
+          <span>Actualizando…</span>
+        } @else {
+          <span>Refrescar cuotas</span>
+          <span class="text-xs text-emerald-400/70">~16 créditos</span>
+        }
+      </button>
+    </div>
+  </div>
+
+  @if (lastRefresh(); as r) {
+    <div class="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div class="text-emerald-300 font-medium">
+          ✓ Refresco completado en {{ r.duration_seconds.toFixed(1) }} s
+        </div>
+        <div class="text-slate-300 text-xs flex flex-wrap gap-x-4 gap-y-1">
+          <span>{{ r.leagues_ok }}/{{ r.leagues_total }} ligas OK</span>
+          <span>{{ r.odds_inserted }} cuotas frescas</span>
+          <span>{{ r.snapshots_deleted }} snapshots viejos borrados</span>
+          @if (r.past_matches_deleted > 0) {
+            <span>{{ r.past_matches_deleted }} partidos pasados borrados</span>
+          }
+          @if (r.requests_remaining != null) {
+            <span class="text-amber-300">{{ r.requests_remaining }} créditos restantes</span>
+          }
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (lastDailyRefresh(); as dr) {
+    <div class="mb-6 rounded-xl border p-4 text-sm"
+         [class.border-cyan-500/20]="dr.ok" [class.bg-cyan-500/5]="dr.ok"
+         [class.border-rose-500/30]="!dr.ok" [class.bg-rose-500/5]="!dr.ok">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <div class="font-medium" [class.text-cyan-300]="dr.ok" [class.text-rose-300]="!dr.ok">
+          {{ dr.ok ? '✓' : '⚠' }} Pipeline diario completado en {{ dr.duration_seconds.toFixed(1) }} s
+        </div>
+        <div class="text-slate-300 text-xs flex flex-wrap gap-x-4 gap-y-1">
+          @if (dr.results) {
+            <span>{{ dr.results.total_updated }} resultados nuevos</span>
+            <span>{{ dr.results.total_already_ok }} ya al día</span>
+          }
+          @if (dr.stats) {
+            <span class="text-slate-400">·</span>
+            <span>{{ dr.stats.stats_inserted }} stats nuevas</span>
+            @if (dr.stats.matches_unmatched > 0) {
+              <span class="text-amber-300">{{ dr.stats.matches_unmatched }} sin emparejar</span>
+            }
+          }
+        </div>
+      </div>
+      @if (dr.errors.length > 0) {
+        <div class="text-xs text-rose-300 space-y-0.5 mt-2">
+          @for (e of dr.errors; track $index) {
+            <div>· {{ e }}</div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  @if (loading()) {
+    <div class="text-center py-20 text-slate-400">Cargando value bets...</div>
+  } @else if (error()) {
+    <div class="bg-rose-500/10 border border-rose-400/30 rounded-xl p-6 text-rose-300">
+      <div class="font-medium">No se pudo conectar con la API</div>
+      <div class="text-sm mt-1 opacity-75">{{ error() }}</div>
+      <div class="text-xs mt-3 opacity-60">
+        Asegúrate de que el backend está corriendo en
+        <code class="bg-slate-900/50 px-2 py-0.5 rounded">http://127.0.0.1:8000</code>.
+      </div>
+    </div>
+  } @else {
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+      @for (k of kpis(); track k.label) {
+        <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
+          <div class="text-xs uppercase tracking-wider text-slate-400">{{ k.label }}</div>
+          <div class="text-3xl font-bold mt-2">{{ k.value }}</div>
+          @if (k.hint) {
+            <div class="text-xs text-slate-500 mt-1">{{ k.hint }}</div>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+        <h2 class="font-semibold">Top 10 oportunidades</h2>
+        <a routerLink="/value-bets"
+           class="text-sm text-emerald-300 hover:text-emerald-200">Ver todas →</a>
+      </div>
+
+      @if (topBets().length === 0) {
+        <div class="px-6 py-12 text-center text-slate-400">
+          No hay value bets que cumplan el umbral mínimo.
+        </div>
+      } @else {
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900 text-slate-400 text-xs uppercase tracking-wider">
+              <tr>
+                <th class="px-4 py-3 text-left font-medium">Partido</th>
+                <th class="px-4 py-3 text-left font-medium">Mercado</th>
+                <th class="px-4 py-3 text-left font-medium">Bookie</th>
+                <th class="px-4 py-3 text-right font-medium">Cuota</th>
+                <th class="px-4 py-3 text-right font-medium">EV mercado</th>
+                <th class="px-4 py-3 text-right font-medium">EV modelo</th>
+                <th class="px-4 py-3 text-center font-medium">Confianza</th>
+                <th class="px-4 py-3 text-right font-medium">Fecha</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              @for (b of topBets(); track $index) {
+                <tr class="hover:bg-slate-800/40 transition-colors">
+                  <td class="px-4 py-3">
+                    <div class="font-medium">{{ b.home_team }}</div>
+                    <div class="text-slate-400 text-xs">vs {{ b.away_team }}</div>
+                    <div class="text-slate-500 text-xs mt-0.5">{{ b.league }}</div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="font-medium">{{ outcome(b) }}</div>
+                    <div class="text-slate-500 text-xs">{{ b.market_key }}</div>
+                  </td>
+                  <td class="px-4 py-3 text-slate-300">{{ b.bookmaker_title }}</td>
+                  <td class="px-4 py-3 text-right font-mono">{{ fmtOdds(b.offered_odds) }}</td>
+                  <td class="px-4 py-3 text-right font-mono font-semibold" [class]="evColorClass(b.ev)">
+                    {{ fmtPct(b.ev, 2) }}
+                  </td>
+                  <td class="px-4 py-3 text-right font-mono"
+                      [class]="b.model_ev != null ? evColorClass(b.model_ev) : 'text-slate-500'">
+                    @if (b.model_ev != null) {
+                      {{ fmtPct(b.model_ev, 2) }}
+                    } @else {
+                      <span class="text-xs">n/a</span>
+                    }
+                  </td>
+                  <td class="px-4 py-3 text-center">
+                    <span class="inline-block px-2 py-0.5 rounded-md border text-xs font-medium"
+                          [class]="confidenceClass(b.confidence)">
+                      {{ confidenceLabel(b.confidence) }}
+                    </span>
+                  </td>
+                  <td class="px-4 py-3 text-right text-slate-400 text-xs">{{ fmtDateShort(b.commence_time) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  }
+</section>

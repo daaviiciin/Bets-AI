@@ -1,0 +1,506 @@
+<section class="max-w-7xl mx-auto px-6 py-10">
+  <a routerLink="/matches" class="text-sm text-emerald-300 hover:text-emerald-200">← Volver a partidos</a>
+
+  @if (loading()) {
+    <div class="text-center py-20 text-slate-400">Cargando partido...</div>
+  } @else if (error()) {
+    <div class="bg-rose-500/10 border border-rose-400/30 rounded-xl p-6 text-rose-300 mt-6">{{ error() }}</div>
+  } @else if (match(); as m) {
+    <div class="mt-4 mb-8">
+      <div class="text-sm text-slate-400">{{ m.league.name }}</div>
+      <h1 class="text-3xl font-bold tracking-tight mt-1">
+        {{ m.home_team.name }}
+        <span class="text-slate-500 font-normal">vs</span>
+        {{ m.away_team.name }}
+      </h1>
+      <div class="text-slate-400 mt-2">{{ fmtDate(m.commence_time) }}</div>
+    </div>
+
+    @if (m.status === 'finished' && m.home_score !== null && m.away_score !== null) {
+      <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-6 mb-8 flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <div class="text-xs uppercase tracking-wider text-emerald-300/80">Resultado final</div>
+          <div class="text-4xl font-mono font-bold mt-1">
+            {{ m.home_score }} <span class="text-slate-500">–</span> {{ m.away_score }}
+          </div>
+        </div>
+        <div class="text-sm text-slate-400 text-right">
+          <div>{{ m.home_team.name }} {{ m.home_score! > m.away_score! ? 'gana' : (m.home_score === m.away_score ? 'empata' : 'pierde') }}</div>
+          @if (m.played_at) {
+            <div class="text-xs mt-1">Jugado el {{ fmtDate(m.played_at) }}</div>
+          }
+        </div>
+      </div>
+    }
+
+    @if (stats(); as st) {
+      <div class="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden mb-8">
+        <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 class="font-semibold">Estadísticas del partido</h2>
+            <div class="text-xs text-slate-500 mt-0.5">
+              Vía Flashscore · capturado {{ fmtDate(st.captured_at) }}
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-8 text-center">
+            <div>
+              <div class="text-xs text-slate-500 uppercase tracking-wider">{{ st.home.team.name }}</div>
+              <div class="text-2xl font-mono font-bold text-emerald-300">{{ statValue(st.home.xg) }}</div>
+              <div class="text-[10px] text-slate-500">xG</div>
+            </div>
+            <div>
+              <div class="text-xs text-slate-500 uppercase tracking-wider">{{ st.away.team.name }}</div>
+              <div class="text-2xl font-mono font-bold text-cyan-300">{{ statValue(st.away.xg) }}</div>
+              <div class="text-[10px] text-slate-500">xG</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <!-- Tiros principales -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+            @for (row of [
+              { label: 'Posesión', h: st.home.possession_pct, a: st.away.possession_pct, suffix: '%' },
+              { label: 'Tiros totales', h: st.home.shots_total, a: st.away.shots_total, suffix: '' },
+              { label: 'Tiros a puerta', h: st.home.shots_on_target, a: st.away.shots_on_target, suffix: '', highlight: true },
+              { label: 'Ocasiones claras', h: st.home.big_chances, a: st.away.big_chances, suffix: '' },
+              { label: 'Tiros dentro área', h: st.home.shots_inside_box, a: st.away.shots_inside_box, suffix: '' },
+              { label: 'Tiros fuera área', h: st.home.shots_outside_box, a: st.away.shots_outside_box, suffix: '' },
+              { label: 'Córners', h: st.home.corners, a: st.away.corners, suffix: '' },
+              { label: 'Faltas', h: st.home.fouls, a: st.away.fouls, suffix: '' },
+              { label: 'Tarjetas amarillas', h: st.home.yellow_cards, a: st.away.yellow_cards, suffix: '' },
+              { label: 'Fueras de juego', h: st.home.offsides, a: st.away.offsides, suffix: '' },
+            ]; track row.label) {
+              <div class="text-sm">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-mono w-10 text-emerald-300 text-right" [class.text-base]="row.highlight" [class.font-bold]="row.highlight">{{ statValue(row.h) }}{{ row.suffix }}</span>
+                  <span class="text-slate-400 text-xs uppercase tracking-wider mx-2">{{ row.label }}</span>
+                  <span class="font-mono w-10 text-cyan-300" [class.text-base]="row.highlight" [class.font-bold]="row.highlight">{{ statValue(row.a) }}{{ row.suffix }}</span>
+                </div>
+                <div class="h-1 rounded-full bg-slate-800 overflow-hidden flex">
+                  <div class="h-full bg-emerald-400/60" [style.width.%]="statShareHome(row.h, row.a)"></div>
+                  <div class="h-full bg-cyan-400/60 flex-1"></div>
+                </div>
+              </div>
+            }
+          </div>
+
+          <!-- Pases -->
+          <div class="border-t border-slate-800 pt-4 grid grid-cols-3 gap-4 text-sm">
+            <div class="text-center">
+              <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Pases (home)</div>
+              <div class="font-mono text-emerald-300">{{ fmtPasses(st.home.passes_completed, st.home.passes_attempted, st.home.passes_pct) }}</div>
+            </div>
+            <div class="text-center">
+              <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">xG on target</div>
+              <div class="font-mono">
+                <span class="text-emerald-300">{{ statValue(st.home.xg_on_target) }}</span>
+                <span class="text-slate-500 mx-1">·</span>
+                <span class="text-cyan-300">{{ statValue(st.away.xg_on_target) }}</span>
+              </div>
+            </div>
+            <div class="text-center">
+              <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Pases (away)</div>
+              <div class="font-mono text-cyan-300">{{ fmtPasses(st.away.passes_completed, st.away.passes_attempted, st.away.passes_pct) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+
+    @if (analysis(); as a) {
+      @if (a.notes.length > 0) {
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-6 text-amber-200 text-sm mb-8">
+          <div class="font-semibold mb-1">Sin análisis predictivo disponible</div>
+          @for (note of a.notes; track $index) {
+            <div>{{ note }}</div>
+          }
+        </div>
+      } @else {
+        <div class="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden mb-8">
+          <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 class="font-semibold">Análisis predictivo del partido</h2>
+              <div class="text-xs text-slate-500 mt-0.5">
+                Modelo Poisson independiente · media liga {{ fmtLambda(a.league_avg_goals) }} g/p
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="text-center">
+                <div class="text-xs text-slate-500 uppercase tracking-wider">λ {{ a.home.name }}</div>
+                <div class="text-2xl font-mono font-bold text-emerald-300">{{ fmtLambda(a.expected_goals_home) }}</div>
+              </div>
+              <div class="text-slate-600 text-2xl">·</div>
+              <div class="text-center">
+                <div class="text-xs text-slate-500 uppercase tracking-wider">λ {{ a.away.name }}</div>
+                <div class="text-2xl font-mono font-bold text-emerald-300">{{ fmtLambda(a.expected_goals_away) }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800">
+            <div class="p-6">
+              <div class="text-sm text-slate-400 mb-3 font-semibold">{{ a.home.name }} (local)</div>
+              <div class="grid grid-cols-3 gap-3 text-sm">
+                <div>
+                  <div class="text-xs text-slate-500">PJ</div>
+                  <div class="font-mono">{{ formNumber(a.home.matches_played) }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-slate-500">V-E-D</div>
+                  <div class="font-mono">{{ formNumber(a.home.wins) }}-{{ formNumber(a.home.draws) }}-{{ formNumber(a.home.losses) }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-slate-500">Pts</div>
+                  <div class="font-mono">{{ formNumber(a.home.points) }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-slate-500">GF/GC</div>
+                  <div class="font-mono">{{ formNumber(a.home.goals_for) }}/{{ formNumber(a.home.goals_against) }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-slate-500">GF/p</div>
+                  <div class="font-mono">{{ goalsForPerMatch(a.home.goals_for_per_match) }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-slate-500">GC/p</div>
+                  <div class="font-mono">{{ goalsForPerMatch(a.home.goals_against_per_match) }}</div>
+                </div>
+              </div>
+
+              @if (a.home_top_players.length > 0) {
+                <div class="mt-4">
+                  <div class="text-xs text-slate-500 uppercase tracking-wider mb-2">Top atacantes</div>
+                  <table class="w-full text-xs">
+                    <thead class="text-slate-500">
+                      <tr>
+                        <th class="text-left font-medium pb-1">Jugador</th>
+                        <th class="text-right font-medium pb-1">PJ</th>
+                        <th class="text-right font-medium pb-1">Gls</th>
+                        <th class="text-right font-medium pb-1">SoT</th>
+                        <th class="text-right font-medium pb-1">SoT/90</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60">
+                      @for (p of a.home_top_players; track p.name) {
+                        <tr>
+                          <td class="py-1 truncate max-w-[180px]">{{ p.name }}</td>
+                          <td class="text-right font-mono">{{ formNumber(p.matches_played) }}</td>
+                          <td class="text-right font-mono">{{ formNumber(p.goals) }}</td>
+                          <td class="text-right font-mono">{{ formNumber(p.shots_on_target) }}</td>
+                          <td class="text-right font-mono text-emerald-300">{{ fmtPerNine(p.shots_on_target_per_90) }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            </div>
+
+            <div class="p-6">
+              <div class="text-sm text-slate-400 mb-3 font-semibold">{{ a.away.name }} (visitante)</div>
+              <div class="grid grid-cols-3 gap-3 text-sm">
+                <div>
+                  <div class="text-xs text-slate-500">PJ</div>
+                  <div class="font-mono">{{ formNumber(a.away.matches_played) }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-slate-500">V-E-D</div>
+                  <div class="font-mono">{{ formNumber(a.away.wins) }}-{{ formNumber(a.away.draws) }}-{{ formNumber(a.away.losses) }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-slate-500">Pts</div>
+                  <div class="font-mono">{{ formNumber(a.away.points) }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-slate-500">GF/GC</div>
+                  <div class="font-mono">{{ formNumber(a.away.goals_for) }}/{{ formNumber(a.away.goals_against) }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-slate-500">GF/p</div>
+                  <div class="font-mono">{{ goalsForPerMatch(a.away.goals_for_per_match) }}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-slate-500">GC/p</div>
+                  <div class="font-mono">{{ goalsForPerMatch(a.away.goals_against_per_match) }}</div>
+                </div>
+              </div>
+
+              @if (a.away_top_players.length > 0) {
+                <div class="mt-4">
+                  <div class="text-xs text-slate-500 uppercase tracking-wider mb-2">Top atacantes</div>
+                  <table class="w-full text-xs">
+                    <thead class="text-slate-500">
+                      <tr>
+                        <th class="text-left font-medium pb-1">Jugador</th>
+                        <th class="text-right font-medium pb-1">PJ</th>
+                        <th class="text-right font-medium pb-1">Gls</th>
+                        <th class="text-right font-medium pb-1">SoT</th>
+                        <th class="text-right font-medium pb-1">SoT/90</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60">
+                      @for (p of a.away_top_players; track p.name) {
+                        <tr>
+                          <td class="py-1 truncate max-w-[180px]">{{ p.name }}</td>
+                          <td class="text-right font-mono">{{ formNumber(p.matches_played) }}</td>
+                          <td class="text-right font-mono">{{ formNumber(p.goals) }}</td>
+                          <td class="text-right font-mono">{{ formNumber(p.shots_on_target) }}</td>
+                          <td class="text-right font-mono text-emerald-300">{{ fmtPerNine(p.shots_on_target_per_90) }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            </div>
+          </div>
+
+          <div class="border-t border-slate-800 p-6 space-y-6">
+            <div>
+              <div class="text-sm font-semibold mb-3">Resultado del partido (1X2)</div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead class="text-slate-500 text-xs uppercase tracking-wider">
+                    <tr>
+                      <th class="text-left font-medium py-2">Selección</th>
+                      <th class="text-right font-medium py-2">Prob. modelo</th>
+                      <th class="text-right font-medium py-2">Cuota justa</th>
+                      <th class="text-right font-medium py-2">Mejor cuota</th>
+                      <th class="text-right font-medium py-2">Prob. implícita</th>
+                      <th class="text-right font-medium py-2">EV</th>
+                      <th class="text-left font-medium py-2 pl-4">Bookmaker</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-800/60">
+                    @for (p of h2hPredictions(); track p.selection) {
+                      <tr [class.bg-emerald-500]="isValuePrediction(p)" class="hover:bg-slate-800/40">
+                        <td class="py-2 font-medium">
+                          {{ p.selection_label }}
+                          @if (isValuePrediction(p)) {
+                            <span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">VALUE</span>
+                          }
+                        </td>
+                        <td class="text-right font-mono">{{ fmtAbsPct(p.fair_probability) }}</td>
+                        <td class="text-right font-mono text-slate-400">{{ fmtOdds(p.fair_odds) }}</td>
+                        <td class="text-right font-mono">
+                          @if (p.best_odds != null) { {{ fmtOdds(p.best_odds) }} } @else { — }
+                        </td>
+                        <td class="text-right font-mono text-slate-400">
+                          @if (p.implied_probability != null) { {{ fmtAbsPct(p.implied_probability) }} } @else { — }
+                        </td>
+                        <td class="text-right font-mono font-semibold" [class]="p.expected_value != null ? evColorClass(p.expected_value) : 'text-slate-600'">
+                          @if (p.expected_value != null) {
+                            {{ p.expected_value > 0 ? '+' : '' }}{{ (p.expected_value * 100).toFixed(1) }}%
+                          } @else { — }
+                        </td>
+                        <td class="pl-4 text-xs text-slate-400">{{ p.bookmaker_key ?? '—' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            @if (totalsPredictions().length > 0) {
+              <div>
+                <div class="text-sm font-semibold mb-3">Totales (Over / Under)</div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead class="text-slate-500 text-xs uppercase tracking-wider">
+                      <tr>
+                        <th class="text-left font-medium py-2">Selección</th>
+                        <th class="text-right font-medium py-2">Prob. modelo</th>
+                        <th class="text-right font-medium py-2">Cuota justa</th>
+                        <th class="text-right font-medium py-2">Mejor cuota</th>
+                        <th class="text-right font-medium py-2">Prob. implícita</th>
+                        <th class="text-right font-medium py-2">EV</th>
+                        <th class="text-left font-medium py-2 pl-4">Bookmaker</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60">
+                      @for (p of totalsPredictions(); track p.market + p.selection) {
+                        <tr class="hover:bg-slate-800/40">
+                          <td class="py-2 font-medium">
+                            {{ p.selection_label }}
+                            @if (isValuePrediction(p)) {
+                              <span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">VALUE</span>
+                            }
+                          </td>
+                          <td class="text-right font-mono">{{ fmtAbsPct(p.fair_probability) }}</td>
+                          <td class="text-right font-mono text-slate-400">{{ fmtOdds(p.fair_odds) }}</td>
+                          <td class="text-right font-mono">
+                            @if (p.best_odds != null) { {{ fmtOdds(p.best_odds) }} } @else { — }
+                          </td>
+                          <td class="text-right font-mono text-slate-400">
+                            @if (p.implied_probability != null) { {{ fmtAbsPct(p.implied_probability) }} } @else { — }
+                          </td>
+                          <td class="text-right font-mono font-semibold" [class]="p.expected_value != null ? evColorClass(p.expected_value) : 'text-slate-600'">
+                            @if (p.expected_value != null) {
+                              {{ p.expected_value > 0 ? '+' : '' }}{{ (p.expected_value * 100).toFixed(1) }}%
+                            } @else { — }
+                          </td>
+                          <td class="pl-4 text-xs text-slate-400">{{ p.bookmaker_key ?? '—' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            }
+
+            @if (bttsPredictions().length > 0) {
+              <div>
+                <div class="text-sm font-semibold mb-3">
+                  Ambos marcan (BTTS)
+                  <span class="text-xs text-slate-500 font-normal">— predicción del modelo, sin cuotas reales en este momento</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3 text-sm">
+                  @for (p of bttsPredictions(); track p.selection) {
+                    <div class="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3"
+                         [class.ring-1]="isValuePrediction(p)"
+                         [class.ring-emerald-400]="isValuePrediction(p)">
+                      <div class="text-xs text-slate-500">{{ p.selection_label }}</div>
+                      <div class="text-2xl font-mono font-bold mt-1">{{ fmtAbsPct(p.fair_probability) }}</div>
+                      <div class="text-xs text-slate-500 mt-0.5">cuota justa {{ fmtOdds(p.fair_odds) }}</div>
+                      @if (p.best_odds != null) {
+                        <div class="mt-2 pt-2 border-t border-slate-800 text-xs">
+                          <div class="text-slate-400">{{ p.bookmaker_key }} · cuota {{ fmtOdds(p.best_odds) }}</div>
+                          @if (p.expected_value != null) {
+                            <div [class]="evColorClass(p.expected_value)" class="font-mono mt-0.5">
+                              EV {{ (p.expected_value * 100).toFixed(2) }}%
+                            </div>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            @if (doubleChancePredictions().length > 0) {
+              <div>
+                <div class="text-sm font-semibold mb-3">
+                  Doble oportunidad (1X · 12 · X2)
+                  <span class="text-xs text-slate-500 font-normal">— predicción del modelo, derivada del 1X2</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                  @for (p of doubleChancePredictions(); track p.selection) {
+                    <div class="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3"
+                         [class.ring-1]="isValuePrediction(p)"
+                         [class.ring-emerald-400]="isValuePrediction(p)">
+                      <div class="text-xs text-slate-500">{{ p.selection_label }}</div>
+                      <div class="text-2xl font-mono font-bold mt-1">{{ fmtAbsPct(p.fair_probability) }}</div>
+                      <div class="text-xs text-slate-500 mt-0.5">cuota justa {{ fmtOdds(p.fair_odds) }}</div>
+                      @if (p.best_odds != null) {
+                        <div class="mt-2 pt-2 border-t border-slate-800 text-xs">
+                          <div class="text-slate-400">{{ p.bookmaker_key }} · cuota {{ fmtOdds(p.best_odds) }}</div>
+                          @if (p.expected_value != null) {
+                            <div [class]="evColorClass(p.expected_value)" class="font-mono mt-0.5">
+                              EV {{ (p.expected_value * 100).toFixed(2) }}%
+                            </div>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+    }
+
+    @if (markets().length === 0) {
+      <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-12 text-center text-slate-400">
+        No hay cuotas almacenadas para este partido.
+      </div>
+    } @else {
+      @if (playerProps(); as pp) {
+        @if (pp.players.length > 0) {
+          <div class="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden mb-8">
+            <div class="px-6 py-4 border-b border-slate-800">
+              <h2 class="font-semibold">Props de jugadores (Winamax)</h2>
+              <div class="text-xs text-slate-500 mt-0.5">
+                Mercados de tiros, tiros a puerta, tarjetas y goleadores.
+              </div>
+            </div>
+            <div class="p-5 space-y-4 max-h-[540px] overflow-auto">
+              @for (pl of pp.players; track pl.player_id) {
+                <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+                  <div class="font-medium mb-2">{{ pl.player_name }}</div>
+                  <div class="space-y-1 text-sm">
+                    @for (entry of marketRows(pl.markets); track entry[0]) {
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-slate-500 text-xs uppercase">{{ entry[0] }}</span>
+                        @for (o of entry[1]; track $index) {
+                          <span class="px-2 py-0.5 rounded-md border border-slate-700 bg-slate-900 font-mono text-xs">
+                            {{ o.outcome_name }} @ {{ fmtOdds(o.odds) }}
+                          </span>
+                        }
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      }
+
+      <div class="space-y-8">
+        @for (mk of markets(); track mk.key) {
+          <div class="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-800">
+              <h2 class="font-semibold">{{ mk.label }}</h2>
+              <div class="text-xs text-slate-500 mt-0.5">
+                {{ mk.bookies.length }} bookmakers · {{ mk.rows.length }} resultado{{ mk.rows.length === 1 ? '' : 's' }}
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-slate-900 text-slate-400 text-xs uppercase tracking-wider">
+                  <tr>
+                    <th class="px-4 py-3 text-left font-medium sticky left-0 bg-slate-900 z-10">Resultado</th>
+                    @for (bookie of mk.bookies; track bookie) {
+                      <th class="px-4 py-3 text-right font-medium">{{ bookie }}</th>
+                    }
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800">
+                  @for (row of mk.rows; track $index) {
+                    <tr class="hover:bg-slate-800/40 transition-colors">
+                      <td class="px-4 py-3 font-medium sticky left-0 bg-slate-900/95 z-10">
+                        {{ row.outcome }}
+                        @if (row.point) {
+                          <span class="text-slate-500">{{ row.point }}</span>
+                        }
+                      </td>
+                      @for (bookie of mk.bookies; track bookie) {
+                        <td class="px-4 py-3 text-right font-mono"
+                            [class.text-emerald-300]="isBest(row, bookie)"
+                            [class.font-semibold]="isBest(row, bookie)"
+                            [class.text-slate-600]="priceFor(row, bookie) === null">
+                          @if (priceFor(row, bookie); as p) {
+                            {{ fmtOdds(p) }}
+                          } @else {
+                            —
+                          }
+                        </td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        }
+      </div>
+      <div class="text-xs text-slate-500 mt-4">
+        Las cuotas resaltadas en verde son las mejores disponibles para ese resultado.
+      </div>
+    }
+  }
+</section>

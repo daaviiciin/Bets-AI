@@ -1,0 +1,52 @@
+<div class="min-h-screen flex flex-col">
+  <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <a routerLink="/" class="flex items-center gap-3 group">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center font-bold text-slate-900">
+          B
+        </div>
+        <div>
+          <div class="font-bold text-lg leading-none">Bets AI</div>
+          <div class="text-xs text-slate-400 leading-none mt-0.5">Value betting · Top 5 ligas</div>
+        </div>
+      </a>
+
+      <nav class="flex items-center gap-1 text-sm">
+        <a routerLink="/"
+           routerLinkActive="bg-slate-800 text-white"
+           [routerLinkActiveOptions]="{ exact: true }"
+           class="px-4 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+          Dashboard
+        </a>
+        <a routerLink="/recommendations"
+           routerLinkActive="bg-slate-800 text-white"
+           class="px-4 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+          Recomendaciones
+        </a>
+        <a routerLink="/value-bets"
+           routerLinkActive="bg-slate-800 text-white"
+           class="px-4 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+          Value Bets
+        </a>
+        <a routerLink="/matches"
+           routerLinkActive="bg-slate-800 text-white"
+           class="px-4 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+          Partidos
+        </a>
+        <a routerLink="/calibracion"
+           routerLinkActive="bg-slate-800 text-white"
+           class="px-4 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+          Calibración
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="flex-1">
+    <router-outlet />
+  </main>
+
+  <footer class="border-t border-slate-800 py-6 text-center text-xs text-slate-500">
+    Bets AI · MVP {{ year }} · Datos vía The Odds API · No es asesoramiento financiero
+  </footer>
+</div>
