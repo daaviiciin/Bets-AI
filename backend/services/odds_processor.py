@@ -20,7 +20,6 @@ Uso:
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import logging
 import sys
@@ -31,6 +30,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.cli_utils import force_utf8_stdio
 from backend.app.config import Settings, get_settings
 from backend.app.database import get_session_factory
 from backend.models import Bookmaker, League, Market, Match, Odds, Snapshot, Team
@@ -40,10 +40,6 @@ from backend.services.schemas import (
     MarketEntry,
     SnapshotFile,
 )
-
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 
 LEAGUE_METADATA: dict[str, tuple[str, str]] = {
@@ -341,6 +337,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    force_utf8_stdio()
     settings: Settings = get_settings()
     _configurar_logging(settings.log_level)
     log = logging.getLogger(__name__)

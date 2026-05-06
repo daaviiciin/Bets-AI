@@ -139,6 +139,58 @@ docker compose up -d
 python -m backend.scrapers.odds_api
 ```
 
+## Cómo levantar el MVP en local
+
+Arrancar todos los servicios (3 terminales):
+
+```powershell
+# 1. Base de datos PostgreSQL
+docker compose up -d
+
+# 2. API FastAPI (backend)
+.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload
+
+# 3. Frontend Angular
+cd frontend
+npm start
+```
+
+URLs disponibles:
+
+| Servicio | URL |
+|---|---|
+| Frontend Angular | http://127.0.0.1:4200 |
+| API FastAPI | http://127.0.0.1:8000 |
+| Swagger UI (docs API) | http://127.0.0.1:8000/docs |
+| ReDoc (docs API) | http://127.0.0.1:8000/redoc |
+
+## Frontend Angular (Fase 5)
+
+Dashboard moderno construido con **Angular 21 + Tailwind CSS v4**:
+
+- **`/`** — Dashboard con KPIs y top 10 oportunidades
+- **`/recommendations`** — Selector de los 4 perfiles + apuestas filtradas y stake calculado
+- **`/value-bets`** — Listado completo con filtros por liga, EV mínimo y mercado
+- **`/matches`** — Próximos partidos agrupados por día
+- **`/matches/:id`** — Tabla comparativa de cuotas entre todos los bookmakers (mejor cuota resaltada)
+
+Componentes lazy-loaded para arranque rápido. Tema oscuro por defecto.
+
+## API REST (Fase 4)
+
+Endpoints principales:
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/` | Health check |
+| `GET` | `/matches` | Lista de partidos próximos (filtrable por liga) |
+| `GET` | `/matches/{id}` | Detalle de un partido |
+| `GET` | `/matches/{id}/odds` | Cuotas capturadas para un partido |
+| `GET` | `/value-bets` | Value bets detectadas (EV+) |
+| `GET` | `/profiles` | Perfiles de apostador disponibles |
+| `GET` | `/profiles/{name}` | Detalle de un perfil |
+| `GET` | `/profiles/{name}/recommendations` | Recomendaciones personalizadas con stake calculado |
+
 ## Estructura del proyecto
 
 ```

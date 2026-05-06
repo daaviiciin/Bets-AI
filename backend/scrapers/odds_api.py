@@ -14,7 +14,6 @@ Uso:
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import logging
 import sys
@@ -24,11 +23,8 @@ from pathlib import Path
 
 import requests
 
+from backend.app.cli_utils import force_utf8_stdio
 from backend.app.config import Settings, get_settings
-
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 LIGAS: dict[str, str] = {
     "la_liga": "soccer_spain_la_liga",
@@ -268,6 +264,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    force_utf8_stdio()
     settings = get_settings()
     _configurar_logging(settings.log_level)
 

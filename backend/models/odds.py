@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from backend.models.bookmaker import Bookmaker
     from backend.models.market import Market
     from backend.models.match import Match
+    from backend.models.player import Player
     from backend.models.snapshot import Snapshot
 
 
@@ -23,6 +24,7 @@ class Odds(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_odds_match_bookmaker_market", "match_id", "bookmaker_id", "market_id"),
         Index("ix_odds_snapshot", "snapshot_id"),
+        Index("ix_odds_player", "player_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -39,6 +41,12 @@ class Odds(Base, TimestampMixin):
     market_id: Mapped[int] = mapped_column(
         ForeignKey("markets.id", ondelete="RESTRICT"), nullable=False,
     )
+    # Para player props: jugador concreto al que se refiere la cuota.
+    # Es nullable para mantener compat con cuotas a nivel partido (1X2,
+    # over/under totales, etc.) donde el jugador no aplica.
+    player_id: Mapped[int | None] = mapped_column(
+        ForeignKey("players.id", ondelete="SET NULL"), nullable=True,
+    )
 
     outcome_name: Mapped[str] = mapped_column(String(128), nullable=False)
     outcome_point: Mapped[Decimal | None] = mapped_column(
@@ -53,6 +61,7 @@ class Odds(Base, TimestampMixin):
     match: Mapped["Match"] = relationship(back_populates="odds")
     bookmaker: Mapped["Bookmaker"] = relationship(back_populates="odds")
     market: Mapped["Market"] = relationship(back_populates="odds")
+    player: Mapped["Player | None"] = relationship()
 
     def __repr__(self) -> str:
         return (
