@@ -16,6 +16,7 @@ from backend.services.poisson_model import (
     expected_goals,
     league_average_goals,
     predict,
+    probability_over_single_poisson,
     probability_over_total,
 )
 
@@ -245,3 +246,14 @@ class TestDixonColes:
         po25, pu25 = probability_over_total(1.5, 1.3, 2.5, dixon_coles_rho=rho)
         assert math.isclose(po25, ref.p_over_25, abs_tol=1e-12)
         assert math.isclose(pu25, ref.p_under_25, abs_tol=1e-12)
+
+
+class TestSinglePoissonTotals:
+    def test_half_line_sums_to_one(self) -> None:
+        po, pu = probability_over_single_poisson(1.2, 1.5)
+        assert math.isclose(po + pu, 1.0, abs_tol=1e-9)
+
+    def test_lambda_zero_favors_under_high_line(self) -> None:
+        po, pu = probability_over_single_poisson(0.0, 2.5)
+        assert po == 0.0
+        assert pu == 1.0

@@ -17,6 +17,7 @@ pydantic-settings==2.7.0
 sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
 alembic==1.14.0
+PyJWT==2.10.1
 
 # ---------- Análisis y modelo (Fase 3) ----------
 pandas==2.2.3
@@ -27,6 +28,7 @@ scipy==1.14.1
 beautifulsoup4==4.12.3
 lxml==5.3.0
 playwright==1.49.0
+curl_cffi==0.7.4
 
 # ---------- Automatización (Fase 6) ----------
 apscheduler==3.11.0

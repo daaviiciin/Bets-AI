@@ -45,6 +45,10 @@ _INT_FIELDS: frozenset[str] = frozenset({
     "touches_in_box",
     "fouls", "yellow_cards", "red_cards", "duels_won", "clearances",
     "interceptions", "saves", "goal_kicks",
+    "goals_1h", "goals_2h",
+    "corners_1h", "corners_2h",
+    "yellow_cards_1h", "yellow_cards_2h",
+    "red_cards_1h", "red_cards_2h",
     "passes_pct", "passes_completed", "passes_attempted",
     "long_passes_pct", "long_passes_completed", "long_passes_attempted",
     "passes_final_third_pct", "passes_final_third_completed",
@@ -213,14 +217,24 @@ class FlashscoreStatsIngester:
                 result.parse_errors += 1
                 continue
 
-            if not parsed["home"] and not parsed["away"]:
+            su_home: dict[str, int] = {}
+            su_away: dict[str, int] = {}
+            try:
+                su_recs = fs.fetch_match_summary_events(fs_match.match_id)
+                su_home, su_away = fs.parse_team_half_metrics_from_summary_events(su_recs)
+            except Exception as exc:  # noqa: BLE001
+                self.log.debug(
+                    "df_su sin datos o error para %s: %s", fs_match.match_id, exc,
+                )
+
+            if not parsed["home"] and not parsed["away"] and not su_home and not su_away:
                 self.log.info(
                     "  [EMPTY] %s vs %s: feed sin stats (¿partido sin datos?)",
                     m.home_team.name, m.away_team.name,
                 )
                 continue
 
-            self._upsert_match_stats(m, fs_match.match_id, parsed, result)
+            self._upsert_match_stats(m, fs_match.match_id, parsed, su_home, su_away, result)
 
     def _match_db_to_flashscore(
         self, m: Match, fixtures: list[fs.FlashscoreMatch],
@@ -258,6 +272,8 @@ class FlashscoreStatsIngester:
         match: Match,
         flashscore_match_id: str,
         parsed: dict[str, dict[str, float | int]],
+        su_home: dict[str, int],
+        su_away: dict[str, int],
         result: IngestResult,
     ) -> None:
         """Inserta o actualiza las dos filas (home/away) para este partido."""
@@ -270,7 +286,10 @@ class FlashscoreStatsIngester:
         now = datetime.now(timezone.utc)
 
         for is_home, side in ((True, "home"), (False, "away")):
-            stats_dict = parsed.get(side, {})
+            stats_dict: dict[str, float | int] = dict(parsed.get(side, {}))
+            su_extra = su_home if is_home else su_away
+            for k, v in su_extra.items():
+                stats_dict[k] = v
             if not stats_dict:
                 continue
 

@@ -1,0 +1,64 @@
+<div class="min-h-screen flex flex-col items-center justify-center px-4 pb-20 pt-10">
+  <div class="mb-10 flex flex-col items-center gap-4">
+    <img
+      src="/brand/logo-bets-ai.png"
+      alt="BETS Ai · Intelligent market analysis"
+      width="280"
+      height="96"
+      class="w-[min(280px,85vw)] h-auto object-contain drop-shadow-[0_0_28px_rgb(0_229_255_/_28%)]" />
+    <p class="text-[11px] uppercase tracking-[0.35em] text-brand-muted text-center">
+      Intelligent market analysis
+    </p>
+  </div>
+
+  <div
+    class="w-full max-w-md rounded-2xl border border-brand-cyan/20 bg-brand-bg-panel/55 backdrop-blur-md p-8 shadow-2xl shadow-black/40 ring-1 ring-brand-blue/15">
+    <h1 class="text-xl font-semibold text-white">Entrar</h1>
+    <p class="text-sm text-brand-muted mt-2 leading-relaxed">
+      Cuenta MVP: <span class="text-white">admin</span> /
+      <span class="text-white">1234</span>. Las combinadas guardadas se persisten en PostgreSQL.
+    </p>
+    <form class="mt-8 space-y-4" (submit)="$event.preventDefault(); submit()">
+      <div>
+        <label class="block text-xs uppercase tracking-wider text-brand-muted mb-1.5">Usuario</label>
+        <input
+          type="text"
+          autocomplete="username"
+          [value]="username()"
+          (input)="username.set(($any($event.target).value || '').toString())"
+          class="w-full rounded-xl bg-brand-bg-deep border border-brand-blue/35 px-4 py-3 text-sm text-white placeholder:text-brand-muted/50 focus:outline-none focus:ring-2 focus:ring-brand-cyan/35 focus:border-brand-cyan/40" />
+      </div>
+      <div>
+        <label class="block text-xs uppercase tracking-wider text-brand-muted mb-1.5">Contraseña</label>
+        <input
+          type="password"
+          autocomplete="current-password"
+          [value]="password()"
+          (input)="password.set(($any($event.target).value || '').toString())"
+          class="w-full rounded-xl bg-brand-bg-deep border border-brand-blue/35 px-4 py-3 text-sm text-white placeholder:text-brand-muted/50 focus:outline-none focus:ring-2 focus:ring-brand-cyan/35 focus:border-brand-cyan/40" />
+      </div>
+      @if (error()) {
+        <div class="rounded-lg border border-rose-500/40 bg-rose-950/25 px-4 py-3 text-sm text-rose-200">
+          {{ error() }}
+        </div>
+      }
+      <button
+        type="submit"
+        [disabled]="busy()"
+        class="w-full inline-flex justify-center items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold
+               bg-brand-cyan/12 border border-brand-cyan/40 text-brand-cyan hover:bg-brand-cyan/20 hover:border-brand-cyan/55 transition-all disabled:opacity-45 shadow-[0_0_24px_-8px_rgb(0_229_255_/_45%)]">
+        @if (busy()) {
+          <span class="size-4 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin"></span>
+          <span>Entrando…</span>
+        } @else {
+          <span>Iniciar sesión</span>
+        }
+      </button>
+    </form>
+    <a
+      routerLink="/dashboard"
+      class="inline-block mt-6 text-sm text-brand-muted hover:text-brand-cyan transition-colors">
+      ← Ir al dashboard (sin sesión)
+    </a>
+  </div>
+</div>

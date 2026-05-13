@@ -4,6 +4,7 @@ Importar todos los modelos aquí garantiza que ``Base.metadata`` los registre
 antes de que Alembic genere migraciones.
 """
 
+from backend.models.app_user import AppUser
 from backend.models.base import Base, TimestampMixin
 from backend.models.bookmaker import Bookmaker
 from backend.models.calibration_report import CalibrationReport
@@ -15,6 +16,7 @@ from backend.models.odds import Odds
 from backend.models.player import Player
 from backend.models.player_match_stats import PlayerMatchStats
 from backend.models.player_stats import PlayerSeasonStats
+from backend.models.saved_parlay import SavedParlay
 from backend.models.season import Season
 from backend.models.snapshot import Snapshot
 from backend.models.team import Team
@@ -24,6 +26,7 @@ from backend.models.user_profile import UserProfile
 __all__ = [
     "Base",
     "TimestampMixin",
+    "AppUser",
     "Bookmaker",
     "CalibrationReport",
     "League",
@@ -34,6 +37,7 @@ __all__ = [
     "Player",
     "PlayerMatchStats",
     "PlayerSeasonStats",
+    "SavedParlay",
     "Season",
     "Snapshot",
     "Team",

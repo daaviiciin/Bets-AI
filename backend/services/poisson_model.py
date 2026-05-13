@@ -313,6 +313,46 @@ def probability_over_total(
     return p_over, p_under
 
 
+def probability_over_single_poisson(
+    lambda_: float,
+    point: float,
+    *,
+    k_tail: int = 80,
+) -> tuple[float, float]:
+    """``(P(over point), P(under point))`` para un único recuento Poisson(λ).
+
+    Replica las convenciones de :func:`probability_over_total` aplicadas al
+    total de dos equipos, pero usando una sola variable (goles locales,
+    jugador SoT, etc.).
+    """
+    lam = float(lambda_)
+    pt = float(point)
+    if pt < 0:
+        return 1.0, 0.0
+    # Líneas .25 / .75 → mismo arreglo que en match totals.
+    if not (math.isclose(pt % 1, 0.0) or math.isclose(pt % 1, 0.5)):
+        nearest_half = math.floor(pt) + 0.5
+        return probability_over_single_poisson(lam, nearest_half, k_tail=k_tail)
+
+    mu = max(0.0, lam)
+
+    def cdf_until(k_hi: int) -> float:
+        """P(X <= k_hi)."""
+        if k_hi < 0:
+            return 0.0
+        return sum(_poisson_pmf(i, mu) for i in range(min(k_hi, k_tail) + 1))
+
+    if math.isclose(pt % 1, 0.5):
+        threshold = math.ceil(pt)
+        p_over = 1.0 - cdf_until(threshold - 1)
+        return max(0.0, min(1.0, p_over)), max(0.0, min(1.0, 1.0 - p_over))
+
+    point_int = int(round(pt))
+    p_over = 1.0 - cdf_until(point_int)
+    p_under = cdf_until(point_int - 1) if point_int > 0 else 0.0
+    return max(0.0, min(1.0, p_over)), max(0.0, min(1.0, p_under))
+
+
 def derive_market_probabilities(
     lambda_home: float,
     lambda_away: float,

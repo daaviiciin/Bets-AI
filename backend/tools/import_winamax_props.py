@@ -3,6 +3,7 @@
 Uso típico::
 
     python -m backend.tools.import_winamax_props
+    python -m backend.tools.import_winamax_props --sport basketball
     python -m backend.tools.import_winamax_props --max-matches 3 --dry-run
 
 100% gratis: scraping directo de la web de Winamax (PRELOADED_STATE en HTML).
@@ -46,6 +47,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Incluir todas las ligas (default: sólo top-5).",
     )
     parser.add_argument(
+        "--sport",
+        choices=("football", "basketball"),
+        default="football",
+        help="Deporte en Winamax.es: football (/) o basketball (/sport/2).",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Hace rollback al final: muestra qué haría pero no persiste.",
     )
@@ -63,6 +70,7 @@ def main(argv: list[str] | None = None) -> int:
             days_ahead=args.days_ahead,
             max_matches=args.max_matches,
             only_top5=not args.all_leagues,
+            sport=args.sport,
             commit=not args.dry_run,
         )
         if args.dry_run:

@@ -92,6 +92,19 @@ class RefreshService:
         self.log.info("Iniciando refresh completo a las %s", started_at.isoformat())
         self.log.info("=" * 70)
 
+        if not self.settings.odds_api_refresh_enabled or not (
+            self.settings.odds_api_key or ""
+        ).strip():
+            summary.finished_at = datetime.now(timezone.utc)
+            summary.leagues_error = summary.leagues_total
+            msg = (
+                "Refresco Odds API desactivado "
+                "(odds_api_refresh_enabled=false o ODDS_API_KEY vacía); no se ejecuta."
+            )
+            summary.errors.insert(0, msg)
+            self.log.warning(msg)
+            return summary
+
         results = odds_api.fetch_todas(settings=self.settings)
         successful_files: list[Path] = []
         for r in results:

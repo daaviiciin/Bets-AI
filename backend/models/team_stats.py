@@ -21,7 +21,8 @@ class TeamSeasonStats(Base, TimestampMixin):
 
     Métricas clave para el cálculo de valor:
 
-    * ``goals_for / goals_against``: goles a favor / en contra (totales).
+    * ``goals_for / goals_against``: fútbol — goles totales temporada.
+    * ``bb_points_for / bb_points_against``: baloncesto — puntos anotados/recibidos (totales).
     * ``xg_for / xg_against``: expected goals (más estable que goles reales).
     * ``shots_*``: tendencia ofensiva, útil para mercados de córners y tarjetas.
     * ``points``: posición real en la tabla.
@@ -47,6 +48,8 @@ class TeamSeasonStats(Base, TimestampMixin):
 
     goals_for: Mapped[int | None] = mapped_column(Integer, nullable=True)
     goals_against: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bb_points_for: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bb_points_against: Mapped[int | None] = mapped_column(Integer, nullable=True)
     goal_diff: Mapped[int | None] = mapped_column(Integer, nullable=True)
     points: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

@@ -81,6 +81,15 @@ class TeamStatsSideOut(BaseModel):
     fouls: int | None = None
     yellow_cards: int | None = None
     red_cards: int | None = None
+
+    goals_1h: int | None = None
+    goals_2h: int | None = None
+    corners_1h: int | None = None
+    corners_2h: int | None = None
+    yellow_cards_1h: int | None = None
+    yellow_cards_2h: int | None = None
+    red_cards_1h: int | None = None
+    red_cards_2h: int | None = None
     duels_won: int | None = None
     clearances: int | None = None
     interceptions: int | None = None
@@ -151,6 +160,78 @@ class ValueBetOut(BaseModel):
     model_ev: Decimal | None = None
     model_agrees: bool | None = None
     confidence: str = "unknown"
+    player_name: str | None = None
+
+
+class GradedOddsLineOut(BaseModel):
+    """Cuota puntual calificada (todas las líneas del libro para el dashboard)."""
+
+    match_id: int
+    league: str
+    home_team: str
+    away_team: str
+    commence_time: datetime
+    market_key: str
+    outcome_name: str
+    outcome_point: Decimal | None = None
+    player_name: str | None = None
+    bookmaker_key: str
+    bookmaker_title: str = ""
+    offered_odds: Decimal
+    confidence: str = "unknown"
+    model_probability: Decimal | None = None
+    model_ev: Decimal | None = None
+    lambda_home: Decimal | None = None
+    lambda_away: Decimal | None = None
+    implied_probability: Decimal | None = None
+    model_summary_lines: list[str] = Field(default_factory=list)
+
+
+class AuthUserBriefOut(BaseModel):
+    id: int
+    username: str
+
+
+class TokenResponseOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_at: int
+
+
+class ParlayLegPersistIn(BaseModel):
+    """Pata snapshot al construir combinada guardada desde el cliente."""
+
+    match_id: int
+    home_team: str
+    away_team: str
+    league: str = ""
+    commence_time: datetime | None = None
+    market_key: str
+    outcome_name: str
+    outcome_point: str | None = None
+    player_name: str | None = None
+    offered_odds: Decimal
+    model_probability: Decimal | None = None
+
+
+class SavedParlayCreateIn(BaseModel):
+    title: str | None = Field(default=None, max_length=160)
+    legs: list[ParlayLegPersistIn] = Field(min_length=1)
+
+
+class SavedParlayOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    title: str | None
+    combined_odds: Decimal
+    model_joint_probability: Decimal | None = None
+    legs_snapshot: list[Any]
+    grading_snapshot: dict[str, Any] | None = None
+    overall_result: str
+    last_graded_at: datetime | None = None
+    created_at: datetime
 
 
 class UserProfileOut(BaseModel):

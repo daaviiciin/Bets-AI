@@ -62,6 +62,9 @@ class PlayerSeasonStats(Base, TimestampMixin):
     npxg: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
     xg_per_shot: Mapped[Decimal | None] = mapped_column(Numeric(5, 3), nullable=True)
 
+    bb_points_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bb_rebounds_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     yellow_cards: Mapped[int | None] = mapped_column(Integer, nullable=True)
     red_cards: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

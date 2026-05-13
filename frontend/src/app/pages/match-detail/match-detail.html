@@ -85,6 +85,38 @@
             }
           </div>
 
+          @if (hasHalfSlice(st)) {
+            <div class="border-t border-slate-800 pt-4">
+              <div class="text-xs text-slate-500 uppercase tracking-wider mb-3">Por mitad (Flashscore)</div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+                @for (row of [
+                  { label: 'Goles 1ª mitad', h: st.home.goals_1h, a: st.away.goals_1h },
+                  { label: 'Goles 2ª mitad', h: st.home.goals_2h, a: st.away.goals_2h },
+                  { label: 'Córners 1ª mitad', h: st.home.corners_1h, a: st.away.corners_1h },
+                  { label: 'Córners 2ª mitad', h: st.home.corners_2h, a: st.away.corners_2h },
+                  { label: 'Amarillas 1ª', h: st.home.yellow_cards_1h, a: st.away.yellow_cards_1h },
+                  { label: 'Amarillas 2ª', h: st.home.yellow_cards_2h, a: st.away.yellow_cards_2h },
+                  { label: 'Rojas 1ª', h: st.home.red_cards_1h, a: st.away.red_cards_1h },
+                  { label: 'Rojas 2ª', h: st.home.red_cards_2h, a: st.away.red_cards_2h },
+                ]; track row.label) {
+                  @if (row.h != null || row.a != null) {
+                    <div class="text-sm">
+                      <div class="flex items-center justify-between mb-1">
+                        <span class="font-mono w-10 text-emerald-300 text-right">{{ statValue(row.h) }}</span>
+                        <span class="text-slate-400 text-xs uppercase tracking-wider mx-2">{{ row.label }}</span>
+                        <span class="font-mono w-10 text-cyan-300">{{ statValue(row.a) }}</span>
+                      </div>
+                      <div class="h-1 rounded-full bg-slate-800 overflow-hidden flex">
+                        <div class="h-full bg-emerald-400/60" [style.width.%]="statShareHome(row.h, row.a)"></div>
+                        <div class="h-full bg-cyan-400/60 flex-1"></div>
+                      </div>
+                    </div>
+                  }
+                }
+              </div>
+            </div>
+          }
+
           <!-- Pases -->
           <div class="border-t border-slate-800 pt-4 grid grid-cols-3 gap-4 text-sm">
             <div class="text-center">

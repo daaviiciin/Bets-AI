@@ -1,4 +1,5 @@
+/** Desarrollo: `ng serve` proxy `/api` → backend :8000; el navegador solo usa :4200. */
 export const environment = {
   production: false,
-  apiBaseUrl: 'http://127.0.0.1:8000',
+  apiBaseUrl: '/api',
 };

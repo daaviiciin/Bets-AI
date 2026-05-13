@@ -2,14 +2,16 @@
 
 Encadena los pasos **gratuitos** que deben correr cada día:
 
-1. ``MatchResultsUpdater``  → marca como ``finished`` los partidos jugados
+1. ``FlashscoreFixturesIngester`` → inserta próximos partidos (top 5 + opcional UEFA)
+   en ``matches`` con ``external_id`` prefijado ``flashscore:`` (scraping gratis).
+2. ``MatchResultsUpdater``  → marca como ``finished`` los partidos jugados
    y rellena ``Match.sofascore_event_id`` (Sofascore unofficial API, gratis).
-2. ``FlashscoreStatsIngester`` → ingesta xG, tiros, posesión, córners,
+3. ``FlashscoreStatsIngester`` → ingesta xG, tiros, posesión, córners,
    tarjetas, etc. para los partidos finalizados sin stats todavía
    (Flashscore feed ``df_st_1``, gratis).
-3. ``PlayerMatchStatsIngester`` → ingesta stats individuales por jugador
+4. ``PlayerMatchStatsIngester`` → ingesta stats individuales por jugador
    (goles, tiros, SoT, rating, …) usando Sofascore ``/event/{id}/lineups``.
-   Se apoya en el ``sofascore_event_id`` que rellena el paso 1.
+   Se apoya en el ``sofascore_event_id`` que rellena el paso 2.
 
 Los pasos que sí cuestan (cuotas vía Odds API) o son más pesados (re-scraping
 de stats de temporada por liga) se quedan fuera de este pipeline diario;
@@ -29,6 +31,14 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from backend.services.basketball_season_rollup import (
+    rollup_basketball_player_season_totals,
+    rollup_basketball_team_season_stats,
+)
+from backend.services.flashscore_fixtures_ingester import (
+    FlashscoreFixturesIngester,
+    FlashscoreFixturesIngestResult,
+)
 from backend.services.flashscore_stats_ingester import (
     FlashscoreStatsIngester,
     IngestResult,
@@ -51,6 +61,7 @@ class DailyRefreshSummary:
     results: UpdateSummary | None = None
     stats: IngestResult | None = None
     player_stats: PlayerStatsIngestResult | None = None
+    fixtures: FlashscoreFixturesIngestResult | None = None
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -71,6 +82,7 @@ class DailyRefreshOrchestrator:
         *,
         log: logging.Logger | None = None,
         results_updater: MatchResultsUpdater | None = None,
+        fixtures_ingester: FlashscoreFixturesIngester | None = None,
         stats_ingester: FlashscoreStatsIngester | None = None,
         player_stats_ingester: PlayerMatchStatsIngester | None = None,
     ) -> None:
@@ -78,6 +90,7 @@ class DailyRefreshOrchestrator:
         self.log = log or logging.getLogger(__name__)
         # Permitimos inyectar dependencias (clave para tests con mocks).
         self._results_updater = results_updater or MatchResultsUpdater(session, log=self.log)
+        self._fixtures_ingester = fixtures_ingester or FlashscoreFixturesIngester(session, log=self.log)
         self._stats_ingester = stats_ingester or FlashscoreStatsIngester(session, log=self.log)
         self._player_stats_ingester = (
             player_stats_ingester or PlayerMatchStatsIngester(session, log=self.log)
@@ -90,6 +103,7 @@ class DailyRefreshOrchestrator:
         stats_days_back: int = 7,
         stats_only_top5: bool = True,
         stats_limit: int | None = None,
+        fixtures_days_ahead: int = 7,
         player_stats_max_matches: int = 30,
         player_stats_with_cards: bool = False,
     ) -> DailyRefreshSummary:
@@ -102,6 +116,8 @@ class DailyRefreshOrchestrator:
             a las 5 grandes ligas (más fiable).
         :param stats_limit: número máximo de partidos cuyas stats se
             ingestan (útil para no saturar Flashscore).
+        :param fixtures_days_ahead: días de feeds Flashscore a recorrer (0..N-1)
+            para insertar partidos próximos.
         :param player_stats_max_matches: número máximo de partidos para
             los que se ingesta el detalle por jugador.
         :param player_stats_with_cards: si ``True``, además llama a
@@ -112,7 +128,31 @@ class DailyRefreshOrchestrator:
         summary = DailyRefreshSummary(started_at=started, finished_at=started)
 
         self.log.info("=" * 80)
-        self.log.info("PIPELINE DIARIO  (paso 1/3: actualizar resultados de partidos)")
+        self.log.info("PIPELINE DIARIO  (paso 1/4: fixtures próximos Flashscore → BD)")
+        self.log.info("=" * 80)
+        try:
+            fixtures = self._fixtures_ingester.ingest(
+                days_ahead=fixtures_days_ahead,
+                only_top5=stats_only_top5,
+            )
+            self.session.commit()
+            summary.fixtures = fixtures
+            self.log.info(
+                "Fixtures: fetched=%d inserted=%d updated=%d omitted_dup=%d (%.1fs)",
+                fixtures.fixtures_fetched,
+                fixtures.fixtures_inserted,
+                fixtures.fixtures_updated,
+                fixtures.skipped_duplicate_db,
+                fixtures.duration_seconds,
+            )
+        except Exception as exc:  # noqa: BLE001
+            msg = f"Error en flashscore_fixtures_ingester: {exc}"
+            self.log.exception(msg)
+            summary.errors.append(msg)
+            self.session.rollback()
+
+        self.log.info("=" * 80)
+        self.log.info("PIPELINE DIARIO  (paso 2/4: actualizar resultados de partidos)")
         self.log.info("=" * 80)
         try:
             results = self._results_updater.update_all(max_pages=results_max_pages)
@@ -130,8 +170,26 @@ class DailyRefreshOrchestrator:
             summary.errors.append(msg)
             self.session.rollback()
 
+        self.log.info(
+            "PIPELINE DIARIO  (entre 2 y 3: rollup bb_points_* temporada desde resultados)",
+        )
+        try:
+            tr = rollup_basketball_team_season_stats(self.session)
+            rollup_basketball_player_season_totals(self.session)
+            self.session.commit()
+            self.log.info(
+                "Rollup baloncesto: ligas=%d, filas equipo=%d",
+                tr.leagues_touched,
+                tr.team_rows_upserted,
+            )
+        except Exception as exc:  # noqa: BLE001
+            msg = f"Error en rollup baloncesto: {exc}"
+            self.log.exception(msg)
+            summary.errors.append(msg)
+            self.session.rollback()
+
         self.log.info("=" * 80)
-        self.log.info("PIPELINE DIARIO  (paso 2/3: ingestar stats post-partido por equipo)")
+        self.log.info("PIPELINE DIARIO  (paso 3/4: stats post-partido por equipo)")
         self.log.info("=" * 80)
         try:
             stats = self._stats_ingester.ingest_recent(
@@ -153,7 +211,7 @@ class DailyRefreshOrchestrator:
             self.session.rollback()
 
         self.log.info("=" * 80)
-        self.log.info("PIPELINE DIARIO  (paso 3/3: ingestar stats por jugador)")
+        self.log.info("PIPELINE DIARIO  (paso 4/4: stats por jugador)")
         self.log.info("=" * 80)
         try:
             player_stats = self._player_stats_ingester.ingest(

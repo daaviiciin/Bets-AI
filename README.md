@@ -1,216 +1,169 @@
 # Bets AI
 
-Sistema automatizado de detección de apuestas de valor (value bets) en fútbol europeo, con perfiles de usuario personalizables y explicaciones generadas por IA.
+Herramienta para **analizar cuotas de fútbol** (sobre todo **Winamax ES**), **cruzarlas con un modelo Poisson / Dixon–Coles** y **priorizar líneas con valor esperado (EV)** frente a un bookie de referencia. Incluye **autenticación por usuario**, **combinadas guardadas** y **stats post-partido** vía Flashscore.
 
-## Idea de negocio
+> **Nota:** la app actual se centra en el flujo **datos oficiales + Winamax + dashboard**; la integración con **The Odds API** sigue disponible pero va **desactivada por defecto** (ver `.env.example`).
 
-Bets AI no es un bot que "te dice qué apostar"; es un **asesor financiero deportivo** que:
+## Qué incluye hoy
 
-1. **Captura cuotas reales** de Winamax, Pinnacle y otros bookmakers europeos vía The Odds API.
-2. **Cruza esas cuotas con estadísticas avanzadas** (xG, forma, head-to-head) de FBref y Understat.
-3. **Calcula el valor esperado (EV)** de cada apuesta de forma matemática (criterio de Kelly).
-4. **Adapta las recomendaciones al perfil del usuario** (conservador, equilibrado, arriesgado, cazador de premios).
-5. **Sugiere combinadas inteligentes** (parlays) entre apuestas con valor positivo.
-6. **Explica cada recomendación en lenguaje natural** mediante un LLM (Gemini Flash).
-
-Cobertura: **Las 5 grandes ligas europeas** (LaLiga, Premier, Bundesliga, Serie A, Ligue 1) **+ Champions, Europa y Conference League**.
-
-## Diferencia respecto a un LLM puro
-
-| Capacidad | LLM solo (ChatGPT) | Bets AI |
-|---|---|---|
-| Cuotas reales en tiempo real | No | Sí, vía API |
-| EV calculado matemáticamente | No | Sí, fórmula determinista |
-| Player props (tiros a puerta, etc.) | No | Sí, scraper Winamax |
-| Perfil de usuario y bankroll | No | Sí, persistente en BD |
-| Historial de apuestas trackeado | No | Sí |
-| Reproducibilidad | No | Sí |
-| Programado / automatizado | No | Sí, GitHub Actions |
-| Explicación en lenguaje natural | Sí | Sí (LLM como capa final) |
+1. **Pipeline de datos** (`POST /refresh/official`): calendario y enlace a partidos (**Flashscore**), enriquecimiento con evento **Sofascore**, resultados cuando el partido termina y (opcional) **estadísticas por equipo** tras el encuentro (**Flashscore** `df_st` + incidencias `df_su`: goles y tarjetas por mitad cuando el feed lo permite).
+2. **Cuotas Winamax** ingeridas desde el HTML (`PRELOADED_STATE`) con **curl_cffi** (sin navegador obligatorio para el catálogo principal).
+3. **The Odds API** (opcional): capa extra de bookmakers si activas `ODDS_API_REFRESH_ENABLED` y defines `ODDS_API_KEY`.
+4. **Backend FastAPI**: partidos, cuotas, análisis por partido, value bets, calibración, jugadores, refresco.
+5. **Dashboard de cuotas calificadas** (`GET /dashboard/graded-odds`): todas las líneas Winamax del horizonte con **probabilidad modelo**, **EV**, λ del Poisson y **viñetas de resumen en español** (legibles, orientadas al mercado).
+6. **Auth JWT** (`POST /auth/login`, `GET /auth/me`) y **combinadas guardadas** (`/me/parlays`) con recomputación de resultado cuando los partidos están finalizados.
+7. **Frontend Angular**: login, dashboard de cuotas, página «Mis apuestas».
 
 ## Stack técnico
 
 | Capa | Tecnología |
-|---|---|
-| Backend | Python 3.12 + FastAPI |
-| Base de datos | PostgreSQL 16 (Docker) |
-| ORM | SQLAlchemy 2 |
-| Scraping | Requests + BeautifulSoup + Playwright (para Winamax) |
-| Frontend | Angular 21 |
-| ML / Modelo | scipy / pandas (Poisson-Dixon-Coles) |
-| LLM | Google Gemini 1.5 Flash (free tier) |
-| Automatización | APScheduler + GitHub Actions |
-| Hosting (futuro) | Vercel (front) + Render/Fly.io (back) + Supabase (BD) |
+|------|------------|
+| Backend | Python 3.12+, FastAPI, Pydantic v2 |
+| Base de datos | PostgreSQL 16 (Docker), SQLAlchemy 2, **Alembic** |
+| Scraping / HTTP | `requests`, BeautifulSoup, **curl_cffi**, Playwright (dependencia presente; Winamax usa principalmente curl_cffi) |
+| Frontend | Angular 21, Tailwind CSS v4 |
+| Modelo | Poisson / Dixon–Coles (`scipy`, `pandas`) |
+| Jobs | APScheduler (opcional en despliegue) |
+| LLM | Configurable (`google-generativeai` en requirements; uso según implementación de explicaciones) |
 
-**Coste de operación: 0 €/mes** en plan free.
+## Mercados y fuentes
 
-## Modelo de valor (EV)
+### Winamax (ingesta principal)
 
-Para cada apuesta el sistema calcula:
+Entre otros: **1X2**, **doble oportunidad**, **totales de goles**, **BTTS**, **goles por equipo**, **totales de córners / tarjetas / tiros / tiros a puerta**, **totales de 1ª parte** (goles, córners, tarjetas y goles por equipo local/visitante cuando Winamax los publica), y **player props** (tiros, tiros a puerta, tarjetas, goleador, etc.). Los `betType` concretos están mapeados en `backend/scrapers/winamax.py`.
 
-```
-prob_implícita_bookie = 1 / cuota
-prob_real             = estimada vía Pinnacle/1xBet (sin vig) o modelo Poisson sobre xG
-EV                    = (cuota * prob_real) - 1
-stake_recomendado     = bankroll * Kelly_fraction * (EV / (cuota - 1))
-```
+### The Odds API (opcional)
 
-Hay valor cuando `EV > 0`. El stake se ajusta al perfil del usuario.
+Desactivado por defecto para no consumir créditos. Mercados típicos configurados en el proyecto: `h2h`, `double_chance`, `totals`, etc.
 
-### Perfiles disponibles
+### Flashscore
 
-| Perfil | Cuotas | Prob. real mín | EV mín | Stake | Notas |
-|---|---|---|---|---|---|
-| Conservador | 1.30-1.70 | ≥ 70% | +3% | Kelly/4 | Combinadas dobles, 5€/apuesta |
-| Equilibrado | 1.50-2.50 | ≥ 55% | +5% | Kelly/2 | Mix individual + combinadas |
-| Arriesgado | 2.00-5.00 | sin mín. | +7% | Kelly | Singles |
-| Cazador de premios | 3.00+ | sin mín. | +10% | Stake fijo bajo | Modo lotería |
+Feeds internos tipo `global.flashscore.ninja`: fixtures, **stats de partido** y **incidencias por mitad** (mejor soporte para goles/tarjetas por parte que para córners por mitad en la práctica).
 
-## Mercados cubiertos
+## Frontend (rutas)
 
-### Vía The Odds API (Capa 1)
-- `h2h` — 1X2 ganador
-- `double_chance` — doble oportunidad (1X, X2, 12)
-- `totals` — Over/Under goles
+| Ruta | Descripción |
+|------|-------------|
+| `/` | Login (si ya hay sesión, redirige a `/dashboard`) |
+| `/dashboard` | Tabla de cuotas Winamax calificadas, KPIs y guardado de combinadas |
+| `/mis-apuestas` | Lista de combinadas guardadas (requiere login) |
 
-### Vía scraper Winamax (Capa 2)
-- Tiros a puerta de jugador
+Proxy de desarrollo: `frontend/proxy.conf.json` reenvía `/api` al backend (`uvicorn` en `:8000`).
 
-### Pendientes (capas futuras)
-- BTTS (Both Teams To Score)
-- Spreads (hándicap asiático)
-- Córners y tarjetas
-- Más player props
+## API REST (resumen)
 
-## Estrategia de actualización
+Documentación interactiva: **`http://127.0.0.1:8000/docs`**.
 
-Para no agotar el plan free de The Odds API (500 créditos/mes):
-
-| Día | Hora | Acción | Coste |
-|---|---|---|---|
-| Jueves | AM | Snapshot completo de las 8 ligas | 24 cred |
-| Sábado | AM | Refresh ligas con partido sábado | ~15 cred |
-| Domingo | AM | Refresh ligas con partido domingo | ~15 cred |
-| Mar/Mié | AM | Champions/Europa/Conference | ~10 cred |
-
-**Total estimado: 250-310 créditos/mes**, sobra para pruebas.
-
-## Plan por fases
-
-| Fase | Objetivo | Estado |
-|---|---|---|
-| **0** | Setup: estructura, deps, .env, Docker, README | En curso |
-| **1** | Scraper The Odds API → guarda en BD | Pendiente |
-| **2** | Scraper Winamax (tiros a puerta) → BD | Pendiente |
-| **3** | Stats FBref/Understat + cálculo de prob. real y EV | Pendiente |
-| **4** | Backend FastAPI + endpoints | Pendiente |
-| **5** | Frontend Angular: dashboard, perfiles, recomendaciones | Pendiente |
-| **6** | Automatización con GitHub Actions | Pendiente |
-| **7** | Capa LLM (Gemini) para explicaciones en lenguaje natural | Pendiente |
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/` | Health check |
+| `POST` | `/auth/login` | JWT (body: usuario / contraseña) |
+| `GET` | `/auth/me` | Usuario actual (Bearer) |
+| `GET` | `/me/parlays` | Combinadas guardadas |
+| `POST` | `/me/parlays` | Crear combinada desde patas snapshot |
+| `DELETE` | `/me/parlays/{id}` | Borrar |
+| `POST` | `/me/parlays/refresh-grades` | Recalcular aciertos/fallos |
+| `GET` | `/dashboard/graded-odds` | Cuotas Winamax calificadas + resumen textual |
+| `GET` | `/matches` | Partidos próximos |
+| `GET` | `/matches/{id}` | Detalle |
+| `GET` | `/matches/{id}/odds` | Cuotas |
+| `GET` | `/matches/{id}/stats` | Stats Flashscore (si existen) |
+| `GET` | `/matches/{id}/analysis` | Análisis modelo |
+| `GET` | `/matches/{id}/player-props` | Props agrupadas |
+| `GET` | `/value-bets` | Value bets detectadas |
+| `GET` | `/profiles` … | Perfiles y recomendaciones |
+| `POST` | `/refresh` | Refresco Odds API (si está habilitado) |
+| `POST` | `/refresh/results` | Actualizar marcadores |
+| `POST` | `/refresh/daily` | Orquestación diaria |
+| `POST` | `/refresh/official` | **Pipeline oficial** (Flashscore + Sofascore + Winamax según flags) |
 
 ## Setup local
 
 ### Requisitos
-- Python 3.12+
-- Node.js 22+ y Angular CLI 21+
-- Docker Desktop (para PostgreSQL)
-- Una API key de [The Odds API](https://the-odds-api.com/#get-access) (free)
 
-### Instalación
+- Python **3.12+**
+- Node.js **22+** y Angular CLI acorde al proyecto
+- Docker Desktop (**PostgreSQL**)
+- Opcional: `ODDS_API_KEY`, API keys LLM según uses esas rutas
+
+### Pasos
 
 ```powershell
-# 1. Clonar el repo
 git clone <repo_url>
 cd "Bets AI"
 
-# 2. Crear entorno virtual e instalar deps
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
-# 3. Configurar variables de entorno
 copy .env.example .env
-# (editar .env y poner tu ODDS_API_KEY real)
+# Edita .env: DATABASE_URL, y si aplica ODDS_API_KEY / flags del pipeline
 
-# 4. Levantar PostgreSQL
 docker compose up -d
 
-# 5. Probar el scraper de cuotas
-python -m backend.scrapers.odds_api
+# Obligatorio antes de arrancar la API (esquema SQLAlchemy != BD vacía)
+alembic upgrade head
 ```
 
-## Cómo levantar el MVP en local
-
-Arrancar todos los servicios (3 terminales):
+### Arrancar en desarrollo (3 terminales)
 
 ```powershell
-# 1. Base de datos PostgreSQL
+# 1) PostgreSQL
 docker compose up -d
 
-# 2. API FastAPI (backend)
+# 2) API
 .\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload
 
-# 3. Frontend Angular
+# 3) Frontend
 cd frontend
+npm install
 npm start
 ```
 
-URLs disponibles:
-
 | Servicio | URL |
-|---|---|
-| Frontend Angular | http://127.0.0.1:4200 |
-| API FastAPI | http://127.0.0.1:8000 |
-| Swagger UI (docs API) | http://127.0.0.1:8000/docs |
-| ReDoc (docs API) | http://127.0.0.1:8000/redoc |
+|----------|-----|
+| Angular | http://localhost:4200 |
+| API | http://127.0.0.1:8000 |
+| Swagger | http://127.0.0.1:8000/docs |
 
-## Frontend Angular (Fase 5)
+### Poblar datos
 
-Dashboard moderno construido con **Angular 21 + Tailwind CSS v4**:
+- Tras levantar la API: **`POST /refresh/official`** (desde Swagger o tu cliente HTTP) para sincronizar fixtures/cuotas según `.env`.
+- Stats post-partido: por ejemplo `python -m backend.tools.import_flashscore_stats` desde la raíz del repo (o el paso equivalente dentro de tu orquestación `/refresh`).
 
-- **`/`** — Dashboard con KPIs y top 10 oportunidades
-- **`/recommendations`** — Selector de los 4 perfiles + apuestas filtradas y stake calculado
-- **`/value-bets`** — Listado completo con filtros por liga, EV mínimo y mercado
-- **`/matches`** — Próximos partidos agrupados por día
-- **`/matches/:id`** — Tabla comparativa de cuotas entre todos los bookmakers (mejor cuota resaltada)
+### Tests backend
 
-Componentes lazy-loaded para arranque rápido. Tema oscuro por defecto.
+```powershell
+pytest backend/tests -q
+```
 
-## API REST (Fase 4)
+## Idea de valor (EV)
 
-Endpoints principales:
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/` | Health check |
-| `GET` | `/matches` | Lista de partidos próximos (filtrable por liga) |
-| `GET` | `/matches/{id}` | Detalle de un partido |
-| `GET` | `/matches/{id}/odds` | Cuotas capturadas para un partido |
-| `GET` | `/value-bets` | Value bets detectadas (EV+) |
-| `GET` | `/profiles` | Perfiles de apostador disponibles |
-| `GET` | `/profiles/{name}` | Detalle de un perfil |
-| `GET` | `/profiles/{name}/recommendations` | Recomendaciones personalizadas con stake calculado |
+Para cada línea relevante se puede contrastar la **cuota ofrecida** con una **probabilidad modelo** (Poisson / mercados tipo sharp) y estimar **EV ≈ cuota × P(modelo) − 1**. La confianza mostrada en el dashboard depende del mercado y de si el modelo aplica a esa selección.
 
 ## Estructura del proyecto
 
 ```
-bets-ai/
+Bets AI/
 ├── backend/
-│   ├── app/              # Aplicación FastAPI (config, BD, main)
-│   ├── scrapers/         # Scrapers (The Odds API, Winamax, FBref, ...)
-│   ├── models/           # Modelos SQLAlchemy y lógica de cálculo (EV, Kelly)
-│   ├── services/         # Servicios de negocio (recomendador, perfiles)
-│   └── tests/            # Tests unitarios y de integración
-├── frontend/             # Aplicación Angular (dashboard)
-├── data/
-│   ├── raw/              # JSONs crudos del scraping
-│   └── processed/        # Datos transformados
-├── docs/                 # Documentación adicional
-├── docker-compose.yml    # PostgreSQL en contenedor
-├── requirements.txt      # Dependencias Python
-└── .env.example          # Plantilla de variables de entorno
+│   ├── app/                 # FastAPI: main, api/, deps/, schemas/, config
+│   ├── models/              # SQLAlchemy
+│   ├── services/            # Ingesta, modelo, graded odds, parlays, refresh…
+│   ├── scrapers/            # odds_api, winamax, flashscore, sofascore
+│   ├── tools/               # Scripts CLI (import stats, etc.)
+│   └── tests/
+├── frontend/                # Angular (proxy → /api)
+├── migrations/              # Alembic (revisiones versionadas)
+├── docker-compose.yml
+├── alembic.ini
+├── requirements.txt
+└── .env.example
 ```
+
+## Roadmap / historia corta
+
+Las fases antiguas del README inicial quedaron **superadas**: ya hay API, scrapers Winamax/Flashscore, modelo, dashboard y usuarios. Lo pendiente o ampliable depende del producto (más deportes, más casas, explicaciones LLM integradas en UI, CI/CD, etc.).
 
 ## Aviso legal
 
-Este proyecto es **educativo y de portfolio**. No constituye asesoramiento financiero. El juego puede ser adictivo; apuesta solo con dinero que estés dispuesto a perder.
+Proyecto **educativo / portfolio**. No es asesoramiento financiero. El juego puede generar adicción; apuesta solo dinero que puedas permitirte perder.

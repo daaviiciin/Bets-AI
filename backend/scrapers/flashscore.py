@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -53,6 +54,11 @@ HEADERS = {
 }
 
 # Mapeo de claves observadas en el feed (no exhaustivo, ampliar al usar)
+# IDs deporte en el feed ``f_{sport}_{day}_...`` (Flashscore).
+# Football = 1 y basketball = 2 son los habituales; verificar si el feed cambia.
+FLASHSCORE_SPORT_SOCCER = 1
+FLASHSCORE_SPORT_BASKETBALL = 2
+
 KEY_MAP = {
     "SA": "sport_id",
     "ZA": "league_full_name",
@@ -145,7 +151,7 @@ def parse_payload(text: str) -> list[dict[str, str]]:
 
 
 def fetch_fixtures_feed(
-    *, day_offset: int = 0, sport: int = 1, locale: str = "en",
+    *, day_offset: int = 0, sport: int = FLASHSCORE_SPORT_SOCCER, locale: str = "en",
 ) -> list[FlashscoreMatch]:
     """Obtiene los partidos del día (offset 0) o del día siguiente (offset +1)."""
     path = f"f_{sport}_{day_offset}_3_{locale}_1"
@@ -195,6 +201,16 @@ def fetch_match_summary(match_id: str) -> dict[str, str]:
 def fetch_match_statistics(match_id: str) -> list[dict[str, str]]:
     """Stats del partido. **Solo viene poblado para partidos ya jugados.**"""
     text = _http_get(f"df_st_1_{match_id}")
+    return parse_payload(text)
+
+
+def fetch_match_summary_events(match_id: str) -> list[dict[str, str]]:
+    """Incidencias y cabeceras de periodo (`1st Half`/`2nd Half`) con marcador parcial.
+
+    Feed ``df_su_1_<match_id>``: tarjetas, goles por minuto, y filas AC+IG+IH con
+    goles acumulados por mitad equipos casa/fuera respectivamente.
+    """
+    text = _http_get(f"df_su_1_{match_id}")
     return parse_payload(text)
 
 
@@ -292,6 +308,140 @@ _STAT_MAP: dict[str, tuple[str, str]] = {
     "Tackles": ("pct_d", "tackles"),
 }
 
+# Solo estas stats se pueden desdoblar por mitad usando el texto de SF (cabeceras
+# tipo "First half"; en práctica el feed inglés apenas las usa para córners).
+_STAT_KEYS_HALF_SUFFIXABLE: frozenset[str] = frozenset({
+    "corners", "yellow_cards", "red_cards",
+})
+
+# Row labels de goles dentro de una sección de tiempo (caso futuro cuando SF
+# marque primera/segunda parte en df_st).
+_HALF_GOALS_LABELS: frozenset[str] = frozenset({
+    "Goals", "Goal", "Goles", "Gol",
+})
+
+
+_IB_MIN_FIRST_RE = re.compile(r"(\d+)")
+
+
+def _half_suffix_from_section_title(title: str | None) -> str:
+    """Clasifica texto de grupo ``SF`` o ``AC`` como sufijo `_1h` / `_2h` o ''."""
+    if not title:
+        return ""
+    t = title.strip().lower()
+    if not t:
+        return ""
+    if any(
+        p in t
+        for p in (
+            "1st half", "first half", "1st-half", "1 half",
+            "1ª mitad", "primera mitad", "mitad 1", "primer tiempo",
+            "primera parte",
+        )
+    ):
+        return "_1h"
+    if any(
+        p in t
+        for p in (
+            "2nd half", "second half", "2nd-half", "2 half",
+            "2ª mitad", "segunda mitad", "mitad 2", "segundo tiempo",
+            "segunda parte",
+        )
+    ):
+        return "_2h"
+    # "Half" genérico en apps en inglés
+    if "1st" in t and ("period" in t or "section" in t):
+        return "_1h"
+    if "2nd" in t and ("period" in t or "section" in t):
+        return "_2h"
+    return ""
+
+
+def _incident_team_side(ia_raw: str | None) -> str | None:
+    """``IA`` habitual en incidentes: 1 = local / casa, 2 = visitante."""
+    if not ia_raw:
+        return None
+    ia = ia_raw.strip()
+    if ia == "1":
+        return "home"
+    if ia == "2":
+        return "away"
+    return None
+
+
+def _incident_half_from_minute(ib_raw: str | None) -> str | None:
+    """Devuelve ``1h`` o ``2h`` según cadena tipo ``54'``, ``45+2'``.
+
+    Todo lo que lleva base <= 45 cuenta como primera parte (prolongaciones
+    de la 1ª mitad siguen tratándose aquí como 1H).
+    """
+    if not ib_raw:
+        return None
+    m = _IB_MIN_FIRST_RE.match(ib_raw.strip())
+    if not m:
+        return None
+    base = int(m.group(1))
+    if base <= 45:
+        return "1h"
+    return "2h"
+
+
+def parse_team_half_metrics_from_summary_events(
+    records: list[dict[str, str]],
+) -> tuple[dict[str, int], dict[str, int]]:
+    """Extrae goles por mitad (cabeceras AC) y tarjetas por mitad/minuto.
+
+    Devuelve acumulados para ``home`` / ``away`` sólo sobre claves conocidas::
+    ``goals_1h``, ``goals_2h``, ``yellow_cards_1h``, etc.
+    """
+    home_counts: dict[str, int] = {}
+    away_counts: dict[str, int] = {}
+
+    def bump(side: str, field: str, delta: int) -> None:
+        bucket = home_counts if side == "home" else away_counts
+        bucket[field] = bucket.get(field, 0) + delta
+
+    for rec in records:
+        ik = rec.get("IK")
+        raw_ik = (ik or "").strip().lower()
+
+        period = rec.get("AC")
+        if period and rec.get("IG") is not None and rec.get("IH") is not None:
+            ph = _half_suffix_from_section_title(period)
+            if ph == "_1h":
+                g_home, g_away = _parse_int(rec.get("IG")), _parse_int(rec.get("IH"))
+                if g_home is not None:
+                    home_counts["goals_1h"] = g_home
+                if g_away is not None:
+                    away_counts["goals_1h"] = g_away
+            elif ph == "_2h":
+                g_home, g_away = _parse_int(rec.get("IG")), _parse_int(rec.get("IH"))
+                if g_home is not None:
+                    home_counts["goals_2h"] = g_home
+                if g_away is not None:
+                    away_counts["goals_2h"] = g_away
+
+        if not ik:
+            continue
+
+        yellow = raw_ik == "yellow card" or raw_ik == "tarjeta amarilla"
+        red = raw_ik == "red card" or raw_ik == "tarjeta roja"
+        if not yellow and not red:
+            continue
+
+        side = _incident_team_side(rec.get("IA"))
+        hk = _incident_half_from_minute(rec.get("IB"))
+        if side is None or hk is None:
+            continue
+        half_key = hk
+
+        if yellow:
+            bump(side, f"yellow_cards_{half_key}", 1)
+        if red:
+            bump(side, f"red_cards_{half_key}", 1)
+
+    return home_counts, away_counts
+
 
 def parse_match_statistics(records: list[dict[str, str]]) -> dict[str, dict[str, float | int]]:
     """Convierte los records crudos de ``df_st_1`` en stats canónicos.
@@ -299,8 +449,10 @@ def parse_match_statistics(records: list[dict[str, str]]) -> dict[str, dict[str,
     Devuelve un dict ``{"home": {...}, "away": {...}}`` con todas las claves
     de :data:`_STAT_MAP` que aparezcan en el feed. Las stats que aparecen
     repetidas (la misma stat puede listarse en varias secciones SF) se
-    almacenan una sola vez (la primera ocurrencia gana, el resto debe ser
-    idéntico salvo bugs de Flashscore).
+    almacenan una sola vez (la primera ocurrencia gana salvo errores evidentes).
+
+    Si el texto de grupo ``SF`` indica primera/segunda parte, algunas estadísticas
+    (córneres/tarjetas) se guardan también como ``corners_1h``, etc.
 
     Para stats con detalle pct+raw (``passes``), añade tres claves:
     ``passes_pct``, ``passes_completed``, ``passes_attempted``.
@@ -308,19 +460,47 @@ def parse_match_statistics(records: list[dict[str, str]]) -> dict[str, dict[str,
     home: dict[str, float | int] = {}
     away: dict[str, float | int] = {}
 
+    current_sf_title: str | None = None
+
     for rec in records:
-        name = rec.get("SG")
-        if not name or name not in _STAT_MAP:
+        if rec.get("SF"):
+            stripped = rec["SF"].strip()
+            current_sf_title = stripped if stripped else None
+
+        sg_raw = rec.get("SG")
+        if not sg_raw:
+            continue
+        name = sg_raw.strip()
+
+        sf_suffix = _half_suffix_from_section_title(current_sf_title)
+        ac_suffix = _half_suffix_from_section_title(rec.get("AC"))
+        half_suffix = sf_suffix or ac_suffix
+
+        if name in _HALF_GOALS_LABELS and half_suffix:
+            sh, si = rec.get("SH"), rec.get("SI")
+            gk = "goals" + half_suffix
+            vh, va = _parse_int(sh), _parse_int(si)
+            if vh is not None and gk not in home:
+                home[gk] = vh
+            if va is not None and gk not in away:
+                away[gk] = va
+            continue
+
+        if name not in _STAT_MAP:
             continue
         kind, key = _STAT_MAP[name]
         sh, si = rec.get("SH"), rec.get("SI")
+        hk = ""
+        if key in _STAT_KEYS_HALF_SUFFIXABLE and sf_suffix:
+            hk = sf_suffix
 
         if kind == "int":
             vh, va = _parse_int(sh), _parse_int(si)
-            if vh is not None and key not in home:
-                home[key] = vh
-            if va is not None and key not in away:
-                away[key] = va
+            nk = key + hk
+            if vh is not None and nk not in home:
+                home[nk] = vh
+            if va is not None and nk not in away:
+                away[nk] = va
         elif kind == "float":
             vh, va = _parse_decimal(sh), _parse_decimal(si)
             if vh is not None and key not in home:

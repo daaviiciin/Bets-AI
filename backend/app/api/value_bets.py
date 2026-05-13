@@ -38,7 +38,8 @@ def list_value_bets(
     * **EV del modelo Poisson**: si tenemos stats del partido, calculamos la
       probabilidad teórica con el modelo y comparamos con la cuota ofrecida.
 
-    El campo ``confidence`` resume la concordancia:
+    El campo ``confidence`` resume la concordancia (en la UI se muestra como
+    *alta / media / baja* según el mismo criterio):
 
     * ``high``: ambos EV muy positivos (≥ ~5%) → apuesta robusta.
     * ``medium``: ambos positivos pero moderados.
@@ -76,6 +77,7 @@ def list_value_bets(
             model_ev=b.model_ev,
             model_agrees=b.model_agrees,
             confidence=b.confidence,
+            player_name=b.player_name,
         )
         for b in bets[:top]
     ]

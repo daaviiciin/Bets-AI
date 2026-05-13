@@ -72,6 +72,7 @@ class PlayerMatchStats(Base, TimestampMixin):
 
     # Output ofensivo
     goals: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bb_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     assists: Mapped[int | None] = mapped_column(Integer, nullable=True)
     shots: Mapped[int | None] = mapped_column(Integer, nullable=True)
     shots_on_target: Mapped[int | None] = mapped_column(Integer, nullable=True)

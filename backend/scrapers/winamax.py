@@ -38,6 +38,7 @@ from curl_cffi import requests as cf
 BASE_URL = "https://www.winamax.es/apuestas-deportivas"
 REQUEST_TIMEOUT = 30
 SPORT_FOOTBALL = 1
+SPORT_BASKETBALL = 2
 
 _HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -71,6 +72,12 @@ MARKET_TYPES: dict[int, str] = {
     3621: "match_corners_totals",
     6202: "match_shots_totals",
     6205: "match_sot_totals",
+    # Primera mitad (IDs Winamax.es observados mayo 2026)
+    2531: "match_first_half_totals",
+    2394: "team_home_first_half_totals_goals",
+    2801: "team_away_first_half_totals_goals",
+    3814: "match_first_half_corners_totals",
+    3210: "match_first_half_cards_totals",
     # ---- PLAYER PROPS ----
     # "logros" = grid alternativo con líneas 1+/2+/3+ múltiples por jugador.
     2747: "player_shots_alt",              # Tiros del jugador (alternativas)
@@ -162,7 +169,16 @@ def fetch_state(url: str) -> dict:
 
 def fetch_football_overview() -> dict:
     """Descarga la home de fútbol con la lista de partidos disponibles."""
-    return fetch_state(f"{BASE_URL}/sport/{SPORT_FOOTBALL}")
+    return fetch_sport_overview(SPORT_FOOTBALL)
+
+
+def fetch_basketball_overview() -> dict:
+    return fetch_sport_overview(SPORT_BASKETBALL)
+
+
+def fetch_sport_overview(sport_id: int) -> dict:
+    """Home de un deporte (1=fútbol, 2=basket en Winamax.es, verificar otros)."""
+    return fetch_state(f"{BASE_URL}/sport/{sport_id}")
 
 
 def fetch_match(tournament_id: int | str, match_id: int | str) -> dict:
@@ -237,11 +253,16 @@ class WinamaxPlayerProp:
 
 def parse_football_matches(state: dict) -> list[WinamaxMatchInfo]:
     """Extrae los partidos de fútbol con metadatos básicos."""
+    return parse_sport_matches(state, SPORT_FOOTBALL)
+
+
+def parse_sport_matches(state: dict, sport_id: int) -> list[WinamaxMatchInfo]:
+    """Variante parametrizada por ``sport_id``."""
     matches = state.get("matches", {}) or {}
     tournaments = state.get("tournaments", {}) or {}
     out: list[WinamaxMatchInfo] = []
     for raw_id, m in matches.items():
-        if m.get("sportId") != SPORT_FOOTBALL:
+        if m.get("sportId") != sport_id:
             continue
         tour_id = m.get("tournamentId")
         tour = tournaments.get(str(tour_id)) or tournaments.get(tour_id) or {}
@@ -257,7 +278,7 @@ def parse_football_matches(state: dict) -> list[WinamaxMatchInfo]:
             away_team=str(m.get("competitor2Name") or ""),
             tournament_id=str(tour_id) if tour_id is not None else "",
             tournament_name=tour.get("tournamentName"),
-            sport_id=SPORT_FOOTBALL,
+            sport_id=int(sport_id),
             kickoff=kickoff,
             home_competitor_id=(
                 str(m["competitor1Id"]) if m.get("competitor1Id") is not None else None
@@ -271,7 +292,7 @@ def parse_football_matches(state: dict) -> list[WinamaxMatchInfo]:
     return out
 
 
-def parse_match_bets(state: dict, match_id: str | int) -> list[WinamaxBet]:
+def parse_match_bets(state: dict, match_id: int | str) -> list[WinamaxBet]:
     """Devuelve los mercados de un partido como lista de :class:`WinamaxBet`.
 
     Sólo incluye los mercados cuyo ``betType`` está en :data:`MARKET_TYPES`.
@@ -458,14 +479,18 @@ __all__ = [
     "BASE_URL",
     "MARKET_TYPES",
     "PLAYER_PROP_MARKETS",
+    "SPORT_BASKETBALL",
+    "SPORT_FOOTBALL",
     "WinamaxBet",
     "WinamaxMatchInfo",
     "WinamaxOutcome",
     "WinamaxPlayerProp",
     "fetch_football_overview",
+    "fetch_basketball_overview",
     "fetch_match",
     "fetch_state",
     "parse_football_matches",
     "parse_match_bets",
+    "parse_sport_matches",
     "parse_player_props",
 ]

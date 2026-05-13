@@ -1,0 +1,134 @@
+<div class="min-h-screen bg-gradient-to-b from-brand-bg-deep via-brand-bg-mid to-brand-bg-deep text-white pb-16">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
+    <div class="space-y-3">
+      <p class="text-xs font-medium uppercase tracking-[0.2em] text-brand-cyan/85">PostgreSQL</p>
+      <h1 class="text-3xl font-semibold text-white tracking-tight">Mis combinadas</h1>
+      <p class="text-brand-muted text-sm max-w-xl leading-relaxed">
+        Cada fila es una <strong class="text-white font-medium">combinada completa</strong> tal como la guardaste desde el simulador del dashboard.
+        Pulsa <strong class="text-white font-medium">Actualizar marcadores</strong> después de los partidos para recalcular si la combinada hubiera entrado según el marcador
+        (misma lógica automática que antes: 1×2, totales de goles marcador claro, BTTS; el resto marca revisión).
+      </p>
+      <div class="flex flex-wrap gap-3 pt-2">
+        <button
+          type="button"
+          (click)="refreshGrades()"
+          [disabled]="busy() || parlays().length === 0"
+          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium
+                 bg-brand-cyan/12 border border-brand-cyan/35 text-brand-cyan hover:bg-brand-cyan/18
+                 transition-all disabled:opacity-45 shadow-[0_0_20px_-10px_rgb(0_229_255_/_40%)]">
+          @if (busy()) {
+            <span class="size-4 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin"></span>
+            <span>Trabajando…</span>
+          } @else {
+            <span>Actualizar marcadores</span>
+          }
+        </button>
+        <button
+          type="button"
+          (click)="reload()"
+          [disabled]="busy()"
+          class="text-sm font-medium px-4 py-2.5 rounded-xl border border-brand-blue/30 text-brand-muted hover:border-brand-cyan/35 hover:text-white transition-colors disabled:opacity-40">
+          Recargar lista
+        </button>
+      </div>
+      @if (error()) {
+        <div class="rounded-xl border border-rose-500/35 bg-rose-950/25 px-4 py-3 text-sm text-rose-200">
+          {{ error() }}
+        </div>
+      }
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="rounded-xl border border-brand-blue/20 bg-brand-bg-panel/40 px-4 py-3">
+        <div class="text-[10px] uppercase text-brand-muted">Guardadas</div>
+        <div class="text-2xl font-semibold text-white tabular-nums">{{ summary().total }}</div>
+      </div>
+      <div class="rounded-xl border border-brand-blue/20 bg-brand-bg-panel/40 px-4 py-3">
+        <div class="text-[10px] uppercase text-brand-muted">Pendientes</div>
+        <div class="text-2xl font-semibold text-amber-200/95 tabular-nums">{{ summary().pending }}</div>
+      </div>
+      <div class="rounded-xl border border-brand-blue/20 bg-brand-bg-panel/40 px-4 py-3">
+        <div class="text-[10px] uppercase text-brand-muted">OK / KO cerradas</div>
+        <div class="text-xl font-semibold text-white tabular-nums">
+          {{ summary().hits }} / {{ summary().misses }}
+        </div>
+      </div>
+      <div class="rounded-xl border border-brand-blue/20 bg-brand-bg-panel/40 px-4 py-3">
+        <div class="text-[10px] uppercase text-brand-muted">% acierto combinadas</div>
+        <div class="text-2xl font-semibold text-brand-cyan tabular-nums">
+          {{ summary().ratePct != null ? summary().ratePct + '%' : '—' }}
+        </div>
+      </div>
+    </div>
+
+    @if (!busy() && parlays().length === 0) {
+      <div class="rounded-2xl border border-brand-blue/20 bg-brand-bg-panel/30 px-8 py-16 text-center text-brand-muted text-sm space-y-3">
+        <p>No hay combinadas guardadas todavía.</p>
+        <p>
+          Ve al <strong class="text-white">Dashboard</strong>: monta la combinada en «Simulador de combinada» y pulsa
+          <strong class="text-white">Guardar combinada en servidor</strong> (debes haber iniciado sesión).
+        </p>
+      </div>
+    } @else if (parlays().length > 0) {
+      <div class="space-y-5">
+        @for (p of parlays(); track p.id) {
+          <article class="rounded-2xl border border-brand-cyan/15 bg-brand-bg-panel/35 px-6 py-5 space-y-4 shadow-lg shadow-brand-blue/5 backdrop-blur-sm">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div class="text-white font-medium text-lg">{{ p.title ?? 'Combinada sin nombre' }}</div>
+                <div class="text-xs text-brand-muted mt-0.5">{{ overallLabel(p.overall_result) }}</div>
+              </div>
+              <div class="text-right text-xs text-brand-muted">
+                <div>Guardada {{ fmtDateShort(p.created_at) }}</div>
+                @if (p.last_graded_at) {
+                  <div>Último cálculo {{ fmtDateShort(p.last_graded_at) }}</div>
+                }
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-6 text-sm">
+              <div>
+                <div class="text-[10px] uppercase text-brand-muted">Cuota combinada (al guardar)</div>
+                <div class="font-semibold text-white tabular-nums mt-1">{{ fmtOdds(p.combined_odds) }}</div>
+              </div>
+              <div>
+                <div class="text-[10px] uppercase text-brand-muted">P modelo conjunta (al guardar)</div>
+                <div class="font-semibold text-brand-cyan tabular-nums mt-1">{{ mpAtSave(p) }}</div>
+              </div>
+            </div>
+            <ul class="space-y-2 text-sm border-t border-brand-blue/15 pt-4">
+              @for (lg of gradedLegs(p); track lg.match_id + lg.market_key + lg.outcome_name + (lg.outcome_point ?? '') + (lg.player_name ?? '')) {
+                <li class="flex flex-wrap justify-between gap-2 rounded-lg border border-brand-blue/20 bg-brand-bg-deep/50 px-4 py-3">
+                  <div>
+                    <div class="text-white font-medium">{{ lg.home_team }} – {{ lg.away_team }}</div>
+                    <div class="text-brand-muted text-xs mt-0.5">{{ legLabel(lg) }}</div>
+                    @if (lg.score_text) {
+                      <div class="text-xs text-brand-muted/80 mt-1">{{ lg.score_text }}</div>
+                    }
+                  </div>
+                  <div class="text-right text-xs shrink-0">
+                    <div class="text-brand-muted tabular-nums">cuota {{ fmtOdds(lg.offered_odds) }}</div>
+                    @if (lg.model_probability) {
+                      <div class="text-brand-muted/90 tabular-nums">P {{ fmtAbsPct(lg.model_probability, 1) }}</div>
+                    }
+                    <div class="mt-1 font-medium" [class]="legResultClass(lg.result)">
+                      {{ lg.result === 'hit' ? 'Pata OK' : lg.result === 'miss' ? 'Pata KO' : lg.result === 'needs_review' ? 'Revisar' : 'Pendiente' }}
+                    </div>
+                  </div>
+                </li>
+              }
+            </ul>
+            <div class="flex justify-end">
+              <button
+                type="button"
+                (click)="remove(p.id)"
+                [disabled]="busy()"
+                class="text-xs font-medium text-rose-300/90 px-3 py-1.5 rounded-lg border border-rose-500/35 hover:bg-rose-500/10 disabled:opacity-40">
+                Eliminar
+              </button>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  </div>
+</div>

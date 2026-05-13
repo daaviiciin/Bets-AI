@@ -1,0 +1,249 @@
+<section class="max-w-7xl mx-auto px-6 py-10">
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold tracking-tight">Análisis de cuotas</h1>
+    <p class="text-slate-400 mt-1 max-w-3xl">
+      Introduce la cuota (o combinada) tal como la ves en Winamax. Si enlazas un partido de la BD,
+      comparamos la probabilidad implícita del libro con el modelo estadístico (Flashscore /
+      temporada). En ligas <span class="text-slate-300">basketball_*</span> usamos una heurística
+      rápida de puntos; en fútbol, Poisson Dixon–Coles como en el detalle del partido.
+    </p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-6 space-y-4">
+      <div>
+        <label class="text-xs text-slate-400 uppercase tracking-wider">ID partido (opcional)</label>
+        <input
+          type="text"
+          [value]="matchIdStr()"
+          (input)="matchIdStr.set($any($event.target).value)"
+          placeholder="Ej. 42 — desde /partidos"
+          class="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+        />
+      </div>
+
+      <label class="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+        <input
+          type="checkbox"
+          [checked]="assumeIndependent()"
+          (change)="assumeIndependent.set($any($event.target).checked)"
+          class="rounded border-slate-600"
+        />
+        Asumir patas independientes (producto de probabilidades modelo)
+      </label>
+
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-semibold text-slate-200">Patas</span>
+          <button
+            type="button"
+            (click)="addLeg()"
+            class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-200 hover:bg-slate-700"
+          >
+            + Añadir
+          </button>
+        </div>
+
+        @for (leg of legs(); track $index) {
+          <div class="rounded-lg border border-slate-800 p-4 space-y-2 bg-slate-950/40">
+            <div class="flex justify-between items-center">
+              <span class="text-xs text-slate-500">#{{ $index + 1 }}</span>
+              @if (legs().length > 1) {
+                <button
+                  type="button"
+                  (click)="removeLeg($index)"
+                  class="text-xs text-rose-400 hover:text-rose-300"
+                >
+                  Quitar
+                </button>
+              }
+            </div>
+            <input
+              type="text"
+              [value]="leg.label"
+              (input)="patchLeg($index, { label: $any($event.target).value })"
+              placeholder="Etiqueta (ej. Over 2.5 goles)"
+              class="w-full rounded bg-slate-900 border border-slate-700 px-2 py-1.5 text-sm"
+            />
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <div class="text-[10px] text-slate-500 uppercase">Cuota decimal</div>
+                <input
+                  type="text"
+                  [value]="leg.decimal_odds"
+                  (input)="patchLeg($index, { decimal_odds: $any($event.target).value })"
+                  class="w-full rounded bg-slate-900 border border-slate-700 px-2 py-1.5 text-sm font-mono"
+                />
+              </div>
+              <div>
+                <div class="text-[10px] text-slate-500 uppercase">Línea (totales)</div>
+                <input
+                  type="text"
+                  [value]="leg.line"
+                  (input)="patchLeg($index, { line: $any($event.target).value })"
+                  placeholder="2.5 o 215.5"
+                  class="w-full rounded bg-slate-900 border border-slate-700 px-2 py-1.5 text-sm font-mono"
+                />
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <div class="text-[10px] text-slate-500 uppercase">Mercado</div>
+                <select
+                  [value]="leg.market"
+                  (change)="patchLeg($index, { market: $any($event.target).value })"
+                  class="w-full rounded bg-slate-900 border border-slate-700 px-2 py-1.5 text-sm"
+                >
+                  <option value="h2h">h2h (1X2)</option>
+                  <option value="totals">totals</option>
+                  <option value="btts">btts</option>
+                  <option value="double_chance">double_chance</option>
+                  <option value="team_totals_home">team_totals_home</option>
+                  <option value="team_totals_away">team_totals_away</option>
+                  <option value="">(solo implícita)</option>
+                </select>
+              </div>
+              <div>
+                <div class="text-[10px] text-slate-500 uppercase">Selección</div>
+                <input
+                  type="text"
+                  [value]="leg.selection"
+                  (input)="patchLeg($index, { selection: $any($event.target).value })"
+                  placeholder="home / over / yes…"
+                  class="w-full rounded bg-slate-900 border border-slate-700 px-2 py-1.5 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+
+      <button
+        type="button"
+        (click)="run()"
+        [disabled]="loading()"
+        class="w-full py-3 rounded-xl font-semibold bg-gradient-to-r from-emerald-500 to-cyan-600 text-slate-900 disabled:opacity-50"
+      >
+        @if (loading()) {
+          Calculando…
+        } @else {
+          Evaluar
+        }
+      </button>
+
+      @if (error()) {
+        <div class="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-200 text-sm p-4">
+          {{ error() }}
+        </div>
+      }
+    </div>
+
+    <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-6 min-h-[320px]">
+      @if (result(); as r) {
+        <div class="space-y-4">
+          <div class="text-xs text-slate-500 uppercase tracking-wider">Resultado</div>
+          @if (r.match_label) {
+            <div class="text-lg font-semibold text-white">{{ r.match_label }}</div>
+            <div class="text-xs text-slate-500">sport_key: {{ r.league_sport_key }}</div>
+          }
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div class="rounded-lg bg-slate-950/80 p-4 border border-slate-800">
+              <div class="text-slate-400 text-xs">Cuota combinada</div>
+              <div class="font-mono text-xl mt-1 text-emerald-300">{{ r.combined_decimal_odds }}</div>
+            </div>
+            <div class="rounded-lg bg-slate-950/80 p-4 border border-slate-800">
+              <div class="text-slate-400 text-xs">Prob. implícita (libro)</div>
+              <div class="font-mono text-xl mt-1">{{ fmtPct(r.combined_implied_probability, 2) }}</div>
+            </div>
+          </div>
+          @if (r.combined_model_probability != null) {
+            <div class="rounded-lg bg-cyan-500/10 border border-cyan-500/25 p-4">
+              <div class="text-cyan-200 text-xs uppercase">Modelo estadístico (combinada)</div>
+              <div class="flex flex-wrap gap-6 mt-2">
+                <div>
+                  <div class="text-slate-500 text-xs">P modelo</div>
+                  <div class="font-mono text-lg">{{ fmtPct(r.combined_model_probability, 2) }}</div>
+                </div>
+                @if (r.model_combined_ev != null) {
+                  <div>
+                    <div class="text-slate-500 text-xs">EV vs cuota combinada</div>
+                    <div class="font-mono text-lg" [class.text-emerald-300]="r.model_combined_ev > 0" [class.text-rose-300]="r.model_combined_ev < 0">
+                      {{ fmtPct(r.model_combined_ev, 2) }}
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          } @else {
+            <div class="text-sm text-slate-500 italic">
+              No hay probabilidad modelo combinada (falta datos, mercado no mapeado, o independence off).
+            </div>
+          }
+          @if (r.independence_warning) {
+            <div class="text-amber-200/90 text-xs border border-amber-500/30 rounded-lg p-3 bg-amber-500/10">
+              {{ r.independence_warning }}
+            </div>
+          }
+          <p class="text-xs text-slate-500">{{ r.data_sources_note }}</p>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm border border-slate-800 rounded-lg overflow-hidden">
+              <thead class="bg-slate-950 text-slate-400 text-xs uppercase">
+                <tr>
+                  <th class="text-left px-3 py-2">Pata</th>
+                  <th class="text-right px-3 py-2">Cuota</th>
+                  <th class="text-right px-3 py-2">Implícita</th>
+                  <th class="text-right px-3 py-2">Modelo</th>
+                  <th class="text-right px-3 py-2">EV</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800">
+                @for (row of r.legs; track $index) {
+                  <tr class="bg-slate-900/40">
+                    <td class="px-3 py-2">
+                      <div class="font-medium text-slate-200">{{ row.label }}</div>
+                      @if (row.model_note) {
+                        <div class="text-[10px] text-slate-500 mt-0.5">{{ row.model_note }}</div>
+                      }
+                    </td>
+                    <td class="px-3 py-2 text-right font-mono">{{ row.decimal_odds }}</td>
+                    <td class="px-3 py-2 text-right font-mono">{{ fmtPct(row.implied_probability, 2) }}</td>
+                    <td class="px-3 py-2 text-right font-mono text-slate-300">
+                      @if (row.model_probability != null) {
+                        {{ fmtPct(row.model_probability, 2) }}
+                      } @else {
+                        —
+                      }
+                    </td>
+                    <td class="px-3 py-2 text-right font-mono">
+                      @if (row.model_ev != null) {
+                        <span [class.text-emerald-300]="row.model_ev > 0" [class.text-rose-300]="row.model_ev < 0">
+                          {{ fmtPct(row.model_ev, 2) }}
+                        </span>
+                      } @else {
+                        —
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          @if (r.notes.length) {
+            <ul class="text-xs text-slate-500 space-y-1 list-disc list-inside">
+              @for (n of r.notes; track n) {
+                <li>{{ n }}</li>
+              }
+            </ul>
+          }
+        </div>
+      } @else {
+        <div class="h-full flex flex-col items-center justify-center text-slate-500 text-sm text-center px-6 py-16">
+          Rellena las patas y pulsa <span class="text-slate-300">Evaluar</span>. Opcionalmente indica el
+          ID del partido para enlazar estadísticas ya ingeridas.
+        </div>
+      }
+    </div>
+  </div>
+</section>

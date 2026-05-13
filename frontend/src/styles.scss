@@ -1,15 +1,31 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: dark;
+/* Paleta BETS Ai · Intelligent Market Analysis */
+@theme {
+  --color-brand-bg-deep: #050c12;
+  --color-brand-bg-mid: #0a1628;
+  --color-brand-bg-panel: #0f2135;
+  --color-brand-cyan: #00e5ff;
+  --color-brand-blue: #007bff;
+  --color-brand-muted: #a0c4d1;
 }
 
-html, body {
+:root {
+  color-scheme: dark;
+  --brand-glow-cyan: rgb(0 229 255 / 12%);
+}
+
+html,
+body {
   height: 100%;
   margin: 0;
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background: #0b0f17;
-  color: #e6e9ef;
+  background-color: var(--color-brand-bg-deep);
+  background-image:
+    radial-gradient(ellipse 120% 80% at 50% -30%, rgb(0 123 255 / 14%), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 100% 50%, rgb(0 229 255 / 6%), transparent 45%),
+    linear-gradient(180deg, #050c12 0%, #071018 40%, #050c12 100%);
+  color: #ffffff;
   -webkit-font-smoothing: antialiased;
 }
 

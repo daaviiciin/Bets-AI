@@ -3,19 +3,22 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
+from backend.app.config import get_settings
 from backend.app.schemas.refresh import RefreshSummaryOut
-from backend.services.daily_refresh import DailyRefreshOrchestrator
+from backend.services.daily_refresh import DailyRefreshOrchestrator, DailyRefreshSummary
 from backend.services.match_results_updater import MatchResultsUpdater
 from backend.services.refresh_service import (
     DEFAULT_STALE_MATCH_BUFFER_HOURS,
     RefreshService,
 )
+from backend.services.winamax_odds_ingester import WinamaxOddsIngester
 
 router = APIRouter(prefix="/refresh", tags=["refresh"])
 log = logging.getLogger(__name__)
@@ -56,14 +59,89 @@ class DailyRefreshStatsBlockOut(BaseModel):
     parse_errors: int
 
 
+class DailyRefreshFixturesBlockOut(BaseModel):
+    fixtures_fetched: int
+    fixtures_inserted: int
+    fixtures_updated: int
+    skipped_duplicate_db: int
+    skipped_not_future: int
+    skipped_unknown_league: int
+    duration_seconds: float
+    errors: list[str] = Field(default_factory=list)
+
+
 class DailyRefreshSummaryOut(BaseModel):
     started_at: str
     finished_at: str
     duration_seconds: float
     ok: bool
+    fixtures: DailyRefreshFixturesBlockOut | None = None
     results: DailyRefreshResultsBlockOut | None = None
     stats: DailyRefreshStatsBlockOut | None = None
     errors: list[str] = Field(default_factory=list)
+
+
+class WinamaxIngestSummaryOut(BaseModel):
+    matches_in_db: int
+    matches_matched: int
+    matches_unmatched: int
+    matches_failed: int
+    snapshots_created: int
+    snapshots_pruned: int = 0
+    odds_inserted: int
+    duration_seconds: float
+    errors: list[str] = Field(default_factory=list)
+
+
+class OfficialPipelineSummaryOut(BaseModel):
+    """Fixtures próximos (Flashscore) + pipeline Sofascore/stats + Winamax."""
+
+    started_at: str
+    finished_at: str
+    duration_seconds: float
+    ok: bool
+    daily: DailyRefreshSummaryOut
+    winamax: WinamaxIngestSummaryOut
+    note: str = Field(
+        default=(
+            "Confianza (alta/media/baja) la calcula el backend sobre modelo + mercado. "
+            "Los próximos partidos se sincronizan desde Flashscore (`external_id` "
+            "`flashscore:…`). Las cuotas pueden venir de Winamax sobre esos partidos."
+        ),
+    )
+
+
+def _daily_refresh_summary_to_out(summary: DailyRefreshSummary) -> DailyRefreshSummaryOut:
+    return DailyRefreshSummaryOut(
+        started_at=summary.started_at.isoformat(),
+        finished_at=summary.finished_at.isoformat(),
+        duration_seconds=summary.duration_seconds,
+        ok=summary.ok,
+        fixtures=DailyRefreshFixturesBlockOut(
+            fixtures_fetched=summary.fixtures.fixtures_fetched,
+            fixtures_inserted=summary.fixtures.fixtures_inserted,
+            fixtures_updated=summary.fixtures.fixtures_updated,
+            skipped_duplicate_db=summary.fixtures.skipped_duplicate_db,
+            skipped_not_future=summary.fixtures.skipped_not_future,
+            skipped_unknown_league=summary.fixtures.skipped_unknown_league,
+            duration_seconds=summary.fixtures.duration_seconds,
+            errors=summary.fixtures.errors,
+        ) if summary.fixtures is not None else None,
+        results=DailyRefreshResultsBlockOut(
+            total_updated=summary.results.total_updated,
+            total_already_ok=summary.results.total_already_ok,
+            total_not_found=summary.results.total_not_found,
+        ) if summary.results is not None else None,
+        stats=DailyRefreshStatsBlockOut(
+            matches_matched=summary.stats.matches_matched,
+            matches_unmatched=summary.stats.matches_unmatched,
+            stats_inserted=summary.stats.stats_inserted,
+            stats_updated=summary.stats.stats_updated,
+            fetch_errors=summary.stats.fetch_errors,
+            parse_errors=summary.stats.parse_errors,
+        ) if summary.stats is not None else None,
+        errors=summary.errors,
+    )
 
 
 @router.post("", response_model=RefreshSummaryOut)
@@ -79,12 +157,16 @@ def trigger_refresh(
     ),
     db: Session = Depends(get_db),
 ) -> RefreshSummaryOut:
-    """Refresca cuotas de las 8 competiciones.
+    """Refresca cuotas de las 8 competiciones vía The Odds API (de pago).
 
-    **Importante**: cada llamada consume aproximadamente **16 créditos** de
-    The Odds API (8 ligas × 2 mercados). Úsalo con moderación.
+    **Importante**: cada llamada puede consumir ~**16 créditos** (8 ligas × 2 mercados)
+    si ``ODDS_API_REFRESH_ENABLED=true`` y ``ODDS_API_KEY`` está configurada.
+    Por defecto este endpoint está **bloqueado** (sin clave o con refresh desactivado)
+    y responde **403** sin llamar a la API: **cero créditos**.
 
-    Pasos:
+    Para el dashboard / pipeline sin Odds API usa ``POST /refresh/official``.
+
+    Pasos (solo si Odds API está habilitada):
 
     1. Captura cuotas frescas con el scraper.
     2. Las inserta en la BD (con un nuevo snapshot).
@@ -93,6 +175,25 @@ def trigger_refresh(
 
     Si el scraping falla totalmente, la BD se queda con los datos antiguos.
     """
+    settings = get_settings()
+    if not settings.odds_api_refresh_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Refresco vía The Odds API desactivado (ODDS_API_REFRESH_ENABLED=false). "
+                "No se ha consumido ningún crédito. Usa POST /refresh/official para datos "
+                "sin The Odds API."
+            ),
+        )
+    if not (settings.odds_api_key or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Falta ODDS_API_KEY; no se llama a The Odds API ni se gastan créditos. "
+                "Configura la clave y ODDS_API_REFRESH_ENABLED=true para usar este endpoint, "
+                "o usa POST /refresh/official."
+            ),
+        )
     service = RefreshService(db, log=log)
     summary = service.refresh_all(stale_match_buffer_hours=stale_match_buffer_hours)
     return RefreshSummaryOut(
@@ -165,17 +266,13 @@ def refresh_daily(
     stats_all_leagues: bool = Query(
         False, description="Incluir competiciones europeas además de top-5.",
     ),
+    fixtures_days_ahead: int = Query(
+        7, ge=1, le=14,
+        description="Días de calendario a cubrir con feeds de fixtures Flashscore (0..N-1).",
+    ),
     db: Session = Depends(get_db),
 ) -> DailyRefreshSummaryOut:
-    """Pipeline diario unificado (gratis): resultados + stats post-partido.
-
-    Encadena en orden:
-
-    1. ``MatchResultsUpdater`` (Sofascore unofficial API) — marca partidos
-       como ``finished`` con ``home_score`` / ``away_score`` / ``played_at``.
-    2. ``FlashscoreStatsIngester`` (Flashscore ``df_st_1``) — ingesta xG,
-       posesión, tiros, córners, tarjetas, etc. para los partidos
-       finalizados sin stats todavía.
+    """Pipeline diario unificado (gratis): fixtures Flashscore, Sofascore, stats, jugadores.
 
     No consume créditos del Odds API. Idempotente. Si un paso falla, el
     siguiente sigue ejecutándose y los errores se reflejan en la respuesta.
@@ -184,25 +281,83 @@ def refresh_daily(
     summary = orchestrator.run(
         stats_days_back=stats_days_back,
         stats_only_top5=not stats_all_leagues,
+        fixtures_days_ahead=fixtures_days_ahead,
     )
 
-    return DailyRefreshSummaryOut(
-        started_at=summary.started_at.isoformat(),
-        finished_at=summary.finished_at.isoformat(),
-        duration_seconds=summary.duration_seconds,
-        ok=summary.ok,
-        results=DailyRefreshResultsBlockOut(
-            total_updated=summary.results.total_updated,
-            total_already_ok=summary.results.total_already_ok,
-            total_not_found=summary.results.total_not_found,
-        ) if summary.results is not None else None,
-        stats=DailyRefreshStatsBlockOut(
-            matches_matched=summary.stats.matches_matched,
-            matches_unmatched=summary.stats.matches_unmatched,
-            stats_inserted=summary.stats.stats_inserted,
-            stats_updated=summary.stats.stats_updated,
-            fetch_errors=summary.stats.fetch_errors,
-            parse_errors=summary.stats.parse_errors,
-        ) if summary.stats is not None else None,
-        errors=summary.errors,
+    return _daily_refresh_summary_to_out(summary)
+
+
+@router.post("/official", response_model=OfficialPipelineSummaryOut)
+def refresh_official_pipeline(
+    stats_days_back: int = Query(
+        7, ge=1, le=30,
+        description="Ventana en días para buscar partidos sin stats Flashscore.",
+    ),
+    stats_all_leagues: bool = Query(
+        False, description="Incluir competiciones europeas además de top-5.",
+    ),
+    winamax_days_ahead: int = Query(
+        7, ge=1, le=14,
+        description="Horizonte de partidos programados en BD a intentar cubrir.",
+    ),
+    winamax_max_matches: int = Query(
+        100, ge=1, le=220,
+        description=(
+            "Tope de partidos a scrapear en Winamax por corrida "
+            "(más partidos ⇒ más líneas para el dashboard)."
+        ),
+    ),
+    fixtures_days_ahead: int = Query(
+        7, ge=1, le=14,
+        description="Días de feeds Flashscore para poblar próximos partidos en BD.",
+    ),
+    db: Session = Depends(get_db),
+) -> OfficialPipelineSummaryOut:
+    """Pipeline principal sin The Odds API: fixtures Flashscore + pipeline diario + Winamax.
+
+    1. Como ``/refresh/daily``: calendario próximo desde Flashscore, resultados Sofascore,
+       stats post-partido, stats por jugador.
+    2. Ingiere mercados Winamax sobre próximos ``Match`` del horizonte indicado.
+    """
+    t0 = datetime.now(timezone.utc)
+
+    orchestrator = DailyRefreshOrchestrator(db, log=log)
+    stats_top5_only = not stats_all_leagues
+    dsum = orchestrator.run(
+        stats_days_back=stats_days_back,
+        stats_only_top5=stats_top5_only,
+        fixtures_days_ahead=fixtures_days_ahead,
+    )
+
+    ingester = WinamaxOddsIngester(db, log=log, settings=get_settings())
+    wres = ingester.ingest_upcoming(
+        days_ahead=winamax_days_ahead,
+        max_matches=winamax_max_matches,
+        only_top5=stats_top5_only,
+        sport="football",
+        commit=True,
+    )
+
+    t1 = datetime.now(timezone.utc)
+    pipeline_ok = dsum.ok and not wres.errors
+
+    winamax_out = WinamaxIngestSummaryOut(
+        matches_in_db=wres.matches_in_db,
+        matches_matched=wres.matches_matched,
+        matches_unmatched=wres.matches_unmatched,
+        matches_failed=wres.matches_failed,
+        snapshots_created=wres.snapshots_created,
+        snapshots_pruned=wres.snapshots_pruned,
+        odds_inserted=wres.odds_inserted,
+        duration_seconds=wres.duration_seconds,
+        errors=wres.errors,
+    )
+
+    return OfficialPipelineSummaryOut(
+        started_at=t0.isoformat(),
+        finished_at=t1.isoformat(),
+        duration_seconds=(t1 - t0).total_seconds(),
+        ok=pipeline_ok,
+        daily=_daily_refresh_summary_to_out(dsum),
+        winamax=winamax_out,
     )

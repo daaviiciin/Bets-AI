@@ -4,16 +4,24 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import {
+  AuthTokenResponse,
+  AuthUserBrief,
   CalibrationReport,
+  CustomBetAssessmentRequest,
+  CustomBetAssessmentResponse,
   DailyRefreshSummary,
+  GradedOddsLine,
   Match,
   MatchAnalysis,
   MatchPlayerProps,
   MatchStats,
+  OfficialPipelineSummary,
   Odds,
   RecommendationSet,
   RefreshSummary,
   ResultsRefreshSummary,
+  SavedParlay,
+  SavedParlayLegPersist,
   UserProfile,
   ValueBet,
 } from './models';
@@ -72,6 +80,20 @@ export class ApiService {
     );
   }
 
+  listGradedOdds(opts?: {
+    horizonHours?: number;
+    maxLines?: number;
+    bookmaker?: string;
+  }): Observable<GradedOddsLine[]> {
+    let params = new HttpParams();
+    if (opts?.horizonHours != null) {
+      params = params.set('horizon_hours', String(opts.horizonHours));
+    }
+    if (opts?.maxLines != null) params = params.set('max_lines', String(opts.maxLines));
+    if (opts?.bookmaker) params = params.set('bookmaker_key', opts.bookmaker);
+    return this.http.get<GradedOddsLine[]>(`${this.base}/dashboard/graded-odds`, { params });
+  }
+
   listValueBets(opts?: {
     minEv?: number;
     minEvModel?: number;
@@ -125,14 +147,83 @@ export class ApiService {
     return this.http.post<ResultsRefreshSummary>(`${this.base}/refresh/results`, null, { params });
   }
 
-  refreshDaily(opts?: { statsDaysBack?: number; statsAllLeagues?: boolean }): Observable<DailyRefreshSummary> {
+  refreshDaily(opts?: {
+    statsDaysBack?: number;
+    statsAllLeagues?: boolean;
+    fixturesDaysAhead?: number;
+  }): Observable<DailyRefreshSummary> {
     let params = new HttpParams();
     if (opts?.statsDaysBack != null) params = params.set('stats_days_back', String(opts.statsDaysBack));
     if (opts?.statsAllLeagues != null) params = params.set('stats_all_leagues', String(opts.statsAllLeagues));
+    if (opts?.fixturesDaysAhead != null) {
+      params = params.set('fixtures_days_ahead', String(opts.fixturesDaysAhead));
+    }
     return this.http.post<DailyRefreshSummary>(`${this.base}/refresh/daily`, null, { params });
+  }
+
+  /** Sofascore + Flashscore + cuotas Winamax (sin Odds API). */
+  refreshOfficialPipeline(opts?: {
+    statsDaysBack?: number;
+    statsAllLeagues?: boolean;
+    fixturesDaysAhead?: number;
+    winamaxDaysAhead?: number;
+    winamaxMaxMatches?: number;
+  }): Observable<OfficialPipelineSummary> {
+    let params = new HttpParams();
+    if (opts?.statsDaysBack != null) params = params.set('stats_days_back', String(opts.statsDaysBack));
+    if (opts?.statsAllLeagues != null) params = params.set('stats_all_leagues', String(opts.statsAllLeagues));
+    if (opts?.fixturesDaysAhead != null) {
+      params = params.set('fixtures_days_ahead', String(opts.fixturesDaysAhead));
+    }
+    if (opts?.winamaxDaysAhead != null) {
+      params = params.set('winamax_days_ahead', String(opts.winamaxDaysAhead));
+    }
+    if (opts?.winamaxMaxMatches != null) {
+      params = params.set('winamax_max_matches', String(opts.winamaxMaxMatches));
+    }
+    return this.http.post<OfficialPipelineSummary>(`${this.base}/refresh/official`, null, { params });
   }
 
   getLatestCalibration(): Observable<CalibrationReport> {
     return this.http.get<CalibrationReport>(`${this.base}/calibration/latest`);
+  }
+
+  postCustomBetAssessment(
+    body: CustomBetAssessmentRequest,
+  ): Observable<CustomBetAssessmentResponse> {
+    return this.http.post<CustomBetAssessmentResponse>(`${this.base}/analysis/custom-bet`, body);
+  }
+
+  login(username: string, password: string): Observable<AuthTokenResponse> {
+    return this.http.post<AuthTokenResponse>(`${this.base}/auth/login`, {
+      username,
+      password,
+    });
+  }
+
+  authMe(): Observable<AuthUserBrief> {
+    return this.http.get<AuthUserBrief>(`${this.base}/auth/me`);
+  }
+
+  listMyParlays(): Observable<SavedParlay[]> {
+    return this.http.get<SavedParlay[]>(`${this.base}/me/parlays`);
+  }
+
+  saveMyParlay(payload: {
+    title?: string | null;
+    legs: SavedParlayLegPersist[];
+  }): Observable<SavedParlay> {
+    return this.http.post<SavedParlay>(`${this.base}/me/parlays`, payload);
+  }
+
+  deleteMyParlay(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/me/parlays/${id}`);
+  }
+
+  refreshMyParlaysGrading(): Observable<{ updated_parlays: number }> {
+    return this.http.post<{ updated_parlays: number }>(
+      `${this.base}/me/parlays/refresh-grades`,
+      null,
+    );
   }
 }

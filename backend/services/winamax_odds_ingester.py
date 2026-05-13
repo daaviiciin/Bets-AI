@@ -14,8 +14,10 @@ Flujo:
    (Sportradar) si no existe, y vincula la cuota al jugador via
    ``Odds.player_id``.
 
-Idempotente por snapshot: cada corrida crea un nuevo snapshot, no se
-sobreescriben snapshots anteriores.
+En cada corrida se crean snapshots nuevos por liga; antes del ``commit``
+se purgan los antiguos (por defecto se conservan los ``N`` últimos por
+liga, véase ``WINAMAX_SNAPSHOT_RETENTION``): las odds ligadas borran por
+``ON DELETE CASCADE``.
 """
 
 from __future__ import annotations
@@ -24,11 +26,13 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Iterable
+from typing import Literal
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload
 
+from backend.app.config import Settings, get_settings
 from backend.models import (
     Bookmaker,
     Market,
@@ -41,6 +45,14 @@ from backend.models import (
 from backend.models.match import MATCH_STATUS_SCHEDULED
 from backend.scrapers import winamax as wm
 from backend.services.match_results_updater import _names_match, _normalize
+from backend.services.winamax_normalization import (
+    canonical_market_key,
+    normalize_btts_outcome,
+    normalize_double_chance_outcome,
+    normalize_h2h_outcome,
+    normalize_totals_outcome,
+    parse_totals_line_from_label,
+)
 
 DEFAULT_TIME_WINDOW_HOURS = 4
 WINAMAX_BOOKMAKER_KEY = "winamax_es"
@@ -63,6 +75,11 @@ _MARKET_FRIENDLY_NAME: dict[str, str] = {
     "match_corners_totals": "Total de córneres",
     "match_shots_totals": "Total de tiros",
     "match_sot_totals": "Total de tiros a puerta",
+    "match_first_half_totals": "Total de goles (1ª mitad)",
+    "team_home_first_half_totals_goals": "Goles local (1ª mitad)",
+    "team_away_first_half_totals_goals": "Goles visitante (1ª mitad)",
+    "match_first_half_corners_totals": "Total de córneres (1ª mitad)",
+    "match_first_half_cards_totals": "Total de tarjetas (1ª mitad)",
     # Player props
     "player_shots": "Tiros del jugador (over/under)",
     "player_sot": "Tiros a puerta del jugador (over/under)",
@@ -93,6 +110,7 @@ class WinamaxIngestResult:
     player_props_inserted: int = 0
     players_created: int = 0
     markets_created: int = 0
+    snapshots_pruned: int = 0
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -108,17 +126,23 @@ class WinamaxOddsIngester:
         session: Session,
         *,
         log: logging.Logger | None = None,
+        settings: Settings | None = None,
         # Inyectables para test sin red:
         fetch_overview=wm.fetch_football_overview,
+        fetch_overview_basketball=wm.fetch_basketball_overview,
         fetch_match=wm.fetch_match,
     ) -> None:
         self.session = session
         self.log = log or logging.getLogger(__name__)
+        self._settings = settings
         self._fetch_overview = fetch_overview
+        self._fetch_overview_bb = fetch_overview_basketball
         self._fetch_match = fetch_match
 
         self._bookmaker: Bookmaker | None = None
         self._market_cache: dict[str, Market] = {}
+        # Jugadores ya resueltos en esta corrida (evita INSERT duplicado mismo SR id antes del flush).
+        self._player_external_cache: dict[str, Player] = {}
         self._snapshot_by_league: dict[int, Snapshot] = {}
         self._scrape_started_at: datetime | None = None
 
@@ -130,10 +154,12 @@ class WinamaxOddsIngester:
         days_ahead: int = 7,
         max_matches: int = 10,
         only_top5: bool = True,
+        sport: Literal["football", "basketball"] = "football",
         commit: bool = True,
     ) -> WinamaxIngestResult:
         """Busca partidos próximos en BD y los empareja con Winamax.
 
+        :param sport: ``football`` (home /sport/1) o ``basketball`` (/sport/2).
         :param commit: si ``False``, deja toda la transacción abierta para
             que el caller pueda hacer ``rollback()`` (útil para ``--dry-run``).
         """
@@ -142,7 +168,7 @@ class WinamaxOddsIngester:
 
         # 1. Cargar partidos candidatos en BD.
         upcoming = self._load_upcoming_matches(
-            days_ahead=days_ahead, only_top5=only_top5,
+            days_ahead=days_ahead, only_top5=only_top5, sport=sport,
         )
         result.matches_in_db = len(upcoming)
         if not upcoming:
@@ -150,13 +176,18 @@ class WinamaxOddsIngester:
             result.finished_at = datetime.now(timezone.utc)
             return result
 
-        # 2. Descargar overview Winamax (matches con sportId=1).
-        self.log.info("Descargando home Winamax fútbol…")
-        overview = self._fetch_overview()
-        wm_matches = wm.parse_football_matches(overview)
+        # 2. Descargar overview Winamax.
+        if sport == "basketball":
+            self.log.info("Descargando home Winamax baloncesto…")
+            overview = self._fetch_overview_bb()
+            wm_matches = wm.parse_sport_matches(overview, wm.SPORT_BASKETBALL)
+        else:
+            self.log.info("Descargando home Winamax fútbol…")
+            overview = self._fetch_overview()
+            wm_matches = wm.parse_football_matches(overview)
         self.log.info(
-            "Winamax: %d partidos de fútbol disponibles (con %d torneos).",
-            len(wm_matches), len(overview.get("tournaments", {})),
+            "Winamax: %d partidos disponibles (sport=%s).",
+            len(wm_matches), sport,
         )
 
         # 3. Bookmaker (los snapshots se crean por liga en el bucle).
@@ -169,6 +200,8 @@ class WinamaxOddsIngester:
             if wm_info is None:
                 result.matches_unmatched += 1
                 continue
+            db_mid = db_match.id
+            wm_mid = wm_info.match_id
             try:
                 snapshot = self._get_or_create_snapshot(db_match.league_id, result)
                 self._ingest_one_match(db_match, wm_info, snapshot, result)
@@ -176,11 +209,27 @@ class WinamaxOddsIngester:
             except Exception as exc:  # noqa: BLE001
                 self.log.warning(
                     "Error ingiriendo match db=%s wm=%s: %s",
-                    db_match.id, wm_info.match_id, exc,
+                    db_mid, wm_mid, exc,
                 )
                 result.matches_failed += 1
-                result.errors.append(f"match db={db_match.id}: {exc}")
+                result.errors.append(f"match db={db_mid}: {exc}")
                 self.session.rollback()
+                self._market_cache.clear()
+                self._player_external_cache.clear()
+                self._snapshot_by_league.clear()
+
+        touched_leagues = list(self._snapshot_by_league.keys())
+        if commit and touched_leagues:
+            keep_n = (self._settings or get_settings()).winamax_snapshot_retention
+            pruned = self._prune_old_winamax_snapshots(touched_leagues, keep=keep_n)
+            result.snapshots_pruned = pruned
+            if pruned:
+                self.log.info(
+                    "Winamax: %d snapshots antiguos borrados (retención %d/liga · %d ligas).",
+                    pruned,
+                    keep_n,
+                    len(set(touched_leagues)),
+                )
 
         if commit:
             self.session.commit()
@@ -191,6 +240,7 @@ class WinamaxOddsIngester:
 
     def _load_upcoming_matches(
         self, *, days_ahead: int, only_top5: bool,
+        sport: Literal["football", "basketball"] = "football",
     ) -> list[Match]:
         from backend.models import League
         now = datetime.now(timezone.utc)
@@ -200,9 +250,12 @@ class WinamaxOddsIngester:
             .where(Match.status == MATCH_STATUS_SCHEDULED)
             .where(Match.commence_time >= now)
             .where(Match.commence_time <= until)
+            .options(joinedload(Match.home_team), joinedload(Match.away_team))
             .order_by(Match.commence_time)
         )
-        if only_top5:
+        if sport == "basketball":
+            stmt = stmt.join(Match.league).where(League.sport_key.ilike("%basketball%"))
+        elif only_top5:
             top5 = (
                 "soccer_spain_la_liga", "soccer_epl",
                 "soccer_germany_bundesliga", "soccer_italy_serie_a",
@@ -259,16 +312,50 @@ class WinamaxOddsIngester:
         for bet in bets:
             if bet.market_key in wm.PLAYER_PROP_MARKETS:
                 continue
-            market = self._get_or_create_market(bet.market_key, result)
-            line = self._line_from_special_value(bet.special_bet_value)
+            wm_key = bet.market_key
+            canon = canonical_market_key(wm_key)
+            market = self._get_or_create_market(canon, wm_key, result)
+            bet_line = self._line_from_special_value(bet.special_bet_value)
+            home_n = db_match.home_team.name
+            away_n = db_match.away_team.name
             for oc in bet.outcomes:
+                out_name = oc.label
+                line: float | None = bet_line
+                if canon == "h2h":
+                    out_name = normalize_h2h_outcome(oc.label, home_team=home_n, away_team=away_n)
+                elif canon in (
+                    "totals",
+                    "team_home_totals_goals",
+                    "team_away_totals_goals",
+                    "match_cards_totals",
+                    "match_corners_totals",
+                    "match_shots_totals",
+                    "match_sot_totals",
+                    "match_first_half_totals",
+                    "team_home_first_half_totals_goals",
+                    "team_away_first_half_totals_goals",
+                    "match_first_half_corners_totals",
+                    "match_first_half_cards_totals",
+                ):
+                    out_name = normalize_totals_outcome(oc.label)
+                    if line is None:
+                        line = (
+                            parse_totals_line_from_label(bet.title)
+                            or parse_totals_line_from_label(oc.label)
+                        )
+                elif canon == "btts":
+                    out_name = normalize_btts_outcome(oc.label)
+                elif canon == "double_chance":
+                    out_name = normalize_double_chance_outcome(
+                        oc.label, home_team=home_n, away_team=away_n,
+                    )
                 self.session.add(Odds(
                     snapshot_id=snapshot.id,
                     match_id=db_match.id,
                     bookmaker_id=bookmaker_id,
                     market_id=market.id,
                     player_id=None,
-                    outcome_name=_truncate(oc.label, 128),
+                    outcome_name=_truncate(str(out_name), 128),
                     outcome_point=Decimal(str(line)) if line is not None else None,
                     price=Decimal(str(oc.odds)),
                     bookmaker_last_update=captured_at,
@@ -289,7 +376,7 @@ class WinamaxOddsIngester:
         # enriquecer cruzando con lineups esperadas.)
         for prop in props:
             player = self._get_or_create_player(prop, result)
-            market = self._get_or_create_market(prop.market_key, result)
+            market = self._get_or_create_market(prop.market_key, prop.market_key, result)
             line = prop.line
             outcome_name = self._format_outcome_name(prop)
             self.session.add(Odds(
@@ -345,21 +432,55 @@ class WinamaxOddsIngester:
         self.session.flush()
         return bm
 
+    def _prune_old_winamax_snapshots(self, league_ids: list[int], *, keep: int) -> int:
+        """Elimina snapshots ``winamax_es`` más antiguos que los últimos ``keep`` por liga."""
+        uniq = sorted({lid for lid in league_ids if lid is not None})
+        if not uniq or keep < 1:
+            return 0
+
+        rn = func.row_number().over(
+            partition_by=Snapshot.league_id,
+            order_by=(Snapshot.captured_at.desc(), Snapshot.id.desc()),
+        ).label("rn")
+        ranked = (
+            select(Snapshot.id, rn)
+            .where(Snapshot.source == WINAMAX_BOOKMAKER_KEY)
+            .where(Snapshot.league_id.in_(uniq))
+        ).subquery()
+        stale_ids = select(ranked.c.id).where(ranked.c.rn > keep)
+        res = self.session.execute(delete(Snapshot).where(Snapshot.id.in_(stale_ids)))
+        return int(res.rowcount or 0)
+
     def _get_or_create_market(
-        self, key: str, result: WinamaxIngestResult,
+        self,
+        canonical_key: str,
+        wm_source_key: str,
+        result: WinamaxIngestResult,
     ) -> Market:
-        cached = self._market_cache.get(key)
+        cached = self._market_cache.get(canonical_key)
         if cached is not None:
             return cached
-        market = self.session.scalar(select(Market).where(Market.key == key))
-        if market is None:
-            name = _MARKET_FRIENDLY_NAME.get(key, key)
-            market = Market(key=key, name=name)
-            self.session.add(market)
-            self.session.flush()
+        existing = self.session.scalar(select(Market).where(Market.key == canonical_key))
+        if existing is not None:
+            self._market_cache[canonical_key] = existing
+            return existing
+
+        name = _MARKET_FRIENDLY_NAME.get(wm_source_key, canonical_key)
+        try:
+            with self.session.begin_nested():
+                market = Market(key=canonical_key, name=name)
+                self.session.add(market)
+                self.session.flush()
             result.markets_created += 1
-        self._market_cache[key] = market
-        return market
+            self._market_cache[canonical_key] = market
+            return market
+        except IntegrityError:
+            # Otro proceso (u otra parte de la misma corrida) insertó el mercado.
+            fresh = self.session.scalar(select(Market).where(Market.key == canonical_key))
+            if fresh is None:
+                raise
+            self._market_cache[canonical_key] = fresh
+            return fresh
 
     def _get_or_create_player(
         self, prop: wm.WinamaxPlayerProp, result: WinamaxIngestResult,
@@ -373,6 +494,13 @@ class WinamaxOddsIngester:
             )
             return existing
 
+        cache_k = f"{WINAMAX_PLAYER_SOURCE}:{prop.player_external_id}"
+        cached = self._player_external_cache.get(cache_k)
+        if cached is not None:
+            if prop.player_name and cached.name != prop.player_name:
+                cached.name = prop.player_name
+            return cached
+
         player = self.session.scalar(
             select(Player).where(
                 Player.external_source == WINAMAX_PLAYER_SOURCE,
@@ -382,6 +510,7 @@ class WinamaxOddsIngester:
         if player is not None:
             if prop.player_name and player.name != prop.player_name:
                 player.name = prop.player_name
+            self._player_external_cache[cache_k] = player
             return player
 
         # Probar matching cruzado con un jugador Sofascore por nombre
@@ -392,18 +521,37 @@ class WinamaxOddsIngester:
             select(Player).where(Player.name == prop.player_name)
         ).all())
         if len(existing_by_name) == 1:
-            return existing_by_name[0]
+            p = existing_by_name[0]
+            self._player_external_cache[cache_k] = p
+            return p
 
-        # No encontrado: creamos un Player nuevo asociado al source winamax-sr.
+        # No encontrado: creamos Player winamax-sr (una sola vez por corrida /
+        # SR id gracias a _player_external_cache y begin_nested ante carreras).
         player = Player(
             name=prop.player_name or f"sr_{prop.player_external_id}",
             external_id=prop.player_external_id,
             external_source=WINAMAX_PLAYER_SOURCE,
         )
-        self.session.add(player)
-        self.session.flush()
-        result.players_created += 1
-        return player
+        try:
+            with self.session.begin_nested():
+                self.session.add(player)
+                self.session.flush()
+            result.players_created += 1
+            self._player_external_cache[cache_k] = player
+            return player
+        except IntegrityError:
+            fresh = self.session.scalar(
+                select(Player).where(
+                    Player.external_source == WINAMAX_PLAYER_SOURCE,
+                    Player.external_id == prop.player_external_id,
+                )
+            )
+            if fresh is None:
+                raise
+            if prop.player_name and fresh.name != prop.player_name:
+                fresh.name = prop.player_name
+            self._player_external_cache[cache_k] = fresh
+            return fresh
 
     # -------- Helpers de formato
 

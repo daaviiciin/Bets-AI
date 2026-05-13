@@ -22,7 +22,10 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    odds_api_key: str = Field(..., description="API key de The Odds API")
+    odds_api_key: str = Field(
+        default="",
+        description="The Odds API — vacío desactiva el refresco estándar de cuotas.",
+    )
     odds_api_base_url: str = Field(default="https://api.the-odds-api.com/v4")
 
     postgres_user: str = Field(default="betsai")
@@ -37,8 +40,51 @@ class Settings(BaseSettings):
     groq_api_key: str | None = Field(default=None)
     openai_api_key: str | None = Field(default=None)
 
+    # Pipeline de datos principal: estadísticas tipo Flashscore + Winamax cuotas,
+    # sin depender de múltiples bookies para el primer criterio de EV.
+    official_data_pipeline: bool = Field(default=False)
+    primary_bookmaker_key: str = Field(default="winamax_es")
+    odds_api_refresh_enabled: bool = Field(
+        default=False,
+        description="Si False, POST /refresh no llama a The Odds API (cero créditos).",
+    )
+
+    #: Tras ingestar Winamax: cuántos snapshots recientes conservar por liga;
+    #: el resto se borran (CASCADE borra odds). Evita crecimiento ilimitado.
+    winamax_snapshot_retention: int = Field(
+        default=2,
+        ge=1,
+        le=50,
+        description="Snapshots Winamax por liga a mantener; los más antiguos se purgan.",
+    )
+
+    # Filtrado y modelo de value bets (fútbol)
+    value_bets_use_recent_goal_form: bool = Field(
+        default=True,
+        description="Mezcla media temporada con últimos partidos casa/fuera para λ Poisson.",
+    )
+    value_bets_recent_form_matches: int = Field(
+        default=8, ge=3, le=15,
+        description="Cuántos partidos recientes (como local o visitante) mezclar.",
+    )
+    value_bets_recent_form_weight: float = Field(
+        default=0.38, ge=0.0, le=1.0,
+        description="Peso del reciente sobre la temporada completa (0=sólo temporada, 1=sólo reciente).",
+    )
+    value_bets_h2h_min_model_probability: float = Field(
+        default=0.22, ge=0.0, le=1.0,
+        description="Mín. P modelo para publicar picks 1X2 (elimina outsider sólo por margen alto).",
+    )
+
     environment: str = Field(default="development")
     log_level: str = Field(default="INFO")
+
+    #: Firma para JWT de sesión MVP (sobrescribir en producción).
+    jwt_secret: str = Field(
+        default="betsai_dev_jwt_change_me",
+        description="Secreto H256 para firmar tokens de /auth/login.",
+    )
+    jwt_access_ttl_days: int = Field(default=30, ge=1, le=365)
 
     @property
     def project_root(self) -> Path:

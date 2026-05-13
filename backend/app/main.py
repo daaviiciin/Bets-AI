@@ -8,6 +8,7 @@ Endpoints disponibles
 * ``GET /matches/{id}``               — detalle de un partido
 * ``GET /matches/{id}/odds``          — cuotas capturadas para un partido
 * ``GET /value-bets``                 — value bets detectadas (con EV+)
+* ``GET /dashboard/graded-odds``       — todas las cuotas Winamax recientes calificadas
 * ``GET /profiles``                   — lista de perfiles de apostador
 * ``GET /profiles/{name}``            — detalle de un perfil
 * ``GET /profiles/{name}/recommendations`` — recomendaciones personalizadas
@@ -24,10 +25,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
-from backend.app.api import calibration, matches, players, profiles, refresh, value_bets
+from backend.app.api import analysis, auth, calibration, dashboard, matches, me_parlays, players, profiles, refresh, value_bets
 
 app = FastAPI(
     title="Bets AI",
@@ -48,12 +51,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(analysis.router)
+app.include_router(auth.router)
+app.include_router(dashboard.router)
+app.include_router(me_parlays.router)
 app.include_router(matches.router)
 app.include_router(value_bets.router)
 app.include_router(profiles.router)
 app.include_router(refresh.router)
 app.include_router(calibration.router)
 app.include_router(players.router)
+
+
+@app.exception_handler(ProgrammingError)
+async def db_schema_mismatch_handler(request: Request, exc: ProgrammingError) -> JSONResponse:
+    """Columnas/tablas ausentes (migración Alembic pendiente) → mensaje accionable."""
+    _ = exc
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": (
+                "La base de datos no coincide con los modelos (¿falta ejecutar migraciones?). "
+                "Desde la raíz del proyecto: alembic upgrade head"
+            ),
+        },
+    )
+
+
+@app.exception_handler(OperationalError)
+async def db_unavailable_handler(request: Request, exc: OperationalError) -> JSONResponse:
+    """PostgreSQL caído o credenciales/host incorrectos (típico: Docker no arrancado)."""
+    _ = exc
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": (
+                "No se pudo conectar a PostgreSQL. Arranca la base de datos "
+                "(p. ej. `docker compose up -d`) y revisa DATABASE_URL / .env."
+            ),
+        },
+    )
 
 
 @app.get("/", tags=["health"])

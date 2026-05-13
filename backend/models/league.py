@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
+from sqlalchemy import Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.models.base import Base, TimestampMixin
@@ -21,6 +22,10 @@ class League(Base, TimestampMixin):
     sport_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     country: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    bb_sd_margin: Mapped[Decimal | None] = mapped_column(Numeric(6, 3), nullable=True)
+    bb_sd_team_points: Mapped[Decimal | None] = mapped_column(Numeric(6, 3), nullable=True)
+    bb_sd_game_total: Mapped[Decimal | None] = mapped_column(Numeric(6, 3), nullable=True)
 
     matches: Mapped[list["Match"]] = relationship(back_populates="league")
     snapshots: Mapped[list["Snapshot"]] = relationship(back_populates="league")

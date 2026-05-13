@@ -52,6 +52,72 @@ export interface Odds {
 
 export type ValueBetConfidence = 'high' | 'medium' | 'low' | 'unknown';
 
+/** Fila de `/dashboard/graded-odds`: cada cuota con confianza estimada. */
+export interface GradedOddsLine {
+  match_id: number;
+  league: string;
+  home_team: string;
+  away_team: string;
+  commence_time: string;
+  market_key: string;
+  outcome_name: string;
+  outcome_point: string | null;
+  player_name: string | null;
+  bookmaker_key: string;
+  bookmaker_title: string;
+  offered_odds: string;
+  confidence: ValueBetConfidence;
+  model_probability: string | null;
+  model_ev: string | null;
+  /** Esperanza goles local (Poisson) cuando hay modelo de partido. */
+  lambda_home?: string | null;
+  lambda_away?: string | null;
+  /** Probabilidad implícita bruta 1/cuota. */
+  implied_probability?: string | null;
+  /** Bullets con el razonamiento del modelo (columna «resumen»). */
+  model_summary_lines?: string[];
+}
+
+export interface SavedParlayLegPersist {
+  match_id: number;
+  home_team: string;
+  away_team: string;
+  league: string;
+  commence_time: string | null;
+  market_key: string;
+  outcome_name: string;
+  outcome_point: string | null;
+  player_name: string | null;
+  offered_odds: string;
+  model_probability: string | null;
+  result?: string;
+  score_text?: string | null;
+}
+
+export interface SavedParlay {
+  id: number;
+  user_id: number;
+  title: string | null;
+  combined_odds: string;
+  model_joint_probability: string | null;
+  legs_snapshot: SavedParlayLegPersist[];
+  grading_snapshot: { legs: SavedParlayLegPersist[] } | null;
+  overall_result: string;
+  last_graded_at: string | null;
+  created_at: string;
+}
+
+export interface AuthTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_at: number;
+}
+
+export interface AuthUserBrief {
+  id: number;
+  username: string;
+}
+
 export interface ValueBet {
   match_id: number;
   league: string;
@@ -75,6 +141,7 @@ export interface ValueBet {
   model_ev: string | null;
   model_agrees: boolean | null;
   confidence: ValueBetConfidence;
+  player_name?: string | null;
 }
 
 export interface UserProfile {
@@ -216,6 +283,15 @@ export interface TeamStatsSide {
   fouls: number | null;
   yellow_cards: number | null;
   red_cards: number | null;
+
+  goals_1h: number | null;
+  goals_2h: number | null;
+  corners_1h: number | null;
+  corners_2h: number | null;
+  yellow_cards_1h: number | null;
+  yellow_cards_2h: number | null;
+  red_cards_1h: number | null;
+  red_cards_2h: number | null;
   duels_won: number | null;
   clearances: number | null;
   interceptions: number | null;
@@ -347,14 +423,50 @@ export interface DailyStatsBlock {
   parse_errors: number;
 }
 
+export interface DailyRefreshFixturesBlock {
+  fixtures_fetched: number;
+  fixtures_inserted: number;
+  fixtures_updated: number;
+  skipped_duplicate_db: number;
+  skipped_not_future: number;
+  skipped_unknown_league: number;
+  duration_seconds: number;
+  errors: string[];
+}
+
 export interface DailyRefreshSummary {
   started_at: string;
   finished_at: string;
   duration_seconds: number;
   ok: boolean;
+  fixtures: DailyRefreshFixturesBlock | null;
   results: DailyResultsBlock | null;
   stats: DailyStatsBlock | null;
   errors: string[];
+}
+
+/** Resumen de una corrida de ``POST /refresh/official`` (bloque Winamax). */
+export interface WinamaxIngestSummary {
+  matches_in_db: number;
+  matches_matched: number;
+  matches_unmatched: number;
+  matches_failed: number;
+  snapshots_created: number;
+  snapshots_pruned?: number;
+  odds_inserted: number;
+  duration_seconds: number;
+  errors: string[];
+}
+
+/** Pipeline oficial: diario (Sofascore + Flashscore) + Winamax. */
+export interface OfficialPipelineSummary {
+  started_at: string;
+  finished_at: string;
+  duration_seconds: number;
+  ok: boolean;
+  daily: DailyRefreshSummary;
+  winamax: WinamaxIngestSummary;
+  note: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -380,6 +492,45 @@ export interface MatchPlayerProps {
   home_team: string | null;
   away_team: string | null;
   players: PlayerPropsBlock[];
+}
+
+/** Request a ``POST /analysis/custom-bet``. */
+export interface BetLegIn {
+  label: string;
+  decimal_odds: string;
+  market?: string | null;
+  selection?: string | null;
+  outcome_point?: string | null;
+}
+
+export interface CustomBetAssessmentRequest {
+  match_id?: number | null;
+  legs: BetLegIn[];
+  assume_independent?: boolean;
+}
+
+export interface BetLegAssessmentOut {
+  label: string;
+  decimal_odds: string;
+  implied_probability: number;
+  model_probability: number | null;
+  model_ev: number | null;
+  model_note: string | null;
+}
+
+export interface CustomBetAssessmentResponse {
+  match_id: number | null;
+  match_label: string | null;
+  league_sport_key: string | null;
+  combined_decimal_odds: string;
+  combined_implied_probability: number;
+  combined_model_probability: number | null;
+  model_combined_ev: number | null;
+  assume_independence: boolean;
+  independence_warning: string | null;
+  data_sources_note: string;
+  legs: BetLegAssessmentOut[];
+  notes: string[];
 }
 
 export interface RefreshSummary {

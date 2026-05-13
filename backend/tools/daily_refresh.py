@@ -2,8 +2,10 @@
 
 Encadena:
 
-1. Actualizar resultados (Sofascore unofficial API).
-2. Ingerir stats post-partido (Flashscore ``df_st_1``).
+1. Próximos partidos desde calendario Flashscore (``matches``).
+2. Actualizar resultados (Sofascore unofficial API).
+3. Ingerir stats post-partido (Flashscore ``df_st_1``).
+4. Stats por jugador (Sofascore lineups).
 
 Uso típico (local manual o vía cron / Task Scheduler de Windows)::
 
@@ -49,6 +51,10 @@ def main(argv: list[str] | None = None) -> int:
         help="No filtrar por top-5 al ingerir stats (incluye competiciones europeas).",
     )
     parser.add_argument(
+        "--fixtures-days-ahead", type=int, default=7,
+        help="Días de ventana de feeds Flashscore para calendario próximo (default 7).",
+    )
+    parser.add_argument(
         "--stats-limit", type=int, default=None,
         help="Procesar como mucho N partidos en el paso de stats (útil para pruebas).",
     )
@@ -67,11 +73,21 @@ def main(argv: list[str] | None = None) -> int:
             stats_days_back=args.stats_days_back,
             stats_only_top5=not args.stats_all_leagues,
             stats_limit=args.stats_limit,
+            fixtures_days_ahead=args.fixtures_days_ahead,
         )
 
     log.info("=" * 90)
     log.info("PIPELINE DIARIO — RESUMEN FINAL")
     log.info("=" * 90)
+    if summary.fixtures is not None:
+        fx = summary.fixtures
+        log.info(
+            "  Fixtures Flashscore: fetched=%d inserted=%d updated=%d dup_skip=%d",
+            fx.fixtures_fetched, fx.fixtures_inserted, fx.fixtures_updated,
+            fx.skipped_duplicate_db,
+        )
+    else:
+        log.info("  Fixtures Flashscore: NO EJECUTADO (ver errores)")
     if summary.results is not None:
         r = summary.results
         log.info("  Resultados: actualizados=%d  ya_ok=%d  no_encontrados=%d",

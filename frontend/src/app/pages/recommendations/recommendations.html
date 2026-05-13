@@ -49,7 +49,7 @@
             {{ strict() ? 'Validación estadística estricta: ON' : 'Validación estadística estricta: OFF' }}
           </button>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           <div>
             <div class="text-xs text-slate-400">Bankroll</div>
             <div class="font-semibold mt-0.5">{{ fmtEur(profile.bankroll) }}</div>
@@ -75,6 +75,21 @@
                 Flat {{ fmtEur(profile.flat_stake) }}
               } @else {
                 Kelly × {{ profile.kelly_modifier }}
+              }
+            </div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-400">Combinadas</div>
+            <div class="font-semibold mt-0.5">
+              @if (profile.parlay_enabled) {
+                Hasta {{ profile.parlay_legs }} patas
+                @if (profile.parlay_combined_odds_min && profile.parlay_combined_odds_max) {
+                  · cuota comb. {{ fmtOdds(profile.parlay_combined_odds_min) }}–{{
+                    fmtOdds(profile.parlay_combined_odds_max)
+                  }}
+                }
+              } @else {
+                Desactivadas (solo individuales)
               }
             </div>
           </div>

@@ -208,6 +208,23 @@ export class MatchDetail {
     return '—';
   }
 
+  private static readonly HALF_METRIC_FIELDS: readonly (keyof MatchStats['home'])[] = [
+    'goals_1h',
+    'goals_2h',
+    'corners_1h',
+    'corners_2h',
+    'yellow_cards_1h',
+    'yellow_cards_2h',
+    'red_cards_1h',
+    'red_cards_2h',
+  ];
+
+  protected hasHalfSlice(st: MatchStats): boolean {
+    const seen = (side: MatchStats['home']) =>
+      MatchDetail.HALF_METRIC_FIELDS.some((f) => side[f] != null);
+    return seen(st.home) || seen(st.away);
+  }
+
   private formatError(err: unknown): string {
     if (err instanceof Error) return err.message;
     return 'Error cargando el partido.';
