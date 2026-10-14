@@ -14,6 +14,7 @@ from backend.models.market import Market
 from backend.models.match import Match
 from backend.models.match_stats import MatchStats
 from backend.models.odds import Odds
+from backend.models.odds_history import OddsHistory
 from backend.models.player import Player
 from backend.models.player_match_stats import PlayerMatchStats
 from backend.models.player_stats import PlayerSeasonStats
@@ -36,6 +37,7 @@ __all__ = [
     "Match",
     "MatchStats",
     "Odds",
+    "OddsHistory",
     "Player",
     "PlayerMatchStats",
     "PlayerSeasonStats",

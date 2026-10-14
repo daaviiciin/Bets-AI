@@ -31,7 +31,7 @@ Además:
 | # | Bloque | Por qué importa | Esfuerzo | Estado |
 |---|---|---|---|---|
 | 1 | **Formación y bajas** (lesionados, sancionados) desde `lineups` | Los datos ya llegan y se tiran. Las bajas cambian mucho el λ de goles. | Bajo | ☐ |
-| 2 | **Historial de cuotas** (como mínimo apertura y cierre) | Imprescindible para la fase 3: medir el modelo con CLV (*closing line value*). **Cada día sin esto se pierden datos que no se pueden recuperar.** | Bajo-medio | ☐ |
+| 2 | **Historial de cuotas** (como mínimo apertura y cierre) | Imprescindible para la fase 3: medir el modelo con CLV (*closing line value*). **Cada día sin esto se pierden datos que no se pueden recuperar.** | Bajo-medio | ◐ Tabla `odds_history` + migración `9d4aa151b886` + integración en la ingesta Winamax + tests. Falta: decidir qué pasa con los huecos (`needs_new_row`), programar el refresh cada 6 h y medir el tamaño real |
 | 3 | **Contexto del partido**: árbitro, estadio, jornada, entrenadores (`/event/{id}`) | El árbitro es el mejor predictor de tarjetas. | Medio | ☐ |
 | 4 | **Stats por periodo de Sofascore** (`/event/{id}/statistics`) | 1ª y 2ª parte de todo, incluidos los córners por mitad (Flashscore los cubre mal). | Medio | ☐ |
 | 5 | **Mapa de tiros** (`/event/{id}/shotmap`) | Cada tiro con xG, minuto, situación y parte del cuerpo. Permite modelar goles por tramos y mercados de 1ª parte. | Medio-alto | ☐ |
@@ -49,7 +49,8 @@ Los endpoints de los bloques 3 a 6 hay que comprobarlos con un partido real ante
 
 ### Decisiones pendientes
 
-- [ ] **Historial de cuotas (bloque 2):** ¿qué se guarda?
+- [x] **Historial de cuotas (bloque 2):** ¿qué se guarda? → **Decidido (2026-10-14): opción C.**
+  Por confirmar: intervalo X (propuesta: 6 h) y si se guarda solo cuando la cuota cambia (propuesta: sí).
   - **A)** Solo apertura y cierre de cada línea. Ocupa poco y basta para medir CLV.
   - **B)** Todos los snapshots. Permite estudiar cómo se mueven las cuotas, pero la base de datos crece mucho.
   - **C)** Apertura, cierre y un snapshot cada X horas.

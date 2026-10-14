@@ -46,6 +46,7 @@ from backend.models import (
 from backend.models.match import MATCH_STATUS_SCHEDULED
 from backend.scrapers import winamax as wm
 from backend.services.match_results_updater import _names_match, _normalize
+from backend.services.odds_history import LineKey, OddsHistoryRecorder, line_key
 from backend.services.winamax_normalization import (
     canonical_market_key,
     normalize_btts_outcome,
@@ -131,6 +132,8 @@ class WinamaxIngestResult:
     odds_carried_forward: int = 0
     odds_filtered: int = 0
     odds_pruned: int = 0
+    history_rows_inserted: int = 0
+    history_rows_extended: int = 0
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -158,6 +161,7 @@ class WinamaxOddsIngester:
         self._fetch_overview = fetch_overview
         self._fetch_overview_bb = fetch_overview_basketball
         self._fetch_match = fetch_match
+        self._history = OddsHistoryRecorder(session)
 
         self._bookmaker: Bookmaker | None = None
         self._market_cache: dict[str, Market] = {}
@@ -494,6 +498,8 @@ class WinamaxOddsIngester:
 
         bookmaker_id = self._bookmaker.id  # type: ignore[union-attr]
         captured_at = snapshot.captured_at
+        # Cuotas vistas en esta corrida, para ``odds_history``.
+        observed: dict[LineKey, Decimal] = {}
 
         # ---- 1) Cuotas a nivel partido (no player props): h2h, totales,
         #         BTTS, etc. Los persistimos directamente.
@@ -549,17 +555,22 @@ class WinamaxOddsIngester:
                     out_name = normalize_double_chance_outcome(
                         oc.label, home_team=home_n, away_team=away_n,
                     )
+                outcome_name = _truncate(str(out_name), 128)
+                outcome_point = Decimal(str(line)) if line is not None else None
                 self.session.add(Odds(
                     snapshot_id=snapshot.id,
                     match_id=db_match.id,
                     bookmaker_id=bookmaker_id,
                     market_id=market.id,
                     player_id=None,
-                    outcome_name=_truncate(str(out_name), 128),
-                    outcome_point=Decimal(str(line)) if line is not None else None,
+                    outcome_name=outcome_name,
+                    outcome_point=outcome_point,
                     price=price,
                     bookmaker_last_update=captured_at,
                 ))
+                observed[line_key(
+                    db_match.id, bookmaker_id, market.id, None, outcome_name, outcome_point,
+                )] = price
                 result.odds_inserted += 1
 
         # ---- 2) Player props.
@@ -582,24 +593,35 @@ class WinamaxOddsIngester:
             player = self._get_or_create_player(prop, result)
             market = self._get_or_create_market(prop.market_key, prop.market_key, result)
             line = prop.line
-            outcome_name = self._format_outcome_name(prop)
+            outcome_name = _truncate(self._format_outcome_name(prop), 128)
+            outcome_point = Decimal(str(line)) if line is not None else None
+            player_id = player.id if player is not None else None
             self.session.add(Odds(
                 snapshot_id=snapshot.id,
                 match_id=db_match.id,
                 bookmaker_id=bookmaker_id,
                 market_id=market.id,
-                player_id=player.id if player is not None else None,
-                outcome_name=_truncate(outcome_name, 128),
-                outcome_point=Decimal(str(line)) if line is not None else None,
+                player_id=player_id,
+                outcome_name=outcome_name,
+                outcome_point=outcome_point,
                 price=price,
                 bookmaker_last_update=captured_at,
             ))
+            observed[line_key(
+                db_match.id, bookmaker_id, market.id, player_id, outcome_name, outcome_point,
+            )] = price
             result.odds_inserted += 1
             result.player_props_inserted += 1
 
         # Forzar flush para que los IDs queden disponibles si hay
         # iteraciones siguientes que los necesiten.
         self.session.flush()
+
+        plan = self._history.record_match(
+            db_match.id, bookmaker_id, observed, observed_at=captured_at,
+        )
+        result.history_rows_inserted += len(plan.to_insert)
+        result.history_rows_extended += len(plan.to_extend)
 
     # -------- Helpers de "get or create"
 
