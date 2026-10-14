@@ -100,7 +100,7 @@ class DailyRefreshOrchestrator:
         self,
         *,
         results_max_pages: int = 3,
-        stats_days_back: int = 7,
+        stats_days_back: int = 120,
         stats_only_top5: bool = True,
         stats_limit: int | None = None,
         fixtures_days_ahead: int = 7,
@@ -230,6 +230,18 @@ class DailyRefreshOrchestrator:
             )
         except Exception as exc:  # noqa: BLE001
             msg = f"Error en player_match_stats_ingester: {exc}"
+            self.log.exception(msg)
+            summary.errors.append(msg)
+            self.session.rollback()
+
+        self.log.info("PIPELINE DIARIO  (opcional: recalificar picks destacados)")
+        try:
+            from backend.services.featured_daily_picks import refresh_all_grading
+
+            refresh_all_grading(self.session)
+            self.log.info("Featured daily picks: grading refrescado")
+        except Exception as exc:  # noqa: BLE001
+            msg = f"Error en featured_daily_picks.refresh_all_grading: {exc}"
             self.log.exception(msg)
             summary.errors.append(msg)
             self.session.rollback()

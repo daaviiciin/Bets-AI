@@ -11,6 +11,7 @@ from backend.scrapers.flashscore import (
     _parse_percent,
     parse_match_statistics,
     parse_payload,
+    parse_finished_matches_from_html,
 )
 
 
@@ -154,3 +155,22 @@ class TestParseMatchStatistics:
 
     def test_empty_input(self) -> None:
         assert parse_match_statistics([]) == {"home": {}, "away": {}}
+
+
+def test_parse_finished_matches_from_standings_html() -> None:
+    html = (
+        "<script>~AA÷old-1¬AB÷3¬AD÷1790000000¬CX÷Home¬AF÷Away¬"
+        "AG÷2¬AH÷1¬PX÷home-id¬PY÷away-id~"
+        "AA÷future¬AB÷1¬AD÷1791000000¬CX÷Future Home¬AF÷Future Away~"
+        "AA÷old-1¬AB÷3¬AD÷1790000000¬CX÷Home¬AF÷Away¬AG÷2¬AH÷1~</script>"
+    )
+
+    matches = parse_finished_matches_from_html(html, league_name="Test League")
+
+    assert len(matches) == 1
+    assert matches[0].match_id == "old-1"
+    assert matches[0].home_team_name == "Home"
+    assert matches[0].away_team_name == "Away"
+    assert matches[0].score_home == 2
+    assert matches[0].score_away == 1
+    assert matches[0].is_finished is True

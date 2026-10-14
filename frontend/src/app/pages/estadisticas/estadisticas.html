@@ -1,0 +1,105 @@
+<div class="min-h-screen bg-gradient-to-b from-brand-bg-deep via-brand-bg-mid to-brand-bg-deep text-white pb-16">
+  <div class="border-b border-brand-cyan/10 bg-brand-bg-deep/75 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-9">
+      <p class="text-xs font-medium uppercase tracking-[0.2em] text-brand-cyan/85">Centro de datos</p>
+      <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5 mt-2">
+        <div>
+          <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">Estadísticas para entender las cuotas</h1>
+          <p class="text-brand-muted text-sm mt-3 max-w-2xl leading-relaxed">
+            Rankings de equipos y jugadores por competición. Los gráficos muestran únicamente datos guardados desde las fuentes deportivas.
+          </p>
+        </div>
+        <label class="flex flex-col gap-1.5 text-xs text-slate-400">
+          <span class="text-slate-500">Competición</span>
+          <select [value]="selectedCompetition()" (change)="selectCompetition($event)"
+                  class="min-w-60 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2.5 text-sm text-white">
+            @for (competition of competitions; track competition.key) {
+              <option [value]="competition.key">{{ competition.label }}</option>
+            }
+          </select>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-9 space-y-7">
+    @if (loading()) {
+      <div class="py-24 text-center text-slate-400">Cargando estadísticas...</div>
+    } @else if (error()) {
+      <div class="rounded-2xl border border-rose-500/30 bg-rose-950/20 px-6 py-5 text-rose-200">{{ error() }}</div>
+    } @else if (data(); as stats) {
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/40 p-4"><div class="text-[10px] uppercase tracking-wider text-slate-500">Competiciones</div><div class="text-2xl font-semibold mt-1">{{ stats.competitions.length }}</div></div>
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/40 p-4"><div class="text-[10px] uppercase tracking-wider text-slate-500">Equipos con datos</div><div class="text-2xl font-semibold mt-1">{{ stats.teams.length }}</div></div>
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/40 p-4"><div class="text-[10px] uppercase tracking-wider text-slate-500">Jugadores con datos</div><div class="text-2xl font-semibold mt-1">{{ stats.players.length }}</div></div>
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/40 p-4"><div class="text-[10px] uppercase tracking-wider text-slate-500">Partidos con stats</div><div class="text-2xl font-semibold mt-1">{{ totalMatchesWithStats() }}</div></div>
+      </div>
+
+      @if (stats.teams.length === 0 && stats.players.length === 0) {
+        <div class="rounded-2xl border border-amber-500/25 bg-amber-950/15 px-6 py-8 text-center">
+          <h2 class="font-semibold text-amber-100">Todavía no hay estadísticas cargadas</h2>
+          <p class="text-sm text-amber-200/70 mt-2">La pantalla ya está preparada. Ejecuta «Actualizar jornada» o el pipeline de Sofascore/Flashscore para rellenar rankings y gráficos.</p>
+        </div>
+      } @else {
+        @if (selectedCompetition() === 'all') {
+          <div class="rounded-2xl border border-brand-cyan/20 bg-slate-900/35 px-6 py-8 text-center text-slate-300">
+            Elige una competición para consultar su clasificación y abrir la ficha individual de cada equipo.
+          </div>
+        } @else if (standingTeams().length === 0) {
+          <div class="rounded-2xl border border-amber-500/25 bg-amber-950/15 px-6 py-8 text-center">
+            <h2 class="font-semibold text-amber-100">No hay clasificación disponible</h2>
+            <p class="text-sm text-amber-200/70 mt-2">La fuente todavía no ha proporcionado estadísticas de temporada para esta competición.</p>
+          </div>
+        } @else {
+          <section class="rounded-2xl border border-slate-800 bg-slate-900/35 overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-800">
+              <h2 class="font-semibold">Clasificación · {{ stats.competitions[0]?.name }}</h2>
+              <p class="text-xs text-slate-500 mt-1">Selecciona un equipo para abrir sus resultados y estadísticas recientes</p>
+            </div>
+            <div class="overflow-auto">
+              <table class="w-full text-sm min-w-[760px]">
+                <thead class="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-800">
+                  <tr><th class="px-3 py-3 text-right">#</th><th class="px-3 py-3 text-left">Equipo</th><th class="px-3 py-3 text-right">PJ</th><th class="px-3 py-3 text-right">G</th><th class="px-3 py-3 text-right">E</th><th class="px-3 py-3 text-right">P</th><th class="px-3 py-3 text-right">GF</th><th class="px-3 py-3 text-right">GC</th><th class="px-3 py-3 text-right">DG</th><th class="px-4 py-3 text-right">PTS</th></tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800">
+                  @for (team of standingTeams(); track team.team_id; let position = $index) {
+                    <tr><td class="px-3 py-3 text-right text-slate-500">{{ position + 1 }}</td><td class="p-0"><button type="button" (click)="openTeam(team)" class="w-full text-left px-3 py-3 flex items-center gap-3 hover:bg-brand-cyan/[0.06] transition-colors">@if (team.logo_url) { <img [src]="team.logo_url" [alt]="team.name" class="size-7 object-contain" /> } @else { <span class="size-7 grid place-items-center rounded-full bg-brand-cyan/15 text-brand-cyan text-[9px] font-semibold">{{ initials(team.name) }}</span> }<span class="font-medium text-white">{{ team.name }}</span></button></td><td class="px-3 py-3 text-right tabular-nums">{{ team.matches_played ?? '—' }}</td><td class="px-3 py-3 text-right tabular-nums">{{ team.wins ?? '—' }}</td><td class="px-3 py-3 text-right tabular-nums">{{ team.draws ?? '—' }}</td><td class="px-3 py-3 text-right tabular-nums">{{ team.losses ?? '—' }}</td><td class="px-3 py-3 text-right tabular-nums">{{ team.goals_for ?? '—' }}</td><td class="px-3 py-3 text-right tabular-nums">{{ team.goals_against ?? '—' }}</td><td class="px-3 py-3 text-right tabular-nums">{{ goalDifference(team) ?? '—' }}</td><td class="px-4 py-3 text-right font-semibold text-brand-cyan tabular-nums">{{ team.points ?? '—' }}</td></tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </section>
+        }
+      }
+
+      <section class="rounded-2xl border border-slate-800 bg-slate-900/35 overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-800"><h2 class="font-semibold">Cobertura por competición</h2></div>
+        <div class="overflow-auto"><table class="w-full text-sm min-w-[620px]"><thead class="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-800"><tr><th class="px-5 py-3 text-left">Competición</th><th class="px-5 py-3 text-right">Equipos</th><th class="px-5 py-3 text-right">Jugadores</th><th class="px-5 py-3 text-right">Partidos con stats</th></tr></thead><tbody class="divide-y divide-slate-800">@for (competition of stats.competitions; track competition.sport_key) {<tr><td class="px-5 py-3">{{ competition.name }}</td><td class="px-5 py-3 text-right">{{ competition.teams_count }}</td><td class="px-5 py-3 text-right">{{ competition.players_count }}</td><td class="px-5 py-3 text-right">{{ competition.matches_with_stats }}</td></tr>}</tbody></table></div>
+      </section>
+
+      @if (selectedTeam(); as detail) {
+        <section class="rounded-2xl border border-brand-cyan/25 bg-slate-900/45 overflow-hidden">
+          <div class="px-5 py-4 border-b border-slate-800 flex items-start justify-between gap-4">
+            <div class="flex items-center gap-3">
+              @if (detail.team.logo_url) { <img [src]="detail.team.logo_url" [alt]="detail.team.name" class="size-12 object-contain" /> }
+              <div><div class="text-xs text-brand-cyan/80">{{ detail.competition_name ?? 'Competición' }}</div><h2 class="text-xl font-semibold">{{ detail.team.name }}</h2></div>
+            </div>
+            <button type="button" (click)="closeTeam()" class="text-xs text-slate-400 hover:text-white">Cerrar</button>
+          </div>
+          @if (teamLoading()) { <div class="p-8 text-center text-slate-400">Cargando detalle...</div> } @else {
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 p-5">
+              <div class="rounded-xl bg-slate-950/50 p-3"><div class="text-[10px] uppercase text-slate-500">Victorias en casa</div><div class="text-2xl font-semibold text-brand-cyan">{{ detail.home_win_pct != null ? detail.home_win_pct + '%' : '—' }}</div></div>
+              <div class="rounded-xl bg-slate-950/50 p-3"><div class="text-[10px] uppercase text-slate-500">Victorias fuera</div><div class="text-2xl font-semibold text-brand-blue">{{ detail.away_win_pct != null ? detail.away_win_pct + '%' : '—' }}</div></div>
+              <div class="rounded-xl bg-slate-950/50 p-3"><div class="text-[10px] uppercase text-slate-500">Goles a favor</div><div class="text-2xl font-semibold">{{ detail.team.goals_for ?? '—' }}</div></div>
+              <div class="rounded-xl bg-slate-950/50 p-3"><div class="text-[10px] uppercase text-slate-500">Goles en contra</div><div class="text-2xl font-semibold">{{ detail.team.goals_against ?? '—' }}</div></div>
+            </div>
+            <div class="grid lg:grid-cols-[1.2fr_0.8fr] gap-6 px-5 pb-5">
+              <div><h3 class="font-semibold mb-3">Últimos partidos</h3><div class="space-y-2">@for (match of detail.recent_matches; track match.match_id) {<div class="flex items-center gap-3 rounded-lg bg-slate-950/35 px-3 py-2 text-sm"><span class="font-semibold w-5" [class]="resultClass(match.result)">{{ match.result }}</span><span class="flex-1">{{ match.is_home ? 'Casa' : 'Fuera' }} · {{ match.opponent }}</span><span class="tabular-nums">{{ match.team_score }} - {{ match.opponent_score }}</span><span class="text-[11px] text-slate-500">{{ match.shots_on_target ?? '—' }} SoT · {{ match.corners ?? '—' }} C · {{ match.yellow_cards ?? '—' }} T</span></div>}</div></div>
+              <div><h3 class="font-semibold mb-3">Totales de ayuda</h3><div class="grid grid-cols-3 gap-2 text-center"><div class="rounded-lg bg-slate-950/35 p-3"><div class="text-xl font-semibold">{{ detail.totals['shots_on_target'] ?? '—' }}</div><div class="text-[10px] text-slate-500">SoT</div></div><div class="rounded-lg bg-slate-950/35 p-3"><div class="text-xl font-semibold">{{ detail.totals['corners'] ?? '—' }}</div><div class="text-[10px] text-slate-500">Córners</div></div><div class="rounded-lg bg-slate-950/35 p-3"><div class="text-xl font-semibold">{{ detail.totals['yellow_cards'] ?? '—' }}</div><div class="text-[10px] text-slate-500">Amarillas</div></div></div><div class="mt-5"><h3 class="font-semibold mb-3">Jugadores del equipo</h3><div class="space-y-2 max-h-64 overflow-auto">@for (player of detail.players; track player.player_id) {<div class="flex items-center gap-2 text-sm border-b border-slate-800 pb-2">@if (player.image_url) { <img [src]="player.image_url" [alt]="player.name" class="size-7 rounded-full object-cover bg-slate-800" /> } @else { <span class="size-7 grid place-items-center rounded-full bg-brand-blue/20 text-brand-blue text-[9px] font-semibold">{{ initials(player.name) }}</span> }<span class="truncate flex-1">{{ player.name }}</span><span class="text-slate-400 tabular-nums">{{ player.goals ?? 0 }} G · {{ player.shots_on_target ?? 0 }} SoT</span></div>}</div></div></div>
+            </div>
+          }
+        </section>
+      }
+    }
+  </main>
+</div>

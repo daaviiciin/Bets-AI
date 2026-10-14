@@ -6,6 +6,13 @@ from decimal import Decimal
 from typing import Any, Literal
 
 from backend.models.match import MATCH_STATUS_FINISHED, Match
+from backend.services.match_results_updater import _normalize as _norm_team, _names_match
+from backend.services.winamax_normalization import (
+    canonical_market_key,
+    normalize_btts_outcome,
+    normalize_h2h_outcome,
+    normalize_totals_outcome,
+)
 
 LegResult = Literal["pending", "hit", "miss", "needs_review"]
 
@@ -51,7 +58,8 @@ def grade_single_leg(leg: dict[str, Any], match: Match | None) -> dict[str, Any]
         return {"result": "pending", "score_text": None, "match_id": leg.get("match_id")}
 
     tg = hs + aw
-    nk = _norm(str(leg.get("market_key", "")))
+    raw_mk = str(leg.get("market_key", "")).strip()
+    nk = _norm(canonical_market_key(raw_mk) if raw_mk else raw_mk)
 
     if nk.startswith("player_"):
         return {"result": "needs_review", "score_text": score_text, "match_id": leg.get("match_id")}
@@ -65,23 +73,24 @@ def grade_single_leg(leg: dict[str, Any], match: Match | None) -> dict[str, Any]
             return {"result": "needs_review", "score_text": score_text, "match_id": leg.get("match_id")}
 
     if nk == "h2h":
-        on = _norm(str(leg.get("outcome_name", "")))
-        hh = _norm(home_name)
-        aa = _norm(away_name)
-        is_draw = on in {"draw", "tie"} or "empate" in on
-        if is_draw:
+        picked = normalize_h2h_outcome(
+            str(leg.get("outcome_name", "")),
+            home_team=home_name,
+            away_team=away_name,
+        )
+        if picked == "Draw":
             hit = hs == aw
             return {"result": "hit" if hit else "miss", "score_text": score_text, "match_id": leg.get("match_id")}
-        if on == hh:
+        if _names_match(_norm_team(picked), _norm_team(home_name)):
             hit = hs > aw
             return {"result": "hit" if hit else "miss", "score_text": score_text, "match_id": leg.get("match_id")}
-        if on == aa:
+        if _names_match(_norm_team(picked), _norm_team(away_name)):
             hit = aw > hs
             return {"result": "hit" if hit else "miss", "score_text": score_text, "match_id": leg.get("match_id")}
         return {"result": "needs_review", "score_text": score_text, "match_id": leg.get("match_id")}
 
     if nk == "btts":
-        on = _norm(str(leg.get("outcome_name", "")))
+        on = _norm(normalize_btts_outcome(str(leg.get("outcome_name", ""))))
         both = hs >= 1 and aw >= 1
         wants_yes = on in {"yes", "sí", "si"}
         wants_no = on == "no"
@@ -94,7 +103,7 @@ def grade_single_leg(leg: dict[str, Any], match: Match | None) -> dict[str, Any]
         return {"result": "needs_review", "score_text": score_text, "match_id": leg.get("match_id")}
 
     pt = _to_float(leg.get("outcome_point"))
-    on = _norm(str(leg.get("outcome_name", "")))
+    on = _norm(normalize_totals_outcome(str(leg.get("outcome_name", ""))))
     if pt is None:
         return {"result": "needs_review", "score_text": score_text, "match_id": leg.get("match_id")}
 

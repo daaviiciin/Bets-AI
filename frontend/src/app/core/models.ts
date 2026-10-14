@@ -40,6 +40,73 @@ export interface Match {
   played_at: string | null;
 }
 
+export interface CompetitionStats {
+  sport_key: string;
+  name: string;
+  teams_count: number;
+  players_count: number;
+  matches_with_stats: number;
+}
+
+export interface TeamStatistics {
+  team_id: number;
+  name: string;
+  logo_url: string | null;
+  matches_played: number | null;
+  wins: number | null;
+  draws: number | null;
+  losses: number | null;
+  goals_for: number | null;
+  goals_against: number | null;
+  points: number | null;
+  xg_for: string | null;
+  xg_against: string | null;
+}
+
+export interface PlayerStatistics {
+  player_id: number;
+  name: string;
+  image_url: string | null;
+  team_name: string | null;
+  goals: number | null;
+  assists: number | null;
+  shots: number | null;
+  shots_on_target: number | null;
+  xg: string | null;
+  matches_played: number | null;
+}
+
+export interface StatisticsOverview {
+  selected_sport_key: string | null;
+  competitions: CompetitionStats[];
+  teams: TeamStatistics[];
+  players: PlayerStatistics[];
+}
+
+export interface TeamRecentMatch {
+  match_id: number;
+  opponent: string;
+  is_home: boolean;
+  commence_time: string;
+  team_score: number | null;
+  opponent_score: number | null;
+  result: string;
+  shots_on_target: number | null;
+  corners: number | null;
+  yellow_cards: number | null;
+}
+
+export interface TeamDetailStatistics {
+  team: TeamStatistics;
+  competition_name: string | null;
+  home_win_pct: number | null;
+  away_win_pct: number | null;
+  recent_form: string[];
+  recent_matches: TeamRecentMatch[];
+  totals: Record<string, number | null>;
+  players: PlayerStatistics[];
+}
+
 export interface Odds {
   id: number;
   bookmaker: Bookmaker;
@@ -56,6 +123,8 @@ export type ValueBetConfidence = 'high' | 'medium' | 'low' | 'unknown';
 export interface GradedOddsLine {
   match_id: number;
   league: string;
+  /** ``League.sport_key`` (p. ej. soccer_epl); viene del backend para filtros. */
+  league_sport_key?: string;
   home_team: string;
   away_team: string;
   commence_time: string;
@@ -90,6 +159,10 @@ export interface SavedParlayLegPersist {
   player_name: string | null;
   offered_odds: string;
   model_probability: string | null;
+  /** Metadatos extra en picks destacados del backend. */
+  ev_market?: string;
+  model_ev?: string | null;
+  confidence?: string;
   result?: string;
   score_text?: string | null;
 }
@@ -105,6 +178,33 @@ export interface SavedParlay {
   overall_result: string;
   last_graded_at: string | null;
   created_at: string;
+}
+
+/** Picks del día generados por el backend (métricas de transparencia de la app). */
+export interface FeaturedDailyPickRow {
+  pick_date: string;
+  legs: SavedParlayLegPersist[];
+  last_graded_at: string | null;
+  created_at: string;
+}
+
+export interface FeaturedPicksMetrics {
+  total_pick_days: number;
+  total_legs: number;
+  hits: number;
+  misses: number;
+  pending: number;
+  needs_review: number;
+  rate_pct: number | null;
+}
+
+export interface UserParlayMetrics {
+  total: number;
+  pending: number;
+  needs_review: number;
+  hits: number;
+  misses: number;
+  rate_pct: number | null;
 }
 
 export interface AuthTokenResponse {
@@ -454,6 +554,8 @@ export interface WinamaxIngestSummary {
   snapshots_created: number;
   snapshots_pruned?: number;
   odds_inserted: number;
+  /** Líneas copiadas desde el snapshot anterior (partidos no re-scrapeados). */
+  odds_carried_forward?: number;
   duration_seconds: number;
   errors: string[];
 }

@@ -8,6 +8,7 @@ from backend.models.app_user import AppUser
 from backend.models.base import Base, TimestampMixin
 from backend.models.bookmaker import Bookmaker
 from backend.models.calibration_report import CalibrationReport
+from backend.models.featured_daily_pick import FeaturedDailyPick
 from backend.models.league import League
 from backend.models.market import Market
 from backend.models.match import Match
@@ -29,6 +30,7 @@ __all__ = [
     "AppUser",
     "Bookmaker",
     "CalibrationReport",
+    "FeaturedDailyPick",
     "League",
     "Market",
     "Match",

@@ -27,6 +27,17 @@ from backend.services.match_analysis_service import (
 
 router = APIRouter(prefix="/matches", tags=["matches"])
 
+TARGET_JORNADA_LEAGUES = frozenset({
+    "soccer_epl",
+    "soccer_italy_serie_a",
+    "soccer_germany_bundesliga",
+    "soccer_spain_la_liga",
+    "soccer_france_ligue_one",
+    "soccer_uefa_champs_league",
+    "soccer_uefa_europa_league",
+    "soccer_uefa_europa_conference_league",
+})
+
 
 @router.get("", response_model=list[MatchOut])
 def list_matches(
@@ -35,6 +46,10 @@ def list_matches(
     days_back: int = Query(
         0, ge=0, le=30,
         description="Días hacia atrás para incluir partidos finalizados recientes (0 = solo próximos).",
+    ),
+    scope: str | None = Query(
+        None,
+        description="target = cinco grandes ligas + Champions, Europa y Conference League.",
     ),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
@@ -63,6 +78,8 @@ def list_matches(
     )
     if league:
         stmt = stmt.join(Match.league).where(League.sport_key == league)
+    elif scope == "target":
+        stmt = stmt.join(Match.league).where(League.sport_key.in_(TARGET_JORNADA_LEAGUES))
 
     return list(db.scalars(stmt).all())
 
@@ -99,6 +116,8 @@ def get_match_odds(
     stmt = (
         select(Odds)
         .where(Odds.match_id == match_id)
+        .where(Odds.price > 1)
+        .where(Odds.price < 4)
         .options(joinedload(Odds.bookmaker), joinedload(Odds.market))
     )
     rows = db.scalars(stmt).all()

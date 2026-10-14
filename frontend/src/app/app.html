@@ -15,11 +15,23 @@
         <div class="flex flex-wrap items-center gap-4 sm:gap-6 shrink-0">
           <nav class="flex gap-6 text-sm font-medium" aria-label="Principal">
             <a
+              routerLink="/transparencia"
+              routerLinkActive="text-brand-cyan font-semibold"
+              class="text-brand-muted hover:text-white transition-colors">
+              Transparencia
+            </a>
+            <a
               routerLink="/dashboard"
               routerLinkActive="text-brand-cyan font-semibold"
               [routerLinkActiveOptions]="{ exact: false }"
               class="text-brand-muted hover:text-white transition-colors">
               Dashboard
+            </a>
+            <a
+              routerLink="/estadisticas"
+              routerLinkActive="text-brand-cyan font-semibold"
+              class="text-brand-muted hover:text-white transition-colors">
+              Estadísticas
             </a>
             <a
               routerLink="/mis-apuestas"

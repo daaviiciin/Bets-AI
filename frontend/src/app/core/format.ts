@@ -159,8 +159,13 @@ const MATCH_SIDE_TOTAL_KEYS: Record<string, string> = {
   match_shots_totals: 'Tiros (partido)',
   match_sot_totals: 'Tiros a puerta (partido)',
   match_first_half_totals: 'Goles (1ª mitad, partido)',
+  match_second_half_totals: 'Goles (2ª mitad, partido)',
   match_first_half_corners_totals: 'Córneres (1ª mitad)',
   match_first_half_cards_totals: 'Tarjetas (1ª mitad)',
+  match_second_half_corners_totals: 'Córneres (2ª mitad)',
+  match_second_half_cards_totals: 'Tarjetas (2ª mitad)',
+  match_highest_scoring_half: 'Mitad con más goles',
+  match_most_goals_half: 'Mitad con más goles',
 };
 
 export function outcomeLabel(market: string, name: string, point: string | null): string {
@@ -175,6 +180,13 @@ export function outcomeLabel(market: string, name: string, point: string | null)
   ) {
     const side = market === 'team_home_first_half_totals_goals' ? 'Local' : 'Visitante';
     return `Goles 1ª parte ${side}: ${String(name)} ${point ?? ''}`.trim();
+  }
+  if (
+    market === 'team_home_second_half_totals_goals' ||
+    market === 'team_away_second_half_totals_goals'
+  ) {
+    const side = market === 'team_home_second_half_totals_goals' ? 'Local' : 'Visitante';
+    return `Goles 2ª parte ${side}: ${String(name)} ${point ?? ''}`.trim();
   }
   if (MATCH_SIDE_TOTAL_KEYS[market]) {
     return `${MATCH_SIDE_TOTAL_KEYS[market]}: ${String(name)} ${point ?? ''}`.trim();

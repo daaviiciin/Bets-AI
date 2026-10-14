@@ -28,6 +28,8 @@ class TestNormalize:
     def test_drops_common_suffixes(self) -> None:
         assert _normalize("Barcelona FC") == "barcelona"
         assert _normalize("Hoffenheim 1899") == "hoffenheim 1899"
+        assert _normalize("SV 07 Elversberg") == "elversberg"
+        assert _normalize("Bayer 04 Leverkusen") == "bayer leverkusen"
         assert _normalize("AC Milan") == "milan"
 
     def test_compresses_whitespace(self) -> None:

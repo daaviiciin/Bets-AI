@@ -89,6 +89,7 @@ class WinamaxIngestSummaryOut(BaseModel):
     snapshots_created: int
     snapshots_pruned: int = 0
     odds_inserted: int
+    odds_carried_forward: int = 0
     duration_seconds: float
     errors: list[str] = Field(default_factory=list)
 
@@ -260,8 +261,8 @@ def refresh_results(
 @router.post("/daily", response_model=DailyRefreshSummaryOut)
 def refresh_daily(
     stats_days_back: int = Query(
-        7, ge=1, le=30,
-        description="Ventana en días para buscar partidos sin stats Flashscore.",
+        120, ge=1, le=365,
+        description="Antigüedad máxima en días para buscar partidos sin stats Flashscore.",
     ),
     stats_all_leagues: bool = Query(
         False, description="Incluir competiciones europeas además de top-5.",
@@ -290,8 +291,8 @@ def refresh_daily(
 @router.post("/official", response_model=OfficialPipelineSummaryOut)
 def refresh_official_pipeline(
     stats_days_back: int = Query(
-        7, ge=1, le=30,
-        description="Ventana en días para buscar partidos sin stats Flashscore.",
+        120, ge=1, le=365,
+        description="Antigüedad máxima en días para buscar partidos sin stats Flashscore.",
     ),
     stats_all_leagues: bool = Query(
         False, description="Incluir competiciones europeas además de top-5.",
@@ -304,7 +305,8 @@ def refresh_official_pipeline(
         100, ge=1, le=220,
         description=(
             "Tope de partidos a scrapear en Winamax por corrida "
-            "(más partidos ⇒ más líneas para el dashboard)."
+            "(repartidos entre Premier / Serie A / Bundesliga / La Liga / Ligue 1; "
+            "luego se rellena por orden cronológico hasta este tope)."
         ),
     ),
     fixtures_days_ahead: int = Query(
@@ -349,6 +351,7 @@ def refresh_official_pipeline(
         snapshots_created=wres.snapshots_created,
         snapshots_pruned=wres.snapshots_pruned,
         odds_inserted=wres.odds_inserted,
+        odds_carried_forward=wres.odds_carried_forward,
         duration_seconds=wres.duration_seconds,
         errors=wres.errors,
     )

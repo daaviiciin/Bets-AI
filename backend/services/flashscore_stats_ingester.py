@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import time
 from typing import Iterable
 
 from sqlalchemy import select
@@ -29,6 +30,15 @@ from backend.models import Match, MatchStats, Team
 from backend.models.match import MATCH_STATUS_FINISHED
 from backend.scrapers import flashscore as fs
 from backend.services.match_results_updater import _names_match, _normalize
+
+TOP5_SPORT_KEYS = frozenset({
+    "soccer_epl",
+    "soccer_italy_serie_a",
+    "soccer_germany_bundesliga",
+    "soccer_spain_la_liga",
+    "soccer_france_ligue_one",
+})
+HISTORY_REQUEST_SLEEP_SECONDS = 1.5
 
 
 # Stats clave -> tipo de columna en MatchStats. Usamos esto para asignar
@@ -70,12 +80,59 @@ class IngestResult:
     stats_updated: int = 0             # filas MatchStats actualizadas
     fetch_errors: int = 0
     parse_errors: int = 0
-    days_visited: list[str] = field(default_factory=list)
+    competitions_visited: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     @property
     def duration_seconds(self) -> float:
         return (self.finished_at - self.started_at).total_seconds()
+
+
+def _matches_with_complete_stats(rows: Iterable[tuple[int, bool]]) -> set[int]:
+    sides_by_match: dict[int, set[bool]] = {}
+    for match_id, is_home in rows:
+        sides_by_match.setdefault(match_id, set()).add(is_home)
+    return {
+        match_id
+        for match_id, sides in sides_by_match.items()
+        if sides == {True, False}
+    }
+
+
+def _orient_stats_to_database(
+    parsed: dict[str, dict[str, float | int]],
+    summary_home: dict[str, int],
+    summary_away: dict[str, int],
+    *,
+    reversed_sides: bool,
+) -> tuple[dict[str, dict[str, float | int]], dict[str, int], dict[str, int]]:
+    if not reversed_sides:
+        return parsed, summary_home, summary_away
+    return (
+        {"home": parsed.get("away", {}), "away": parsed.get("home", {})},
+        summary_away,
+        summary_home,
+    )
+
+
+def _score_match_orientation(
+    home_score: int | None,
+    away_score: int | None,
+    fixture_home_score: int | None,
+    fixture_away_score: int | None,
+    *,
+    delta_minutes: float,
+) -> bool | None:
+    """Returns side reversal only for an exact score match near kickoff."""
+    if delta_minutes > 15 or None in (
+        home_score, away_score, fixture_home_score, fixture_away_score,
+    ):
+        return None
+    if (home_score, away_score) == (fixture_home_score, fixture_away_score):
+        return False
+    if (home_score, away_score) == (fixture_away_score, fixture_home_score):
+        return True
+    return None
 
 
 class FlashscoreStatsIngester:
@@ -96,16 +153,19 @@ class FlashscoreStatsIngester:
     def ingest_recent(
         self,
         *,
-        days_back: int = 7,
+        days_back: int = 120,
         only_top5: bool = True,
         limit_matches: int | None = None,
     ) -> IngestResult:
         """Ingiere stats de los partidos finalizados sin stats en los últimos
         ``days_back`` días."""
+        days_back = max(1, days_back)
         started = datetime.now(timezone.utc)
         result = IngestResult(started_at=started, finished_at=started)
 
         eligible = self._load_eligible_matches(days_back=days_back, limit=limit_matches)
+        if only_top5:
+            eligible = [match for match in eligible if match.league.sport_key in TOP5_SPORT_KEYS]
         result.matches_eligible = len(eligible)
         if not eligible:
             self.log.info("No hay partidos finalizados sin stats en los últimos %d días.",
@@ -113,32 +173,29 @@ class FlashscoreStatsIngester:
             result.finished_at = datetime.now(timezone.utc)
             return result
 
-        # Agrupar por fecha local del partido para minimizar llamadas al feed.
-        by_date: dict[date, list[Match]] = {}
-        for m in eligible:
-            played = m.played_at or m.commence_time
-            day_local = played.astimezone(timezone.utc).date()
-            by_date.setdefault(day_local, []).append(m)
+        # Standings publica resultados e IDs de los últimos eventos de la temporada,
+        # incluso cuando el feed diario f_-{offset} ya dejó de servirlos.
+        by_league: dict[str, list[Match]] = {}
+        for match in eligible:
+            by_league.setdefault(match.league.sport_key, []).append(match)
 
-        today = datetime.now(timezone.utc).date()
-        for d, matches in sorted(by_date.items()):
-            offset = (d - today).days
-            self.log.info("Procesando %d partidos del %s (offset %+d)",
-                          len(matches), d.isoformat(), offset)
-            result.days_visited.append(d.isoformat())
+        for sport_key, matches in sorted(by_league.items()):
             try:
-                fixtures = fs.fetch_fixtures_feed(day_offset=offset)
+                fixtures = fs.fetch_league_finished_matches(sport_key)
             except Exception as exc:  # noqa: BLE001
-                msg = f"Error descargando feed día {d}: {exc}"
+                msg = f"Error descargando histórico Flashscore {sport_key}: {exc}"
                 self.log.warning(msg)
                 result.errors.append(msg)
                 result.fetch_errors += 1
                 continue
 
-            if only_top5:
-                fixtures = fs._filter_top5(fixtures)
-
+            result.competitions_visited.append(sport_key)
+            self.log.info(
+                "Procesando %d partidos pendientes contra %d eventos de %s",
+                len(matches), len(fixtures), sport_key,
+            )
             self._ingest_day(matches, fixtures, result)
+            time.sleep(HISTORY_REQUEST_SLEEP_SECONDS)
 
         result.finished_at = datetime.now(timezone.utc)
         self.log.info(
@@ -158,10 +215,11 @@ class FlashscoreStatsIngester:
     ) -> list[Match]:
         """Partidos en BD finalizados, sin MatchStats, en la ventana temporal."""
         cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
-        # IDs ya con stats (cualquier fila en match_stats)
-        existing = set(self.session.scalars(
-            select(MatchStats.match_id).distinct()
-        ).all())
+        # Solo damos un encuentro por cubierto cuando tiene fila local y visitante.
+        existing_rows = self.session.execute(
+            select(MatchStats.match_id, MatchStats.is_home)
+        ).all()
+        existing = _matches_with_complete_stats(existing_rows)
 
         stmt = (
             select(Match)
@@ -174,9 +232,6 @@ class FlashscoreStatsIngester:
             )
             .order_by(Match.played_at.desc().nulls_last(), Match.commence_time.desc())
         )
-        if limit is not None:
-            stmt = stmt.limit(limit * 4)  # margen por si hay muchos ya con stats
-
         rows = self.session.scalars(stmt).all()
         out = [m for m in rows if m.id not in existing]
         if limit is not None:
@@ -190,14 +245,15 @@ class FlashscoreStatsIngester:
         result: IngestResult,
     ) -> None:
         for m in db_matches:
-            fs_match = self._match_db_to_flashscore(m, fixtures)
-            if fs_match is None:
+            matched = self._match_db_to_flashscore(m, fixtures)
+            if matched is None:
                 result.matches_unmatched += 1
                 self.log.info(
                     "  [SKIP] %s vs %s: no encontrado en Flashscore",
                     m.home_team.name, m.away_team.name,
                 )
                 continue
+            fs_match, reversed_sides = matched
             result.matches_matched += 1
             try:
                 records = fs.fetch_match_statistics(fs_match.match_id)
@@ -227,6 +283,13 @@ class FlashscoreStatsIngester:
                     "df_su sin datos o error para %s: %s", fs_match.match_id, exc,
                 )
 
+            parsed, su_home, su_away = _orient_stats_to_database(
+                parsed,
+                su_home,
+                su_away,
+                reversed_sides=reversed_sides,
+            )
+
             if not parsed["home"] and not parsed["away"] and not su_home and not su_away:
                 self.log.info(
                     "  [EMPTY] %s vs %s: feed sin stats (¿partido sin datos?)",
@@ -238,13 +301,14 @@ class FlashscoreStatsIngester:
 
     def _match_db_to_flashscore(
         self, m: Match, fixtures: list[fs.FlashscoreMatch],
-    ) -> fs.FlashscoreMatch | None:
+    ) -> tuple[fs.FlashscoreMatch, bool] | None:
         """Empareja un Match de BD con un FlashscoreMatch del feed."""
         target_home = _normalize(m.home_team.name)
         target_away = _normalize(m.away_team.name)
         target_kickoff = m.commence_time
 
-        candidates: list[tuple[float, fs.FlashscoreMatch]] = []
+        candidates: list[tuple[float, fs.FlashscoreMatch, bool]] = []
+        score_candidates: list[tuple[float, fs.FlashscoreMatch, bool]] = []
         for f in fixtures:
             if f.scheduled_at is None:
                 continue
@@ -254,18 +318,29 @@ class FlashscoreStatsIngester:
             f_home = _normalize(f.home_team_name or "")
             f_away = _normalize(f.away_team_name or "")
             # Tolerante a flips home/away (algunas integraciones los invierten)
-            same_pair = (
-                (_names_match(target_home, f_home) and _names_match(target_away, f_away))
-                or (_names_match(target_home, f_away) and _names_match(target_away, f_home))
-            )
-            if not same_pair:
+            direct = _names_match(target_home, f_home) and _names_match(target_away, f_away)
+            reversed_sides = _names_match(target_home, f_away) and _names_match(target_away, f_home)
+            if direct or reversed_sides:
+                candidates.append((delta_min, f, not direct and reversed_sides))
                 continue
-            candidates.append((delta_min, f))
+            score_reversed = _score_match_orientation(
+                m.home_score,
+                m.away_score,
+                f.score_home,
+                f.score_away,
+                delta_minutes=delta_min,
+            )
+            if score_reversed is not None:
+                score_candidates.append((delta_min, f, score_reversed))
 
-        if not candidates:
+        if candidates:
+            candidates.sort(key=lambda t: t[0])
+            _, fixture, reversed_sides = candidates[0]
+            return fixture, reversed_sides
+        if len(score_candidates) != 1:
             return None
-        candidates.sort(key=lambda t: t[0])
-        return candidates[0][1]
+        _, fixture, reversed_sides = score_candidates[0]
+        return fixture, reversed_sides
 
     def _upsert_match_stats(
         self,
@@ -323,7 +398,7 @@ class FlashscoreStatsIngester:
                 result.stats_updated += 1
 
         self.log.info(
-            "  [OK] %s %d-%d %s  stats persistidas",
+                "  [OK] %s %d-%d %s  stats persistidas",
             match.home_team.name, match.home_score or 0,
             match.away_score or 0, match.away_team.name,
         )

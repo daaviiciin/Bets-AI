@@ -3,7 +3,7 @@
 Uso típico (después de actualizar resultados con ``update_match_results``)::
 
     python -m backend.tools.import_flashscore_stats
-    python -m backend.tools.import_flashscore_stats --days-back 14
+    python -m backend.tools.import_flashscore_stats --days-back 120
     python -m backend.tools.import_flashscore_stats --limit 5
 
 Es 100% gratis (Flashscore vía scraping, sin créditos consumidos).
@@ -36,8 +36,8 @@ def main(argv: list[str] | None = None) -> int:
         description="Ingiere stats post-partido de Flashscore en BD.",
     )
     parser.add_argument(
-        "--days-back", type=int, default=7,
-        help="Ventana hacia atrás (default 7 días).",
+        "--days-back", type=int, default=120,
+        help="Antigüedad máxima de partidos a comprobar (default 120 días).",
     )
     parser.add_argument(
         "--limit", type=int, default=None,
@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     log.info("  Stats nuevas:          %d", result.stats_inserted)
     log.info("  Stats actualizadas:    %d", result.stats_updated)
     log.info("  Errores fetch/parse:   %d / %d", result.fetch_errors, result.parse_errors)
-    log.info("  Días procesados:       %s", ", ".join(result.days_visited) or "—")
+    log.info("  Competiciones:         %s", ", ".join(result.competitions_visited) or "—")
     log.info("  Tiempo total:          %.1fs", result.duration_seconds)
     log.info("=" * 90)
     return 0 if not result.errors else 0  # los errores no son fatales

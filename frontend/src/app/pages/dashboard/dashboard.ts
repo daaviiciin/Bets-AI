@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { of } from 'rxjs';
 import { catchError, finalize, switchMap } from 'rxjs/operators';
 
@@ -20,7 +20,7 @@ import {
   outcomeLabel,
   toNumber,
 } from '../../core/format';
-import { GradedOddsLine, SavedParlayLegPersist, ValueBetConfidence } from '../../core/models';
+import { GradedOddsLine, Match, Odds, SavedParlayLegPersist, ValueBetConfidence } from '../../core/models';
 
 interface Kpi {
   label: string;
@@ -42,20 +42,88 @@ const MATCH_STATS_MARKET_KEYS = new Set([
   'team_away_first_half_totals_goals',
   'match_first_half_corners_totals',
   'match_first_half_cards_totals',
+  // 2ª mitad / extras Winamax (cuando existan en BD)
+  'match_second_half_totals',
+  'team_home_second_half_totals_goals',
+  'team_away_second_half_totals_goals',
+  'match_second_half_corners_totals',
+  'match_second_half_cards_totals',
+  'match_total_goals_odd_even',
+  'match_winner_and_totals',
+  'match_highest_scoring_half',
+  'match_most_goals_half',
 ]);
+
+export type MatchStatsSubFilter = 'all' | 'corners' | 'cards' | 'goals' | 'shots';
 
 /** 1X2 · doble · BTTS. */
 function isClassicMatchMarket(key: string): boolean {
   return key === 'h2h' || key === 'double_chance' || key === 'btts';
 }
 
-function isMatchStatsMarket(key: string): boolean {
-  return MATCH_STATS_MARKET_KEYS.has(key);
+/** Nuevos ``match_*`` del scraper: totales / córners / tarjetas / mitades sin listarlos todos a mano. */
+function isMatchStatsMarketFallback(key: string): boolean {
+  if (!(key.startsWith('match_') || key.startsWith('team_home_') || key.startsWith('team_away_'))) {
+    return false;
+  }
+  const k = key.toLowerCase();
+  if (k.startsWith('match_') && (k.includes('player') || k.includes('scorer'))) return false;
+  if (
+    k === 'match_winner' ||
+    k === 'match_winner_dnb' ||
+    k === 'match_btts' ||
+    k === 'match_double_chance'
+  ) {
+    return false;
+  }
+  return (
+    k.includes('totals') ||
+    k.includes('corners') ||
+    k.includes('cards') ||
+    k.includes('shots') ||
+    k.includes('_sot') ||
+    k.includes('half') ||
+    k.includes('goal')
+  );
 }
+
+function isMatchStatsMarket(key: string): boolean {
+  if (MATCH_STATS_MARKET_KEYS.has(key)) return true;
+  if (key.startsWith('player_')) return false;
+  if (isClassicMatchMarket(key)) return false;
+  return isMatchStatsMarketFallback(key);
+}
+
+function matchesMatchStatsSub(key: string, sub: MatchStatsSubFilter): boolean {
+  if (sub === 'all') return true;
+  if (sub === 'corners') return key.toLowerCase().includes('corners');
+  if (sub === 'cards') return key.toLowerCase().includes('cards');
+  const kl = key.toLowerCase();
+  if (sub === 'shots') return kl.includes('shots') || kl.includes('_sot');
+  // goals: goles totales / mitades / “mitad con más goles” — excluye córners, tarjetas, tiros
+  if (kl.includes('corners') || kl.includes('cards')) return false;
+  if (kl.includes('shots') || kl.includes('_sot')) return false;
+  return (
+    key === 'totals' ||
+    kl.includes('totals_goals') ||
+    kl.includes('goal') ||
+    kl.includes('half') ||
+    kl.includes('scoring') ||
+    kl.includes('most_goals')
+  );
+}
+
+/** Competiciones top‑5 para el selector del dashboard (``League.sport_key``). */
+const DASHBOARD_LEAGUE_OPTIONS: readonly { sport_key: string; label: string }[] = [
+  { sport_key: 'soccer_epl', label: 'Premier League' },
+  { sport_key: 'soccer_italy_serie_a', label: 'Serie A' },
+  { sport_key: 'soccer_germany_bundesliga', label: 'Bundesliga' },
+  { sport_key: 'soccer_spain_la_liga', label: 'La Liga' },
+  { sport_key: 'soccer_france_ligue_one', label: 'Ligue 1' },
+];
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink],
   templateUrl: './dashboard.html',
 })
 export class Dashboard {
@@ -67,26 +135,115 @@ export class Dashboard {
   protected readonly busy = signal(false);
   protected readonly scrapingOfficial = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly matches = signal<Match[]>([]);
+  protected readonly selectedMatch = signal<Match | null>(null);
+  protected readonly selectedMatchOdds = signal<Odds[]>([]);
+  protected readonly loadingMatchOdds = signal(false);
   protected readonly gradedRows = signal<GradedOddsLine[]>([]);
   protected readonly parlayTitle = signal('');
   protected readonly parlaySaveHint = signal<string | null>(null);
+  protected readonly oddsMarketFilter = signal('all');
+  protected readonly oddsOutcomeFilter = signal('all');
+  protected readonly oddsMin = signal(1);
+  protected readonly oddsMax = signal(4);
+
+  /** Vista inicial del producto: únicamente cuotas, sin valoración del modelo. */
+  protected readonly oddsRows = computed(() => {
+    const market = this.oddsMarketFilter();
+    const outcome = this.oddsOutcomeFilter();
+    const min = this.oddsMin();
+    const max = this.oddsMax();
+    return [...this.gradedRows()]
+      .filter((row) => {
+        const key = row.market_key.toLowerCase();
+        if (market !== 'all' && key !== market) return false;
+        const price = toNumber(row.offered_odds);
+        if (price < min || price >= max) return false;
+        return this.matchesOddsOutcome(row, outcome);
+      })
+      .sort((a, b) => {
+        const dateA = Date.parse(a.commence_time);
+        const dateB = Date.parse(b.commence_time);
+        if (dateA !== dateB) return dateA - dateB;
+        return toNumber(a.offered_odds) - toNumber(b.offered_odds);
+      })
+      .slice(0, 900);
+  });
+
+  protected readonly visibleMatchOdds = computed(() => {
+    const market = this.oddsMarketFilter();
+    const outcome = this.oddsOutcomeFilter();
+    const min = this.oddsMin();
+    const max = this.oddsMax();
+    return this.selectedMatchOdds().filter((odd) => {
+      const price = toNumber(odd.price);
+      if (price < min || price >= max) return false;
+      if (market !== 'all' && odd.market_key !== market) return false;
+      const value = odd.outcome_name.toLowerCase();
+      if (outcome === 'all') return true;
+      if (outcome === 'draw') return value === 'draw' || value === 'empate';
+      if (outcome === 'over') return value.includes('over') || value.includes('más') || value.includes('mas');
+      if (outcome === 'under') return value.includes('under') || value.includes('menos');
+      if (outcome === 'yes') return value === 'yes' || value === 'sí' || value === 'si';
+      if (outcome === 'no') return value === 'no';
+      const selected = this.selectedMatch();
+      if (outcome === 'home') return !!selected && value === selected.home_team.name.toLowerCase();
+      if (outcome === 'away') return !!selected && value === selected.away_team.name.toLowerCase();
+      return true;
+    });
+  });
+
+  private matchesOddsOutcome(row: GradedOddsLine, filter: string): boolean {
+    if (filter === 'all') return true;
+    const outcome = row.outcome_name.trim().toLowerCase();
+    const home = row.home_team.trim().toLowerCase();
+    const away = row.away_team.trim().toLowerCase();
+    if (filter === 'home') return outcome === home || outcome.includes('local');
+    if (filter === 'away') return outcome === away || outcome.includes('visitante');
+    if (filter === 'draw') return outcome === 'draw' || outcome === 'empate';
+    if (filter === 'over') return outcome === 'over' || outcome.includes('más') || outcome.includes('mas');
+    if (filter === 'under') return outcome === 'under' || outcome.includes('menos');
+    if (filter === 'yes') return outcome === 'yes' || outcome === 'sí' || outcome === 'si';
+    if (filter === 'no') return outcome === 'no';
+    return true;
+  }
+
+  protected setOddsMin(ev: Event): void {
+    const value = Number((ev.target as HTMLInputElement).value);
+    const next = Number.isFinite(value) ? Math.max(1, Math.min(3.99, value)) : 1;
+    this.oddsMin.set(Math.min(next, this.oddsMax() - 0.01));
+  }
+
+  protected setOddsMax(ev: Event): void {
+    const value = Number((ev.target as HTMLInputElement).value);
+    const next = Number.isFinite(value) ? Math.max(1.01, Math.min(4, value)) : 4;
+    this.oddsMax.set(Math.max(next, this.oddsMin() + 0.01));
+  }
 
   /** all · clásicos (1X2/DC/BTTS) · totales/partido stats · jugadores */
   protected readonly marketPreset = signal<'all' | 'classic' | 'match_stats' | 'players'>('all');
 
+  /** Dentro de «Totales partido»: refinar por tipo (córners, tarjetas, goles/mitades, tiros). */
+  protected readonly matchStatsSub = signal<MatchStatsSubFilter>('all');
+
   protected readonly hideLongshots = signal(true);
   protected readonly comfortOddsOnly = signal(false);
 
-  /** Probabilidad modelo 0–100 %. */
+  /** Probabilidad modelo 0–100 % (solo se listan líneas que ya tienen P modelo). */
   protected readonly probMinPct = signal(0);
   protected readonly probMaxPct = signal(100);
-  /** Incluye apuestas sin P modelo (vacío en columna probabilidad). */
-  protected readonly includeNoProbRows = signal(true);
 
   protected readonly confHigh = signal(true);
   protected readonly confMedium = signal(true);
   protected readonly confLow = signal(true);
   protected readonly confUnknown = signal(true);
+
+  /** Competición para pedir `/graded-odds?sport_key=` (vacío = todas). */
+  protected readonly leagueSportKeyFilter = signal('');
+  /** Incluye líneas sin P modelo (depuración: stats/Poisson ausentes por liga). */
+  protected readonly debugShowLinesWithoutModel = signal(false);
+
+  protected readonly leagueOptions = DASHBOARD_LEAGUE_OPTIONS;
 
   protected readonly rowsAfterMarket = computed(() => {
     const all = this.gradedRows();
@@ -99,11 +256,41 @@ export class Dashboard {
         case 'classic':
           return isClassicMatchMarket(k);
         case 'match_stats':
-          return isMatchStatsMarket(k);
+          if (!isMatchStatsMarket(k)) return false;
+          return matchesMatchStatsSub(k, this.matchStatsSub());
         default:
           return true;
       }
     });
+  });
+
+  /** Recuento por ``league_sport_key`` en la última respuesta del servidor (antes de filtros UI). */
+  protected readonly leagueInventory = computed(() => {
+    const by = new Map<string, { label: string; total: number; withModel: number }>();
+    for (const r of this.gradedRows()) {
+      const sk = (r.league_sport_key ?? '').trim() || '__unknown__';
+      const prev = by.get(sk);
+      if (!prev) {
+        by.set(sk, {
+          label: r.league || sk,
+          total: 1,
+          withModel: r.model_probability != null ? 1 : 0,
+        });
+      } else {
+        prev.total++;
+        if (r.model_probability != null) prev.withModel++;
+      }
+    }
+    return by;
+  });
+
+  protected readonly leagueInventoryHint = computed(() => {
+    const inv = this.leagueInventory();
+    if (inv.size === 0) return '';
+    return [...inv.entries()]
+      .sort((a, b) => a[1].label.localeCompare(b[1].label))
+      .map(([, v]) => `${v.label}: ${v.withModel}/${v.total} con P modelo`)
+      .join(' · ');
   });
 
   protected readonly rowsFiltered = computed(() => {
@@ -119,7 +306,9 @@ export class Dashboard {
     const pMin = this.probMinPct() / 100;
     const pMax = this.probMaxPct() / 100;
     base = base.filter((r) => {
-      if (r.model_probability == null) return this.includeNoProbRows();
+      if (r.model_probability == null) {
+        return this.debugShowLinesWithoutModel();
+      }
       const p = toNumber(r.model_probability);
       return p >= pMin && p <= pMax;
     });
@@ -129,30 +318,35 @@ export class Dashboard {
 
   protected readonly kpis = computed<Kpi[]>(() => {
     const band = this.rowsFiltered();
-    const totalSrv = this.gradedRows().length;
+    const inSrv = this.gradedRows().length;
+    const noProbSrv = this.gradedRows().filter((b) => b.model_probability == null).length;
+    const dbg = this.debugShowLinesWithoutModel();
     if (band.length === 0) {
       return [
         {
           label: 'Líneas en vista',
           value: '0',
-          hint: totalSrv > 0 ? `${totalSrv} en servidor · ajusta filtros` : 'Actualiza datos o relaja filtros',
+          hint:
+            inSrv > 0
+              ? `${inSrv} en servidor (${noProbSrv} sin P modelo${dbg ? '; depuración activa' : ' ocultas'})`
+              : 'Actualiza datos o relaja filtros',
         },
         { label: 'Alta · media · baja', value: '0', hint: 'confianza del modelo' },
-        { label: 'Con probabilidad modelo', value: '0', hint: 'P estimada cuando hay estadística' },
+        { label: 'Con estimación Poisson', value: '0', hint: 'solo se listan líneas con P' },
         { label: 'Partidos', value: '0', hint: 'únicos tras filtros' },
       ];
     }
     const matches = new Set(band.map((b) => b.match_id)).size;
     const trio = `${band.filter((b) => b.confidence === 'high').length} · ${band.filter((b) => b.confidence === 'medium').length} · ${band.filter((b) => b.confidence === 'low').length}`;
-    const withProb = band.filter((b) => b.model_probability != null).length;
+    const withProb = band.length;
     return [
       {
         label: 'Líneas en vista',
         value: String(band.length),
-        hint: `${totalSrv} sin filtro de vista`,
+        hint: `${inSrv} en servidor · ${noProbSrv} sin P no mostradas`,
       },
       { label: 'Alta · media · baja', value: trio, hint: '+ sin modelo según filtros' },
-      { label: 'Con probabilidad modelo', value: String(withProb), hint: `${band.length - withProb} sin P o fuera de rango` },
+      { label: 'Con estimación Poisson', value: String(withProb), hint: 'todas las filas visibles' },
       { label: 'Partidos', value: String(matches), hint: 'encuentros distintos' },
     ];
   });
@@ -211,7 +405,82 @@ export class Dashboard {
     // No ejecutar el pipeline oficial (Flashscore + Winamax) en cada entrada al dashboard,
     // recarga F5 ni al navegar desde otras rutas: sólo lista cuotas ya en servidor.
     // El scrape pesado es explícito con «Actualizar desde fuentes».
-    this.reloadSuggestionsOnly();
+    this.reloadJornada();
+  }
+
+  private loadJornada(): void {
+    this.api
+      .listMatches({ scope: 'target', daysAhead: 7, limit: 500 })
+      .subscribe({
+        next: (matches) => {
+          this.matches.set(matches);
+          this.loading.set(false);
+        },
+        error: (err) => {
+          this.error.set(this.formatError(err));
+          this.loading.set(false);
+        },
+      });
+  }
+
+  protected reloadJornada(): void {
+    if (this.busy()) return;
+    this.busy.set(true);
+    this.loading.set(true);
+    this.error.set(null);
+    this.selectedMatch.set(null);
+    this.selectedMatchOdds.set([]);
+    this.api
+      .listMatches({ scope: 'target', daysAhead: 7, limit: 500 })
+      .pipe(finalize(() => {
+        this.busy.set(false);
+        this.loading.set(false);
+      }))
+      .subscribe({
+        next: (matches) => this.matches.set(matches),
+        error: (err) => this.error.set(this.formatError(err)),
+      });
+  }
+
+  protected selectMatch(match: Match): void {
+    if (this.loadingMatchOdds()) return;
+    this.selectedMatch.set(match);
+    this.selectedMatchOdds.set([]);
+    this.loadingMatchOdds.set(true);
+    this.api
+      .getMatchOdds(match.id, { bookmaker: 'winamax_es' })
+      .pipe(finalize(() => this.loadingMatchOdds.set(false)))
+      .subscribe({
+        next: (odds) => this.selectedMatchOdds.set(odds),
+        error: (err) => this.error.set(this.formatError(err)),
+      });
+  }
+
+  protected oddsOutcome(odd: Odds): string {
+    return odd.outcome_point ? `${odd.outcome_name} ${odd.outcome_point}` : odd.outcome_name;
+  }
+
+  protected marketLabel(key: string): string {
+    const labels: Record<string, string> = {
+      h2h: 'Resultado',
+      double_chance: 'Doble oportunidad',
+      totals: 'Goles totales',
+      btts: 'Ambos marcan',
+    };
+    return labels[key] ?? key;
+  }
+
+  private gradedOddsRequestOpts(): {
+    horizonHours: number;
+    maxLines: number;
+    sportKey?: string;
+  } {
+    const sk = this.leagueSportKeyFilter().trim();
+    return {
+      horizonHours: 52,
+      maxLines: 5000,
+      ...(sk ? { sportKey: sk } : {}),
+    };
   }
 
   /** Pipeline oficial en servidor + tabla calificada (sin mostrar logs de pipeline en UI). */
@@ -224,7 +493,7 @@ export class Dashboard {
 
     this.api
       .refreshOfficialPipeline({
-        statsDaysBack: 10,
+        statsDaysBack: 120,
         statsAllLeagues: true,
         fixturesDaysAhead: 14,
         winamaxDaysAhead: 3,
@@ -232,7 +501,7 @@ export class Dashboard {
       })
       .pipe(
         catchError(() => of(null)),
-        switchMap(() => this.api.listGradedOdds({ horizonHours: 52, maxLines: 5000 })),
+        switchMap(() => this.api.listMatches({ scope: 'target', daysAhead: 7, limit: 500 })),
         finalize(() => {
           this.scrapingOfficial.set(false);
           this.busy.set(false);
@@ -240,28 +509,13 @@ export class Dashboard {
         }),
       )
       .subscribe({
-        next: (data) => this.gradedRows.set(data),
+        next: (data) => this.matches.set(data),
         error: (err) => this.error.set(this.formatError(err)),
       });
   }
 
   protected reloadSuggestionsOnly(): void {
-    if (this.busy()) return;
-    this.busy.set(true);
-    this.loading.set(true);
-    this.error.set(null);
-    this.api
-      .listGradedOdds({ horizonHours: 52, maxLines: 5000 })
-      .pipe(
-        finalize(() => {
-          this.busy.set(false);
-          this.loading.set(false);
-        }),
-      )
-      .subscribe({
-        next: (data) => this.gradedRows.set(data),
-        error: (err) => this.error.set(this.formatError(err)),
-      });
+    this.reloadJornada();
   }
 
   protected setProbMinFromInput(ev: Event): void {
@@ -305,17 +559,37 @@ export class Dashboard {
     return this.confUnknown();
   }
 
+  protected onLeagueSportKeyChange(ev: Event): void {
+    const v = (ev.target as HTMLSelectElement).value ?? '';
+    this.leagueSportKeyFilter.set(v);
+    this.reloadSuggestionsOnly();
+  }
+
+  protected toggleDebugWithoutModel(): void {
+    this.debugShowLinesWithoutModel.update((x) => !x);
+  }
+
   protected resetFilters(): void {
     this.marketPreset.set('all');
+    this.matchStatsSub.set('all');
     this.hideLongshots.set(true);
     this.comfortOddsOnly.set(false);
     this.probMinPct.set(0);
     this.probMaxPct.set(100);
-    this.includeNoProbRows.set(true);
     this.confHigh.set(true);
     this.confMedium.set(true);
     this.confLow.set(true);
     this.confUnknown.set(true);
+    this.leagueSportKeyFilter.set('');
+    this.debugShowLinesWithoutModel.set(false);
+    this.reloadSuggestionsOnly();
+  }
+
+  protected setMarketPreset(p: 'all' | 'classic' | 'match_stats' | 'players'): void {
+    this.marketPreset.set(p);
+    if (p !== 'match_stats') {
+      this.matchStatsSub.set('all');
+    }
   }
 
   protected matchesConfidenceFilter(c: ValueBetConfidence): boolean {

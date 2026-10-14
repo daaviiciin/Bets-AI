@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { finalize } from 'rxjs/operators';
+import { finalize, switchMap } from 'rxjs/operators';
 
 import { ApiService } from '../../core/api.service';
 import {
@@ -18,7 +18,12 @@ import type { SavedParlay, SavedParlayLegPersist } from '../../core/models';
 export class MisApuestas {
   private readonly api = inject(ApiService);
 
-  protected readonly busy = signal(false);
+  /** Solo GET /me/parlays (recarga inicial o manual). */
+  protected readonly listBusy = signal(false);
+  /** POST refresh-grades masivo. */
+  protected readonly bulkGrading = signal(false);
+  /** Recalculando una sola combinada (POST /me/parlays/:id/refresh-grade). */
+  protected readonly refreshingId = signal<number | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly parlays = signal<SavedParlay[]>([]);
 
@@ -43,11 +48,11 @@ export class MisApuestas {
   }
 
   protected reload(): void {
-    this.busy.set(true);
+    this.listBusy.set(true);
     this.error.set(null);
     this.api
       .listMyParlays()
-      .pipe(finalize(() => this.busy.set(false)))
+      .pipe(finalize(() => this.listBusy.set(false)))
       .subscribe({
         next: (rows) => this.parlays.set(rows),
         error: (err) =>
@@ -57,15 +62,45 @@ export class MisApuestas {
 
   protected refreshGrades(): void {
     this.error.set(null);
-    this.api.refreshMyParlaysGrading().subscribe({
-      next: () => this.reload(),
-      error: (err) =>
-        this.error.set(err?.error?.detail ?? err.message ?? 'Error al recalcular marcadores'),
-    });
+    this.bulkGrading.set(true);
+    this.api
+      .refreshMyParlaysGrading()
+      .pipe(
+        switchMap(() => this.api.listMyParlays()),
+        finalize(() => this.bulkGrading.set(false)),
+      )
+      .subscribe({
+        next: (rows) => this.parlays.set(rows),
+        error: (err) =>
+          this.error.set(err?.error?.detail ?? err.message ?? 'Error al recalcular marcadores'),
+      });
+  }
+
+  protected refreshOneParlay(id: number): void {
+    if (this.bulkGrading() || this.refreshingId() !== null) return;
+    this.error.set(null);
+    this.refreshingId.set(id);
+    this.api
+      .refreshMyParlayGrade(id)
+      .pipe(
+        switchMap(() => this.api.listMyParlays()),
+        finalize(() => this.refreshingId.set(null)),
+      )
+      .subscribe({
+        next: (rows) => this.parlays.set(rows),
+        error: (err) =>
+          this.error.set(
+            typeof err?.error?.detail === 'string'
+              ? err.error.detail
+              : Array.isArray(err?.error?.detail)
+                ? err.error.detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join(' ')
+                : err.message ?? 'No se pudo comprobar el resultado de la combinada',
+          ),
+      });
   }
 
   protected remove(id: number): void {
-    if (this.busy()) return;
+    if (this.bulkGrading() || this.refreshingId() !== null) return;
     this.api.deleteMyParlay(id).subscribe(() => this.reload());
   }
 
@@ -87,6 +122,32 @@ export class MisApuestas {
         return 'text-amber-200';
       default:
         return 'text-brand-muted';
+    }
+  }
+
+  protected overallShortLabel(o: string): string {
+    switch (o) {
+      case 'hit':
+        return 'Ganada';
+      case 'miss':
+        return 'Perdida';
+      case 'needs_review':
+        return 'A revisar';
+      default:
+        return 'Pendiente';
+    }
+  }
+
+  protected overallBadgeClass(o: string): string {
+    switch (o) {
+      case 'hit':
+        return 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200';
+      case 'miss':
+        return 'border-rose-400/40 bg-rose-500/15 text-rose-200';
+      case 'needs_review':
+        return 'border-amber-400/40 bg-amber-500/15 text-amber-200';
+      default:
+        return 'border-brand-blue/30 bg-brand-bg-deep/50 text-brand-muted';
     }
   }
 

@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
+from urllib.parse import urljoin
 
 from curl_cffi import requests as cf
 
@@ -58,6 +59,20 @@ HEADERS = {
 # Football = 1 y basketball = 2 son los habituales; verificar si el feed cambia.
 FLASHSCORE_SPORT_SOCCER = 1
 FLASHSCORE_SPORT_BASKETBALL = 2
+_FLASHSCORE_SITE = "https://www.flashscore.com"
+
+LEAGUE_STANDINGS_PATHS: dict[str, tuple[str, str]] = {
+    "soccer_spain_la_liga": ("La Liga", "football/spain/laliga/standings/"),
+    "soccer_epl": ("Premier League", "football/england/premier-league/standings/"),
+    "soccer_germany_bundesliga": ("Bundesliga", "football/germany/bundesliga/standings/"),
+    "soccer_italy_serie_a": ("Serie A", "football/italy/serie-a/standings/"),
+    "soccer_france_ligue_one": ("Ligue 1", "football/france/ligue-1/standings/"),
+    "soccer_uefa_champs_league": ("Champions League", "football/europe/champions-league/standings/"),
+    "soccer_uefa_europa_league": ("Europa League", "football/europe/europa-league/standings/"),
+    "soccer_uefa_europa_conference_league": (
+        "Conference League", "football/europe/europa-conference-league/standings/",
+    ),
+}
 
 KEY_MAP = {
     "SA": "sport_id",
@@ -187,6 +202,41 @@ def fetch_fixtures_feed(
             raw=rec,
         ))
     return matches
+
+
+def parse_finished_matches_from_html(text: str, *, league_name: str) -> list[FlashscoreMatch]:
+    """Extrae partidos finalizados del feed serializado dentro de standings HTML."""
+    by_id: dict[str, FlashscoreMatch] = {}
+    for rec in parse_payload(text):
+        match_id = rec.get("AA")
+        epoch = rec.get("AD")
+        if not match_id or rec.get("AB") != "3" or not epoch or not epoch.isdigit():
+            continue
+        by_id[match_id] = FlashscoreMatch(
+            match_id=match_id,
+            league_full_name=league_name,
+            home_team_name=rec.get("CX"),
+            away_team_name=rec.get("AF"),
+            scheduled_at=datetime.fromtimestamp(int(epoch), tz=timezone.utc),
+            score_home=_to_int_or_none(rec.get("AG")),
+            score_away=_to_int_or_none(rec.get("AH")),
+            is_finished=True,
+            raw=rec,
+        )
+    return list(by_id.values())
+
+
+def fetch_league_finished_matches(sport_key: str) -> list[FlashscoreMatch]:
+    """Obtiene los IDs de partidos finalizados publicados en la clasificación de una liga."""
+    league = LEAGUE_STANDINGS_PATHS.get(sport_key)
+    if league is None:
+        raise ValueError(f"No hay página standings de Flashscore para {sport_key}")
+    league_name, path = league
+    url = urljoin(f"{_FLASHSCORE_SITE}/", path)
+    response = cf.get(url, headers=HEADERS, impersonate="chrome", timeout=30)
+    if response.status_code != 200:
+        raise RuntimeError(f"HTTP {response.status_code} en standings {url}")
+    return parse_finished_matches_from_html(response.text, league_name=league_name)
 
 
 def fetch_match_summary(match_id: str) -> dict[str, str]:

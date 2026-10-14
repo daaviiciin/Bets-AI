@@ -360,7 +360,7 @@ def _event_team_name(event: dict, side: str) -> str | None:
 
 
 _NOISE_TOKENS = {
-    "fc", "cf", "ac", "sc", "afc", "rcd", "ud", "cd", "cp",
+    "fc", "cf", "ac", "sc", "afc", "rcd", "ud", "cd", "cp", "sv", "07", "04",
     "club", "de", "calcio", "bv", "ssd", "asd",
 }
 

@@ -5,28 +5,28 @@
       <h1 class="text-3xl font-semibold text-white tracking-tight">Mis combinadas</h1>
       <p class="text-brand-muted text-sm max-w-xl leading-relaxed">
         Cada fila es una <strong class="text-white font-medium">combinada completa</strong> tal como la guardaste desde el simulador del dashboard.
-        Pulsa <strong class="text-white font-medium">Actualizar marcadores</strong> después de los partidos para recalcular si la combinada hubiera entrado según el marcador
-        (misma lógica automática que antes: 1×2, totales de goles marcador claro, BTTS; el resto marca revisión).
+        Tras los partidos, usa <strong class="text-white font-medium">Comprobar todas</strong> para recalcular todas las combinadas según el marcador cargado en base de datos,
+        o <strong class="text-white font-medium">Comprobar resultado</strong> en una fila concreta. Misma lógica que el simulador (1×2, totales con marcador claro, BTTS; el resto puede quedar en revisión).
       </p>
       <div class="flex flex-wrap gap-3 pt-2">
         <button
           type="button"
           (click)="refreshGrades()"
-          [disabled]="busy() || parlays().length === 0"
+          [disabled]="bulkGrading() || parlays().length === 0 || refreshingId() !== null"
           class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium
                  bg-brand-cyan/12 border border-brand-cyan/35 text-brand-cyan hover:bg-brand-cyan/18
                  transition-all disabled:opacity-45 shadow-[0_0_20px_-10px_rgb(0_229_255_/_40%)]">
-          @if (busy()) {
+          @if (bulkGrading()) {
             <span class="size-4 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin"></span>
-            <span>Trabajando…</span>
+            <span>Comprobando…</span>
           } @else {
-            <span>Actualizar marcadores</span>
+            <span>Comprobar todas</span>
           }
         </button>
         <button
           type="button"
           (click)="reload()"
-          [disabled]="busy()"
+          [disabled]="listBusy() || bulkGrading() || refreshingId() !== null"
           class="text-sm font-medium px-4 py-2.5 rounded-xl border border-brand-blue/30 text-brand-muted hover:border-brand-cyan/35 hover:text-white transition-colors disabled:opacity-40">
           Recargar lista
         </button>
@@ -38,7 +38,7 @@
       }
     </div>
 
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
       <div class="rounded-xl border border-brand-blue/20 bg-brand-bg-panel/40 px-4 py-3">
         <div class="text-[10px] uppercase text-brand-muted">Guardadas</div>
         <div class="text-2xl font-semibold text-white tabular-nums">{{ summary().total }}</div>
@@ -47,13 +47,17 @@
         <div class="text-[10px] uppercase text-brand-muted">Pendientes</div>
         <div class="text-2xl font-semibold text-amber-200/95 tabular-nums">{{ summary().pending }}</div>
       </div>
+      <div class="rounded-xl border border-amber-500/25 bg-amber-950/10 px-4 py-3">
+        <div class="text-[10px] uppercase text-brand-muted">A revisar</div>
+        <div class="text-2xl font-semibold text-amber-200/95 tabular-nums">{{ summary().needsReview }}</div>
+      </div>
       <div class="rounded-xl border border-brand-blue/20 bg-brand-bg-panel/40 px-4 py-3">
         <div class="text-[10px] uppercase text-brand-muted">OK / KO cerradas</div>
         <div class="text-xl font-semibold text-white tabular-nums">
           {{ summary().hits }} / {{ summary().misses }}
         </div>
       </div>
-      <div class="rounded-xl border border-brand-blue/20 bg-brand-bg-panel/40 px-4 py-3">
+      <div class="rounded-xl border border-brand-blue/20 bg-brand-bg-panel/40 px-4 py-3 sm:col-span-2 lg:col-span-1">
         <div class="text-[10px] uppercase text-brand-muted">% acierto combinadas</div>
         <div class="text-2xl font-semibold text-brand-cyan tabular-nums">
           {{ summary().ratePct != null ? summary().ratePct + '%' : '—' }}
@@ -61,7 +65,12 @@
       </div>
     </div>
 
-    @if (!busy() && parlays().length === 0) {
+    @if (listBusy() && parlays().length === 0) {
+      <div class="rounded-2xl border border-brand-blue/20 bg-brand-bg-panel/30 px-8 py-16 text-center text-brand-muted text-sm space-y-3">
+        <span class="inline-block size-8 border-2 border-brand-cyan/30 border-t-brand-cyan rounded-full animate-spin mx-auto"></span>
+        <p>Cargando combinadas…</p>
+      </div>
+    } @else if (!listBusy() && parlays().length === 0) {
       <div class="rounded-2xl border border-brand-blue/20 bg-brand-bg-panel/30 px-8 py-16 text-center text-brand-muted text-sm space-y-3">
         <p>No hay combinadas guardadas todavía.</p>
         <p>
@@ -74,9 +83,16 @@
         @for (p of parlays(); track p.id) {
           <article class="rounded-2xl border border-brand-cyan/15 bg-brand-bg-panel/35 px-6 py-5 space-y-4 shadow-lg shadow-brand-blue/5 backdrop-blur-sm">
             <div class="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div class="text-white font-medium text-lg">{{ p.title ?? 'Combinada sin nombre' }}</div>
-                <div class="text-xs text-brand-muted mt-0.5">{{ overallLabel(p.overall_result) }}</div>
+              <div class="space-y-2 min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span
+                    class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
+                    [class]="overallBadgeClass(p.overall_result)">
+                    {{ overallShortLabel(p.overall_result) }}
+                  </span>
+                  <div class="text-white font-medium text-lg">{{ p.title ?? 'Combinada sin nombre' }}</div>
+                </div>
+                <div class="text-xs text-brand-muted">{{ overallLabel(p.overall_result) }}</div>
               </div>
               <div class="text-right text-xs text-brand-muted">
                 <div>Guardada {{ fmtDateShort(p.created_at) }}</div>
@@ -117,11 +133,23 @@
                 </li>
               }
             </ul>
-            <div class="flex justify-end">
+            <div class="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                (click)="refreshOneParlay(p.id)"
+                [disabled]="bulkGrading() || refreshingId() !== null"
+                class="inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg border border-brand-cyan/40 text-brand-cyan hover:bg-brand-cyan/10 disabled:opacity-40">
+                @if (refreshingId() === p.id) {
+                  <span class="size-3.5 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin"></span>
+                  <span>Comprobando…</span>
+                } @else {
+                  <span>Comprobar resultado</span>
+                }
+              </button>
               <button
                 type="button"
                 (click)="remove(p.id)"
-                [disabled]="busy()"
+                [disabled]="bulkGrading() || refreshingId() !== null"
                 class="text-xs font-medium text-rose-300/90 px-3 py-1.5 rounded-lg border border-rose-500/35 hover:bg-rose-500/10 disabled:opacity-40">
                 Eliminar
               </button>

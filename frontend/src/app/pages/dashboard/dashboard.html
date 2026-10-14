@@ -1,350 +1,143 @@
 <div class="min-h-screen bg-gradient-to-b from-brand-bg-deep via-brand-bg-mid to-brand-bg-deep text-white pb-16">
   <div class="border-b border-brand-cyan/10 bg-brand-bg-deep/75 backdrop-blur-md">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-8">
+      <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
         <div class="space-y-3 max-w-2xl">
-          <p class="text-xs font-medium uppercase tracking-[0.2em] text-brand-cyan/85">Cuotas calificadas</p>
-          <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight text-white">
-            Decisiones con filtro de <span class="text-brand-cyan">modelo</span> y <span class="text-brand-blue">mercado</span>
-          </h1>
+          <p class="text-xs font-medium uppercase tracking-[0.2em] text-brand-cyan/85">Jornada</p>
+          <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight text-white">Partidos y cuotas</h1>
           <p class="text-brand-muted text-sm leading-relaxed">
-            Ordenamos por confianza estadística y valor esperado. Al entrar aquí solo se lee la tabla del servidor (sin nueva petición pesada a Winamax); cuando quieras datos frescos, pulsa «Actualizar desde fuentes». Ajusta probabilidad modelo, confianza, mercados y límites de cuota abajo.
+            Selecciona un partido de las cinco grandes ligas o de las competiciones UEFA para consultar sus cuotas Winamax.
           </p>
         </div>
         <div class="flex flex-wrap gap-3 shrink-0">
-          <button type="button"
-                  (click)="runOfficialPipelineThenLoadBets()"
-                  [disabled]="busy()"
-                  class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium
-                         bg-brand-cyan/12 border border-brand-cyan/35 text-brand-cyan hover:bg-brand-cyan/18
-                         transition-all disabled:opacity-45 shadow-lg shadow-brand-blue/15">
-              @if (busy()) {
+          <button type="button" (click)="runOfficialPipelineThenLoadBets()" [disabled]="busy()"
+                  class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-brand-cyan/12 border border-brand-cyan/35 text-brand-cyan hover:bg-brand-cyan/18 transition-all disabled:opacity-45">
+            @if (busy()) {
               <span class="size-4 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin"></span>
-              <span>Sincronizando…</span>
+              <span>Sincronizando...</span>
             } @else {
-              <span>Actualizar desde fuentes</span>
+              <span>Actualizar jornada</span>
             }
           </button>
-          <button type="button"
-                  (click)="reloadSuggestionsOnly()"
-                  [disabled]="busy()"
-                  class="inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-medium
-                         bg-brand-bg-panel/80 border border-brand-blue/25 text-brand-muted hover:border-brand-cyan/30
-                         hover:bg-brand-bg-panel transition-all disabled:opacity-45">
-            Refrescar tabla
+          <button type="button" (click)="reloadJornada()" [disabled]="busy()"
+                  class="inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-medium bg-brand-bg-panel/80 border border-brand-blue/25 text-brand-muted hover:border-brand-cyan/30 hover:bg-brand-bg-panel transition-all disabled:opacity-45">
+            Recargar partidos
           </button>
         </div>
       </div>
     </div>
   </div>
 
-  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 space-y-8">
-
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 space-y-6">
     @if (loading()) {
       <div class="flex flex-col items-center justify-center py-28 gap-5 text-brand-muted">
         <span class="size-11 border-[3px] border-brand-cyan/35 border-t-brand-cyan rounded-full animate-spin"></span>
-        @if (scrapingOfficial()) {
-          <p class="text-sm">Sincronizando estadísticas y cuotas Winamax…</p>
-        } @else {
-          <p class="text-sm">Cargando tabla calificada…</p>
-        }
+        <p class="text-sm">{{ scrapingOfficial() ? 'Sincronizando jornada...' : 'Cargando partidos...' }}</p>
       </div>
     } @else if (error()) {
       <div class="rounded-2xl border border-rose-500/35 bg-rose-950/20 px-8 py-7 text-center max-w-xl mx-auto">
-        <div class="text-rose-200 font-medium">Algo falló al hablar con el backend</div>
+        <div class="text-rose-200 font-medium">No se pudieron cargar los datos</div>
         <div class="text-sm text-rose-300/85 mt-2">{{ error() }}</div>
       </div>
     } @else {
-
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        @for (k of kpis(); track k.label) {
-          <div class="rounded-2xl border border-slate-800/80 bg-slate-900/40 px-5 py-4 shadow-inner shadow-black/20">
-            <div class="text-[10px] uppercase tracking-widest text-slate-500">{{ k.label }}</div>
-            <div class="text-2xl font-semibold text-white mt-1.5 tabular-nums">{{ k.value }}</div>
-            @if (k.hint) {
-              <div class="text-xs text-slate-500 mt-1.5 leading-snug">{{ k.hint }}</div>
-            }
-          </div>
-        }
-      </div>
-
-      <div class="rounded-2xl border border-slate-800/90 bg-slate-900/35 backdrop-blur-sm overflow-hidden shadow-xl shadow-black/20">
-        <div class="px-5 sm:px-6 py-4 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 class="text-lg font-semibold text-white">Filtros</h2>
-            <p class="text-xs text-slate-500 mt-0.5">
-              {{ displayRows().length }} visibles · {{ rowsFiltered().length }} tras filtros · tope 900 filas
-            </p>
-          </div>
-          <button type="button"
-                  (click)="resetFilters()"
-                  [disabled]="busy()"
-                  class="text-xs font-medium text-slate-400 hover:text-white border border-slate-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40">
-            Restablecer filtros
-          </button>
-        </div>
-
-        <div class="p-5 sm:p-6 grid gap-8 lg:grid-cols-2 xl:grid-cols-12">
-          <div class="space-y-2 xl:col-span-3">
-            <div class="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Mercado</div>
-            <div class="flex flex-wrap gap-2">
-              <button type="button" (click)="marketPreset.set('all')" [disabled]="busy()"
-                      [class]="marketPreset() === 'all' ? chipTealOn : chipInactive">Todo</button>
-              <button type="button" (click)="marketPreset.set('classic')" [disabled]="busy()"
-                      [class]="marketPreset() === 'classic' ? chipTealOn : chipInactive">1X2 · DC · BTTS</button>
-              <button type="button" (click)="marketPreset.set('match_stats')" [disabled]="busy()"
-                      [class]="marketPreset() === 'match_stats' ? chipTealOn : chipInactive">Totales partido</button>
-              <button type="button" (click)="marketPreset.set('players')" [disabled]="busy()"
-                      [class]="marketPreset() === 'players' ? chipTealOn : chipInactive">Jugadores</button>
+      <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,0.9fr)]">
+        <section class="rounded-2xl border border-slate-800/90 bg-slate-900/30 overflow-hidden">
+          <div class="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-white">Partidos de la jornada</h2>
+              <p class="text-xs text-slate-500 mt-0.5">{{ matches().length }} partidos en los próximos 7 días</p>
             </div>
           </div>
-
-          <div class="space-y-2 xl:col-span-3">
-            <div class="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Cuota</div>
-            <div class="flex flex-wrap gap-2">
-              <button type="button" (click)="hideLongshots.set(true)" [disabled]="busy()"
-                      [class]="hideLongshots() ? chipTealOn : chipInactive">Ocultar &gt; {{ displayOddsCap }}</button>
-              <button type="button" (click)="hideLongshots.set(false)" [disabled]="busy()"
-                      [class]="!hideLongshots() ? chipTealOn : chipInactive">Permitir cuotones</button>
-              <button type="button" (click)="comfortOddsOnly.set(true)" [disabled]="busy()"
-                      [class]="comfortOddsOnly() ? chipTealOn : chipInactive">Franja {{ oddsRangeLabel }}</button>
-              <button type="button" (click)="comfortOddsOnly.set(false)" [disabled]="busy()"
-                      [class]="!comfortOddsOnly() ? chipTealOn : chipInactive">Sin franja cuota</button>
-            </div>
-          </div>
-
-          <div class="space-y-3 xl:col-span-3">
-            <div class="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Prob. modelo (%)</div>
-            <div class="flex flex-wrap items-center gap-3">
-              <label class="flex items-center gap-2 text-xs text-slate-400">
-                <span class="text-slate-500 w-8">Mín</span>
-                <input type="number" min="0" max="100" [value]="probMinPct()"
-                       (change)="setProbMinFromInput($event)"
-                       class="w-[4.5rem] rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5 text-sm text-white tabular-nums focus:outline-none focus:ring-1 focus:ring-brand-cyan/45">
-              </label>
-              <label class="flex items-center gap-2 text-xs text-slate-400">
-                <span class="text-slate-500 w-8">Máx</span>
-                <input type="number" min="0" max="100" [value]="probMaxPct()"
-                       (change)="setProbMaxFromInput($event)"
-                       class="w-[4.5rem] rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5 text-sm text-white tabular-nums focus:outline-none focus:ring-1 focus:ring-brand-cyan/45">
-              </label>
-            </div>
-            <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
-              <input type="checkbox"
-                     [checked]="includeNoProbRows()"
-                     (change)="includeNoProbRows.set($any($event.target).checked)"
-                     class="rounded border-slate-600 bg-slate-950 text-brand-cyan focus:ring-brand-cyan/35">
-              Incluir líneas sin P modelo
-            </label>
-          </div>
-
-          <div class="space-y-2 xl:col-span-3">
-            <div class="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Confianza</div>
-            <div class="flex flex-wrap gap-2">
-              <button type="button" (click)="toggleConfidence('high')" [disabled]="busy()"
-                      [class]="isConfActive('high') ? chipConfHighOn : chipInactive">Alta</button>
-              <button type="button" (click)="toggleConfidence('medium')" [disabled]="busy()"
-                      [class]="isConfActive('medium') ? chipConfMediumOn : chipInactive">Media</button>
-              <button type="button" (click)="toggleConfidence('low')" [disabled]="busy()"
-                      [class]="isConfActive('low') ? chipConfLowOn : chipInactive">Baja</button>
-              <button type="button" (click)="toggleConfidence('unknown')" [disabled]="busy()"
-                      [class]="isConfActive('unknown') ? chipConfUnknownOn : chipInactive">Sin modelo</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div id="combinada-panel" class="rounded-2xl border border-brand-blue/30 bg-brand-bg-panel/35 backdrop-blur-sm shadow-xl shadow-brand-blue/10 overflow-hidden">
-        <div class="px-5 sm:px-6 py-4 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 class="text-lg font-semibold text-white">Simulador de combinada</h2>
-            <p class="text-xs text-slate-500 mt-0.5 max-w-2xl leading-relaxed">
-              Añade patas desde la tabla. La cuota combinada es el producto de las cuotas. La P del modelo asume
-              <span class="text-brand-blue">eventos independientes</span> entre partidos (entre mercados del mismo partido suele haber correlación: el simulador lo avisa).
-            </p>
-          </div>
-          @if (parlayLegs().length > 0) {
-            <button type="button" (click)="clearParlay()" [disabled]="busy()"
-                    class="text-xs font-medium text-slate-400 hover:text-rose-200 border border-slate-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40">
-              Vaciar combinada
-            </button>
-          }
-        </div>
-        <div class="p-5 sm:p-6 space-y-4">
-          @if (parlayLegs().length === 0) {
-            <p class="text-sm text-slate-500">Sin patas. Pulsa <span class="text-slate-300">+ Combinada</span> en una fila para empezar.</p>
+          @if (matches().length === 0) {
+            <div class="px-6 py-14 text-center text-slate-400 text-sm">No hay partidos cargados. Actualiza la jornada desde las fuentes.</div>
           } @else {
-            @if (parlayStats().duplicateMatches) {
-              <div class="rounded-xl border border-amber-500/35 bg-amber-950/25 px-4 py-3 text-sm text-amber-100/95">
-                Varias selecciones del <span class="font-medium">mismo partido</span>: en la realidad no son independientes;
-                el producto de probabilidades del modelo puede sobrestimar o infraestimar el acierto conjunto.
-              </div>
-            }
-            <ul class="space-y-2 text-sm">
-              @for (leg of parlayLegs(); track rowParlayKey(leg)) {
-                <li class="flex flex-wrap items-start gap-3 justify-between rounded-lg border border-slate-800/80 bg-slate-950/40 px-4 py-3">
-                  <div class="min-w-0 flex-1">
-                    <div class="text-white font-medium">{{ leg.home_team }} – {{ leg.away_team }}</div>
-                    <div class="text-slate-400 text-xs mt-0.5">{{ outcome(leg) }} · cuota {{ fmtOdds(leg.offered_odds) }}</div>
+            <div class="divide-y divide-slate-800/80 max-h-[min(72vh,760px)] overflow-auto">
+              @for (match of matches(); track match.id) {
+                <button type="button" (click)="selectMatch(match)"
+                        class="w-full text-left px-5 py-4 hover:bg-brand-cyan/[0.06] transition-colors"
+                        [class.bg-brand-cyan/10]="selectedMatch()?.id === match.id">
+                  <div class="flex items-start justify-between gap-4">
+                    <div class="min-w-0">
+                      <div class="text-xs text-brand-cyan/80 mb-1">{{ match.league.name }}</div>
+                      <div class="font-medium text-white truncate">{{ match.home_team.name }} - {{ match.away_team.name }}</div>
+                    </div>
+                    <div class="shrink-0 text-right text-xs text-slate-500">{{ fmtDateShort(match.commence_time) }}</div>
                   </div>
-                  <button type="button" (click)="removeParlayLeg(leg)"
-                          class="shrink-0 text-xs text-rose-300/90 hover:text-rose-200 px-2 py-1 rounded-md border border-rose-500/30 hover:border-rose-400/50 transition-colors">
-                    Quitar
-                  </button>
-                </li>
+                  @if (match.status === 'finished') {
+                    <div class="text-xs text-slate-400 mt-2">Resultado: {{ match.home_score }} - {{ match.away_score }}</div>
+                  }
+                </button>
               }
-            </ul>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
-              <div class="rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3">
-                <div class="text-[10px] uppercase tracking-wider text-slate-500">Cuota combinada</div>
-                <div class="text-xl font-semibold text-white mt-1 tabular-nums">
-                  {{ parlayStats().combinedOdds != null ? fmtOdds(parlayStats().combinedOdds, 2) : '—' }}
-                </div>
-              </div>
-              <div class="rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3">
-                <div class="text-[10px] uppercase tracking-wider text-slate-500">Implícita conjunta (bruta)</div>
-                <div class="text-xl font-semibold text-brand-blue mt-1 tabular-nums">
-                  {{ parlayStats().impliedJoint != null ? fmtAbsPct(parlayStats().impliedJoint, 2) : '—' }}
-                </div>
-              </div>
-              <div class="rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3">
-                <div class="text-[10px] uppercase tracking-wider text-slate-500">P modelo (indep.)</div>
-                <div class="text-xl font-semibold text-brand-cyan mt-1 tabular-nums">
-                  {{ parlayStats().modelJointProb != null ? fmtAbsPct(parlayStats().modelJointProb, 2) : '—' }}
-                </div>
-              </div>
-              <div class="rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3">
-                <div class="text-[10px] uppercase tracking-wider text-slate-500">EV unitario modelo</div>
-                <div class="text-xl font-semibold mt-1 tabular-nums"
-                     [class.text-brand-cyan]="parlayStats().ev != null && parlayStats().ev! > 0"
-                     [class.text-rose-300]="parlayStats().ev != null && parlayStats().ev! < 0"
-                     [class.text-slate-300]="parlayStats().ev === null">
-                  {{ parlayStats().ev != null ? fmtPct(parlayStats().ev) : '—' }}
-                </div>
-              </div>
-            </div>
-            <div class="space-y-3 pt-4 border-t border-slate-800/80">
-              <div>
-                <label class="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Nombre (opcional)</label>
-                <input
-                  type="text"
-                  placeholder="Ej. Combinada sábado"
-                  [value]="parlayTitle()"
-                  (input)="parlayTitle.set(($any($event.target).value || '').toString())"
-                  [disabled]="busy()"
-                  class="w-full max-w-md rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-cyan/45 disabled:opacity-45" />
-              </div>
-              @if (!auth.isLoggedIn()) {
-                <p class="text-xs text-amber-200/90">
-                  <a routerLink="/" class="underline hover:text-amber-100">Inicia sesión</a>
-                  para guardar la combinada en PostgreSQL (admin / 1234).
-                </p>
-              }
-              @if (parlaySaveHint()) {
-                <p class="text-xs text-brand-cyan/95">{{ parlaySaveHint() }}</p>
-              }
-              <button type="button"
-                      (click)="saveCombinadaServidor()"
-                      [disabled]="busy() || parlayLegs().length === 0"
-                      class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium
-                             border border-brand-cyan/35 bg-brand-cyan/10 text-brand-cyan hover:bg-brand-cyan/18
-                             transition-all disabled:opacity-40">
-                Guardar combinada en servidor
-              </button>
             </div>
           }
-        </div>
-      </div>
+        </section>
 
-      <div class="rounded-2xl border border-slate-800/90 bg-slate-900/25 overflow-hidden shadow-2xl shadow-black/25">
-        @if (displayRows().length === 0) {
-          <div class="px-8 py-16 text-center text-slate-400 space-y-2">
-            @if (gradedRows().length === 0) {
-              <p class="text-slate-300">Todavía no hay líneas.</p>
-              <p class="text-sm text-slate-500">Pulsa <span class="text-slate-300">Actualizar desde fuentes</span> cuando haya partidos con Winamax.</p>
+        <section class="rounded-2xl border border-brand-cyan/20 bg-slate-900/35 overflow-hidden self-start">
+          @if (!selectedMatch()) {
+            <div class="px-6 py-16 text-center text-slate-400 text-sm">Selecciona un partido para ver sus cuotas.</div>
+          } @else {
+            <div class="px-5 py-4 border-b border-slate-800/80">
+              <div class="text-xs text-brand-cyan/80">{{ selectedMatch()!.league.name }}</div>
+              <h2 class="text-lg font-semibold text-white mt-1">{{ selectedMatch()!.home_team.name }} - {{ selectedMatch()!.away_team.name }}</h2>
+              <p class="text-xs text-slate-500 mt-1">Cuotas Winamax · solo valores inferiores a 4.00</p>
+            </div>
+            <div class="px-5 py-4 border-b border-slate-800/80 flex flex-wrap items-end gap-3">
+              <label class="flex flex-col gap-1 text-xs text-slate-400">
+                <span class="text-slate-500">Mercado</span>
+                <select [value]="oddsMarketFilter()" (change)="oddsMarketFilter.set(($any($event.target).value || 'all').toString())"
+                        class="rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-2 text-sm text-white">
+                  <option value="all">Todos</option>
+                  <option value="h2h">Resultado</option>
+                  <option value="double_chance">Doble oportunidad</option>
+                  <option value="totals">Goles</option>
+                  <option value="btts">Ambos marcan</option>
+                </select>
+              </label>
+              <label class="flex flex-col gap-1 text-xs text-slate-400">
+                <span class="text-slate-500">Selección</span>
+                <select [value]="oddsOutcomeFilter()" (change)="oddsOutcomeFilter.set(($any($event.target).value || 'all').toString())"
+                        class="rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-2 text-sm text-white">
+                  <option value="all">Todas</option>
+                  <option value="home">Local</option>
+                  <option value="draw">Empate</option>
+                  <option value="away">Visitante</option>
+                  <option value="over">Más de</option>
+                  <option value="under">Menos de</option>
+                  <option value="yes">Sí</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+              <label class="flex flex-col gap-1 text-xs text-slate-400">
+                <span class="text-slate-500">Cuota mín.</span>
+                <input type="number" min="1" max="3.99" step="0.01" [value]="oddsMin()" (change)="setOddsMin($event)"
+                       class="w-20 rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-2 text-sm text-white tabular-nums" />
+              </label>
+              <label class="flex flex-col gap-1 text-xs text-slate-400">
+                <span class="text-slate-500">Cuota máx.</span>
+                <input type="number" min="1.01" max="4" step="0.01" [value]="oddsMax()" (change)="setOddsMax($event)"
+                       class="w-20 rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-2 text-sm text-white tabular-nums" />
+              </label>
+              <span class="text-xs text-slate-500 pb-2">{{ visibleMatchOdds().length }} cuotas</span>
+            </div>
+            @if (loadingMatchOdds()) {
+              <div class="px-6 py-14 text-center text-slate-400 text-sm">Cargando cuotas...</div>
+            } @else if (visibleMatchOdds().length === 0) {
+              <div class="px-6 py-14 text-center text-slate-400 text-sm">No hay cuotas que coincidan con estos filtros.</div>
             } @else {
-              <p class="text-slate-300">Ninguna línea cumple estos filtros.</p>
-              <p class="text-sm text-slate-500">
-                Hay {{ gradedRows().length }} en servidor · prueba restablecer o amplía probabilidad / confianza.
-              </p>
-            }
-          </div>
-        } @else {
-          <div class="max-h-[min(72vh,900px)] overflow-auto">
-            <table class="w-full text-sm min-w-[1020px]">
-              <thead class="sticky top-0 z-[1] bg-slate-950/95 backdrop-blur border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500">
-                <tr>
-                  <th class="px-4 py-3.5 text-left font-medium">Partido</th>
-                  <th class="px-4 py-3.5 text-left font-medium">Apuesta</th>
-                  <th class="px-4 py-3.5 text-right font-medium">Cuota</th>
-                  <th class="px-4 py-3.5 text-right font-medium">P modelo</th>
-                  <th class="px-4 py-3.5 text-right font-medium">EV</th>
-                  <th class="px-4 py-3.5 text-center font-medium">Conf.</th>
-                  <th class="px-4 py-3.5 text-left font-medium min-w-[14rem]">Resumen</th>
-                  <th class="px-4 py-3.5 text-center font-medium whitespace-nowrap">A combinada</th>
-                  <th class="px-4 py-3.5 text-right font-medium">Horario</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-800/80">
-                @for (b of displayRows(); track rowParlayKey(b)) {
-                  <tr class="hover:bg-brand-cyan/[0.06] transition-colors group">
-                    <td class="px-4 py-3.5 align-top">
-                      <div class="font-medium text-white group-hover:text-brand-cyan transition-colors">{{ b.home_team }} – {{ b.away_team }}</div>
-                      <div class="text-xs text-slate-500 mt-0.5">{{ b.league }}</div>
-                    </td>
-                    <td class="px-4 py-3.5 align-top">
-                      @if (isPlayerMarket(b)) {
-                        <span class="inline-block text-[10px] font-semibold uppercase tracking-wide text-brand-cyan mb-1">Jugador</span>
-                      } @else if (isTotalsRow(b)) {
-                        <span class="inline-block text-[10px] font-semibold uppercase tracking-wide text-brand-blue mb-1">Total partido</span>
-                      } @else {
-                        <span class="inline-block text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Partido</span>
-                      }
-                      <div class="text-slate-100 font-medium leading-snug">{{ outcome(b) }}</div>
-                      <div class="text-[10px] font-mono text-slate-600 mt-1">{{ b.market_key }}</div>
-                    </td>
-                    <td class="px-4 py-3.5 text-right align-top tabular-nums">
-                      <span class="text-base font-semibold text-white">{{ fmtOdds(b.offered_odds) }}</span>
-                    </td>
-                    <td class="px-4 py-3.5 text-right align-top tabular-nums text-slate-400 text-xs pt-4">
-                      {{ b.model_probability != null ? fmtAbsPct(b.model_probability, 1) : '—' }}
-                    </td>
-                    <td class="px-4 py-3.5 text-right align-top tabular-nums text-xs pt-4 text-slate-300">
-                      {{ b.model_ev != null ? fmtPct(b.model_ev) : '—' }}
-                    </td>
-                    <td class="px-4 py-3.5 text-center align-top pt-3.5">
-                      <span class="inline-flex px-2.5 py-1 rounded-lg border text-xs font-medium"
-                            [class]="confidenceClass(b.confidence)">
-                        {{ confidenceLabel(b.confidence) }}
-                      </span>
-                    </td>
-                    <td class="px-4 py-3.5 align-top">
-                      <ul class="text-slate-300 text-sm leading-snug space-y-2 max-w-xl list-none m-0 p-0">
-                        @for (line of summaryBullets(b); track $index) {
-                          <li class="relative pl-3.5 before:content-[''] before:absolute before:left-0 before:top-2 before:size-1 before:rounded-full before:bg-brand-cyan/55">
-                            {{ line }}
-                          </li>
-                        }
-                      </ul>
-                    </td>
-                    <td class="px-4 py-3.5 align-top text-center whitespace-nowrap">
-                      <button type="button"
-                              (click)="addToParlay(b); scrollToCombinadaPanel()"
-                              [disabled]="busy()"
-                              class="text-[11px] font-medium px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-40
-                                     {{ isInParlay(b)
-                                        ? 'border-brand-cyan/50 bg-brand-cyan/15 text-brand-cyan'
-                                        : 'border-slate-700 bg-brand-bg-deep/60 text-slate-200 hover:border-brand-cyan/35 hover:bg-brand-cyan/10' }}">
-                        {{ isInParlay(b) ? '✓ En combinada' : '+ Combinada' }}
-                      </button>
-                    </td>
-                    <td class="px-4 py-3.5 text-right text-slate-500 text-xs whitespace-nowrap align-top pt-4">{{ fmtDateShort(b.commence_time) }}</td>
-                  </tr>
+              <div class="divide-y divide-slate-800/80 max-h-[min(62vh,640px)] overflow-auto">
+                @for (odd of visibleMatchOdds(); track odd.id) {
+                  <div class="px-5 py-3.5 flex items-center justify-between gap-4">
+                    <div class="min-w-0">
+                      <div class="text-xs text-slate-500">{{ marketLabel(odd.market_key) }}</div>
+                      <div class="text-sm text-white truncate">{{ oddsOutcome(odd) }}</div>
+                    </div>
+                    <div class="text-lg font-semibold text-brand-cyan tabular-nums">{{ fmtOdds(odd.price) }}</div>
+                  </div>
                 }
-              </tbody>
-            </table>
-          </div>
-        }
+              </div>
+            }
+          }
+        </section>
       </div>
     }
   </section>

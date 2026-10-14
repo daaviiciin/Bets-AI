@@ -106,7 +106,7 @@ class TestHappyPath:
         stats_mock.ingest_recent.assert_called_once_with(
             days_back=10, only_top5=True, limit_matches=None,
         )
-        assert session.commit.call_count == 4
+        assert session.commit.call_count == 5
         session.rollback.assert_not_called()
 
         assert summary.ok is True
@@ -129,7 +129,7 @@ class TestHappyPath:
         orchestrator.run(stats_only_top5=False, stats_limit=5)
         fixtures_mock.ingest.assert_called_once_with(days_ahead=7, only_top5=False)
         stats_mock.ingest_recent.assert_called_once_with(
-            days_back=7, only_top5=False, limit_matches=5,
+            days_back=120, only_top5=False, limit_matches=5,
         )
 
 
@@ -154,7 +154,7 @@ class TestFailureIsolation:
         stats_mock.ingest_recent.assert_called_once()
         assert summary.stats is not None and summary.stats.stats_inserted == 8
         session.rollback.assert_called_once()
-        assert session.commit.call_count == 3
+        assert session.commit.call_count == 4
 
     def test_stats_failure_does_not_break_results(self) -> None:
         session = _make_session()
@@ -174,7 +174,7 @@ class TestFailureIsolation:
         assert summary.ok is False
         assert any("flashscore_stats_ingester" in e for e in summary.errors)
         assert summary.results is not None and summary.results.total_updated == 2
-        assert session.commit.call_count == 3
+        assert session.commit.call_count == 4
         session.rollback.assert_called_once()
 
     def test_both_failures_recorded(self) -> None:
@@ -198,7 +198,7 @@ class TestFailureIsolation:
         assert summary.results is None
         assert summary.stats is None
         assert session.rollback.call_count == 2
-        assert session.commit.call_count == 2
+        assert session.commit.call_count == 3
 
 
 class TestSummary:

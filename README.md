@@ -107,6 +107,10 @@ alembic upgrade head
 
 ### Arrancar en desarrollo (3 terminales)
 
+Como alternativa, en Windows puedes ejecutar `start_bets_ai.bat` desde la raiz
+del proyecto. El script usa Python 3.10, comprueba Docker, levanta PostgreSQL, aplica las
+migraciones y abre el backend y el frontend en terminales separadas.
+
 ```powershell
 # 1) PostgreSQL
 docker compose up -d
@@ -130,6 +134,13 @@ npm start
 
 - Tras levantar la API: **`POST /refresh/official`** (desde Swagger o tu cliente HTTP) para sincronizar fixtures/cuotas según `.env`.
 - Stats post-partido: por ejemplo `python -m backend.tools.import_flashscore_stats` desde la raíz del repo (o el paso equivalente dentro de tu orquestación `/refresh`).
+
+### Cobertura de estadísticas de partido
+
+- Flashscore aporta xG, tiros, tiros a puerta, córners, tarjetas, pases y otras estadísticas por equipo cuando el feed del partido está disponible.
+- Para el histórico, el ingester lee IDs de partidos finalizados publicados en las páginas standings de cada competición y consulta sus feeds de estadísticas (`df_st`/`df_su`). Esto evita depender del feed diario, que solo retiene unos días.
+- Ejecuta `py -3.10 -m backend.tools.daily_refresh` con regularidad. Busca hasta 120 días y requiere estadísticas de local y visitante para marcar un partido como completo; el backfill solo puede cubrir eventos que Flashscore aún publique en su standings actual.
+- Opta/Stats Perform no ofrece estas estadísticas como un endpoint público para scrapear. Sus productos oficiales incluyen datos históricos y feeds de betting de equipos/jugadores, pero el acceso se gestiona comercialmente: [Opta Data](https://www.statsperform.com/products/opta-data/) y [Bet Trading Data](https://www.statsperform.com/products/bet-trading-data/). Si se contrata, integraríamos el feed documentado con credenciales, no raspando la web pública.
 
 ### Tests backend
 

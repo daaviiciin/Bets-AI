@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.orm import Session, joinedload
 
 from backend.models import Bookmaker, League, Match, Odds, Season, Snapshot, TeamSeasonStats
 from backend.services import poisson_model as pm
 from backend.services import value_calculator as vc
 from backend.services.value_detector import ValueDetector
+from backend.services.winamax_odds_ingester import WINAMAX_TOP5_FOOTBALL_KEYS
 
 WINAMAX_SOURCE = "winamax_es"
 
@@ -509,6 +511,7 @@ def _club_season_light(team_name: str, st: TeamSeasonStats | None) -> str | None
 class GradedOddsLine:
     match_id: int
     league: str
+    league_sport_key: str
     home_team: str
     away_team: str
     commence_time: datetime
@@ -542,19 +545,61 @@ def confidence_from_model_ev(model_ev: Decimal | None) -> str:
     return "low"
 
 
-def _latest_winamax_snapshot_ids(session: Session) -> list[int]:
-    """Un snapshot reciente por liga para fuente Winamax."""
-    rn_col = func.row_number().over(
-        partition_by=Snapshot.league_id,
-        order_by=(Snapshot.captured_at.desc(), Snapshot.id.desc()),
-    ).label("rn")
-    ranked = (
-        select(Snapshot.id, rn_col)
+def _best_winamax_snapshot_per_match(session: Session, match_ids: set[int]) -> dict[int, int]:
+    """Por cada ``match_id``, el snapshot Winamax más reciente que ya tiene cuotas guardadas."""
+    if not match_ids:
+        return {}
+    stmt = (
+        select(Odds.match_id, Snapshot.id, Snapshot.captured_at)
+        .join(Snapshot, Snapshot.id == Odds.snapshot_id)
         .where(Snapshot.source == WINAMAX_SOURCE)
-        .subquery()
+        .where(Odds.match_id.in_(match_ids))
     )
-    stmt = select(ranked.c.id).where(ranked.c.rn == 1)
-    return [int(row[0]) for row in session.execute(stmt)]
+    best: dict[int, tuple[int, datetime]] = {}
+    for mid, sid, cap in session.execute(stmt):
+        cur = best.get(mid)
+        if cur is None or cap > cur[1] or (cap == cur[1] and sid > cur[0]):
+            best[mid] = (sid, cap)
+    return {mid: sid for mid, (sid, _) in best.items()}
+
+
+def _interleave_odds_rows_for_dashboard(
+    rows: list[Odds],
+    match_by_id: dict[int, Match],
+) -> list[Odds]:
+    """Reordena filas Odds para que ``max_lines`` no consuma todo el cupo con una sola competición.
+
+    El query original ordenaba por ``match_id``; en BD los ids suelen correlacionar con el orden de
+    ingesta (p. ej. muchos partidos de una misma liga seguidos), de modo que el tope cortaba antes
+    de llegar a Premier / Serie A / Bundesliga.
+    """
+    by_sk: dict[str, deque[Odds]] = defaultdict(deque)
+    tail: list[Odds] = []
+    top_set = frozenset(WINAMAX_TOP5_FOOTBALL_KEYS)
+    for o in rows:
+        m = o.match if o.match is not None else match_by_id.get(o.match_id)
+        if m is None or m.league is None:
+            tail.append(o)
+            continue
+        sk = (m.league.sport_key or "").strip()
+        if not sk:
+            tail.append(o)
+            continue
+        by_sk[sk].append(o)
+    keys_order = [sk for sk in WINAMAX_TOP5_FOOTBALL_KEYS if sk in by_sk]
+    keys_order.extend(sorted(sk for sk in by_sk if sk not in top_set))
+    interleaved: list[Odds] = []
+    while True:
+        progressed = False
+        for sk in keys_order:
+            dq = by_sk[sk]
+            if dq:
+                interleaved.append(dq.popleft())
+                progressed = True
+        if not progressed:
+            break
+    interleaved.extend(tail)
+    return interleaved
 
 
 def list_graded_winamax_odds(
@@ -563,6 +608,7 @@ def list_graded_winamax_odds(
     horizon_hours: int = 48,
     max_lines: int = 3500,
     bookmaker_key: str | None = None,
+    sport_key: str | None = None,
     log: logging.Logger | None = None,
 ) -> list[GradedOddsLine]:
     """Últimas cuotas Winamax por liga sobre partidos próximos, todas calificadas.
@@ -573,11 +619,6 @@ def list_graded_winamax_odds(
     _log = log or logging.getLogger(__name__)
     now = datetime.now(timezone.utc)
     horizon = now + timedelta(hours=horizon_hours)
-
-    snap_ids = _latest_winamax_snapshot_ids(session)
-    if not snap_ids:
-        _log.info("graded_odds: no hay snapshots Winamax.")
-        return []
 
     stmt_m = (
         select(Match)
@@ -595,13 +636,24 @@ def list_graded_winamax_odds(
     matches = session.scalars(stmt_m).all()
     if not matches:
         return []
+    if sport_key:
+        sk_filter = sport_key.strip()
+        matches = [m for m in matches if m.league is not None and m.league.sport_key == sk_filter]
+        if not matches:
+            return []
 
+    match_by_id = {m.id: m for m in matches}
     allowed_match_ids = {m.id for m in matches}
 
+    best_snap = _best_winamax_snapshot_per_match(session, allowed_match_ids)
+    if not best_snap:
+        _log.info("graded_odds: ningún partido del horizonte tiene cuotas Winamax en BD.")
+        return []
+
+    pair_list = list(best_snap.items())
     stmt_o = (
         select(Odds)
-        .where(Odds.snapshot_id.in_(snap_ids))
-        .where(Odds.match_id.in_(sorted(allowed_match_ids)))
+        .where(tuple_(Odds.match_id, Odds.snapshot_id).in_(pair_list))
         .where(Odds.price > Decimal("1"))
     )
     if bookmaker_key:
@@ -622,6 +674,7 @@ def list_graded_winamax_odds(
         .order_by(Odds.match_id, Odds.market_id, Odds.id)
     )
     rows = list(session.scalars(stmt_o).all())
+    rows = _interleave_odds_rows_for_dashboard(rows, match_by_id)
 
     det = ValueDetector(
         session,
@@ -631,7 +684,6 @@ def list_graded_winamax_odds(
         log=_log,
     )
 
-    match_by_id = {m.id: m for m in matches}
     expectation_cache: dict[int, object | None] = {}
     season_stats_pair_cache: dict[int, tuple[TeamSeasonStats | None, TeamSeasonStats | None]] = {}
 
@@ -692,6 +744,7 @@ def list_graded_winamax_odds(
             GradedOddsLine(
                 match_id=m.id,
                 league=m.league.name,
+                league_sport_key=m.league.sport_key or "",
                 home_team=m.home_team.name,
                 away_team=m.away_team.name,
                 commence_time=m.commence_time,
@@ -715,3 +768,44 @@ def list_graded_winamax_odds(
             break
 
     return out
+
+
+def summarize_winamax_odds_coverage(
+    session: Session,
+    *,
+    horizon_hours: int = 52,
+) -> dict[str, float | int]:
+    """Resumen para diagnóstico (endpoint dashboard): ¿hay snapshots / odds / cobertura por partido?"""
+
+    now = datetime.now(timezone.utc)
+    horizon = now + timedelta(hours=horizon_hours)
+    n_snapshots = int(
+        session.scalar(select(func.count()).select_from(Snapshot).where(Snapshot.source == WINAMAX_SOURCE))
+        or 0,
+    )
+    n_odds = int(
+        session.scalar(
+            select(func.count())
+            .select_from(Odds)
+            .join(Snapshot, Snapshot.id == Odds.snapshot_id)
+            .where(Snapshot.source == WINAMAX_SOURCE),
+        )
+        or 0,
+    )
+    mids = set(
+        session.scalars(
+            select(Match.id)
+            .where(Match.commence_time >= now)
+            .where(Match.commence_time <= horizon)
+            .join(Match.league)
+            .where(~League.sport_key.ilike("%basketball%")),
+        ).all(),
+    )
+    with_odds = _best_winamax_snapshot_per_match(session, mids)
+    return {
+        "horizon_hours": horizon_hours,
+        "snapshots_winamax": n_snapshots,
+        "odds_rows_winamax_total": n_odds,
+        "football_matches_in_horizon": len(mids),
+        "matches_with_any_winamax_odds": len(with_odds),
+    }

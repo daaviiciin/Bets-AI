@@ -9,7 +9,7 @@ from starlette.responses import Response
 
 from backend.app.database import get_db
 from backend.app.deps.auth_user import get_current_user
-from backend.app.schemas.responses import SavedParlayCreateIn, SavedParlayOut
+from backend.app.schemas.responses import SavedParlayCreateIn, SavedParlayOut, UserParlayMetricsOut
 from backend.models import AppUser, SavedParlay
 from backend.services.saved_parlays import (
     combine_products,
@@ -24,6 +24,33 @@ router = APIRouter(prefix="/me/parlays", tags=["mis-apuestas"])
 def _serialize(row: SavedParlay) -> SavedParlayOut:
     out = SavedParlayOut.model_validate(row)
     return out
+
+
+def _user_parlay_metrics(rows: list[SavedParlay]) -> UserParlayMetricsOut:
+    total = len(rows)
+    pending = sum(1 for r in rows if r.overall_result == "pending")
+    needs_review = sum(1 for r in rows if r.overall_result == "needs_review")
+    hits = sum(1 for r in rows if r.overall_result == "hit")
+    misses = sum(1 for r in rows if r.overall_result == "miss")
+    settled = hits + misses
+    rate = round((1000.0 * hits / settled)) / 10.0 if settled else None
+    return UserParlayMetricsOut(
+        total=total,
+        pending=pending,
+        needs_review=needs_review,
+        hits=hits,
+        misses=misses,
+        rate_pct=rate,
+    )
+
+
+@router.get("/metrics-summary", response_model=UserParlayMetricsOut)
+def parlay_metrics_summary(
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserParlayMetricsOut:
+    rows = db.scalars(select(SavedParlay).where(SavedParlay.user_id == user.id)).all()
+    return _user_parlay_metrics(list(rows))
 
 
 @router.get("", response_model=list[SavedParlayOut])
@@ -96,3 +123,25 @@ def refresh_all_grades(
 
     count = refresh_all_parlays_for_user(db, user.id)
     return {"updated_parlays": count}
+
+
+@router.post("/{parlay_id}/refresh-grade", response_model=SavedParlayOut)
+def refresh_one_grade(
+    parlay_id: int,
+    user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SavedParlayOut:
+    """Recalcula el resultado de una combinada desde las tablas ``matches``."""
+
+    row = db.scalar(
+        select(SavedParlay).where(
+            SavedParlay.id == parlay_id,
+            SavedParlay.user_id == user.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Combinada no encontrada.")
+    refresh_one_parlay(db, row)
+    db.commit()
+    db.refresh(row)
+    return _serialize(row)

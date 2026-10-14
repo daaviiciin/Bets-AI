@@ -20,10 +20,15 @@ import {
   RecommendationSet,
   RefreshSummary,
   ResultsRefreshSummary,
+  FeaturedDailyPickRow,
+  FeaturedPicksMetrics,
+  UserParlayMetrics,
   SavedParlay,
   SavedParlayLegPersist,
   UserProfile,
   ValueBet,
+  StatisticsOverview,
+  TeamDetailStatistics,
 } from './models';
 
 /** Cliente HTTP centralizado para todos los endpoints de la API Bets AI. */
@@ -38,14 +43,29 @@ export class ApiService {
     );
   }
 
+  getStatisticsOverview(opts?: { sportKey?: string; limit?: number }): Observable<StatisticsOverview> {
+    let params = new HttpParams();
+    if (opts?.sportKey) params = params.set('sport_key', opts.sportKey);
+    if (opts?.limit != null) params = params.set('limit', String(opts.limit));
+    return this.http.get<StatisticsOverview>(`${this.base}/statistics/overview`, { params });
+  }
+
+  getTeamStatistics(teamId: number, recent = 8): Observable<TeamDetailStatistics> {
+    return this.http.get<TeamDetailStatistics>(`${this.base}/statistics/teams/${teamId}`, {
+      params: new HttpParams().set('recent', String(recent)),
+    });
+  }
+
   listMatches(opts?: {
     league?: string;
+    scope?: 'target';
     daysAhead?: number;
     daysBack?: number;
     limit?: number;
   }): Observable<Match[]> {
     let params = new HttpParams();
     if (opts?.league) params = params.set('league', opts.league);
+    if (opts?.scope) params = params.set('scope', opts.scope);
     if (opts?.daysAhead != null) params = params.set('days_ahead', String(opts.daysAhead));
     if (opts?.daysBack != null) params = params.set('days_back', String(opts.daysBack));
     if (opts?.limit != null) params = params.set('limit', String(opts.limit));
@@ -84,6 +104,8 @@ export class ApiService {
     horizonHours?: number;
     maxLines?: number;
     bookmaker?: string;
+    /** ``sport_key`` de la competición (``soccer_epl``, …). */
+    sportKey?: string;
   }): Observable<GradedOddsLine[]> {
     let params = new HttpParams();
     if (opts?.horizonHours != null) {
@@ -91,6 +113,7 @@ export class ApiService {
     }
     if (opts?.maxLines != null) params = params.set('max_lines', String(opts.maxLines));
     if (opts?.bookmaker) params = params.set('bookmaker_key', opts.bookmaker);
+    if (opts?.sportKey) params = params.set('sport_key', opts.sportKey);
     return this.http.get<GradedOddsLine[]>(`${this.base}/dashboard/graded-odds`, { params });
   }
 
@@ -223,7 +246,36 @@ export class ApiService {
   refreshMyParlaysGrading(): Observable<{ updated_parlays: number }> {
     return this.http.post<{ updated_parlays: number }>(
       `${this.base}/me/parlays/refresh-grades`,
-      null,
+      {},
     );
+  }
+
+  refreshMyParlayGrade(id: number): Observable<SavedParlay> {
+    return this.http.post<SavedParlay>(
+      `${this.base}/me/parlays/${id}/refresh-grade`,
+      {},
+    );
+  }
+
+  getMyParlayMetricsSummary(): Observable<UserParlayMetrics> {
+    return this.http.get<UserParlayMetrics>(`${this.base}/me/parlays/metrics-summary`);
+  }
+
+  getFeaturedPicksToday(): Observable<FeaturedDailyPickRow> {
+    return this.http.get<FeaturedDailyPickRow>(`${this.base}/featured-picks/today`);
+  }
+
+  getFeaturedPicksHistory(days: number): Observable<FeaturedDailyPickRow[]> {
+    return this.http.get<FeaturedDailyPickRow[]>(`${this.base}/featured-picks/history`, {
+      params: { days: String(days) },
+    });
+  }
+
+  getFeaturedPicksMetrics(): Observable<FeaturedPicksMetrics> {
+    return this.http.get<FeaturedPicksMetrics>(`${this.base}/featured-picks/metrics`);
+  }
+
+  refreshFeaturedPicksGrading(): Observable<{ updated_rows: number }> {
+    return this.http.post<{ updated_rows: number }>(`${this.base}/featured-picks/refresh-grades`, {});
   }
 }

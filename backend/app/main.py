@@ -30,7 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
-from backend.app.api import analysis, auth, calibration, dashboard, matches, me_parlays, players, profiles, refresh, value_bets
+from backend.app.api import analysis, auth, calibration, dashboard, featured_daily_picks, matches, me_parlays, players, profiles, refresh, statistics, value_bets
 
 app = FastAPI(
     title="Bets AI",
@@ -54,6 +54,7 @@ app.add_middleware(
 app.include_router(analysis.router)
 app.include_router(auth.router)
 app.include_router(dashboard.router)
+app.include_router(featured_daily_picks.router)
 app.include_router(me_parlays.router)
 app.include_router(matches.router)
 app.include_router(value_bets.router)
@@ -61,6 +62,7 @@ app.include_router(profiles.router)
 app.include_router(refresh.router)
 app.include_router(calibration.router)
 app.include_router(players.router)
+app.include_router(statistics.router)
 
 
 @app.exception_handler(ProgrammingError)

@@ -39,8 +39,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Horizonte futuro de partidos a buscar (default 7 días).",
     )
     parser.add_argument(
-        "--max-matches", type=int, default=10,
-        help="Procesar como mucho N partidos (default 10).",
+        "--max-matches",
+        type=int,
+        default=10,
+        help="Procesar como mucho N partidos (default 10). Con top-5, el cupo se reparte entre ligas.",
     )
     parser.add_argument(
         "--all-leagues", action="store_true",

@@ -23,6 +23,7 @@ liga, véase ``WINAMAX_SNAPSHOT_RETENTION``): las odds ligadas borran por
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -58,6 +59,17 @@ DEFAULT_TIME_WINDOW_HOURS = 4
 WINAMAX_BOOKMAKER_KEY = "winamax_es"
 WINAMAX_BOOKMAKER_TITLE = "Winamax (ES)"
 WINAMAX_PLAYER_SOURCE = "winamax-sr"  # Sportradar IDs vienen vía Winamax
+MAX_STORED_ODDS = Decimal("4")
+
+# Claves ``League.sport_key`` alineadas con Flashscore fixtures + Sofascore.
+# Orden = reparto de cupos en ingesta (prioriza Premier / Serie A / Bundesliga antes que La Liga).
+WINAMAX_TOP5_FOOTBALL_KEYS: tuple[str, ...] = (
+    "soccer_epl",
+    "soccer_italy_serie_a",
+    "soccer_germany_bundesliga",
+    "soccer_spain_la_liga",
+    "soccer_france_ligue_one",
+)
 
 # Friendly names para los mercados que vamos a ingerir.
 _MARKET_FRIENDLY_NAME: dict[str, str] = {
@@ -78,8 +90,13 @@ _MARKET_FRIENDLY_NAME: dict[str, str] = {
     "match_first_half_totals": "Total de goles (1ª mitad)",
     "team_home_first_half_totals_goals": "Goles local (1ª mitad)",
     "team_away_first_half_totals_goals": "Goles visitante (1ª mitad)",
-    "match_first_half_corners_totals": "Total de córneres (1ª mitad)",
-    "match_first_half_cards_totals": "Total de tarjetas (1ª mitad)",
+    "match_second_half_totals": "Total de goles (2ª mitad)",
+    "team_home_second_half_totals_goals": "Goles local (2ª mitad)",
+    "team_away_second_half_totals_goals": "Goles visitante (2ª mitad)",
+    "match_second_half_corners_totals": "Total de córneres (2ª mitad)",
+    "match_second_half_cards_totals": "Total de tarjetas (2ª mitad)",
+    "match_highest_scoring_half": "Mitad con más goles",
+    "match_most_goals_half": "Mitad con más goles",
     # Player props
     "player_shots": "Tiros del jugador (over/under)",
     "player_sot": "Tiros a puerta del jugador (over/under)",
@@ -111,6 +128,9 @@ class WinamaxIngestResult:
     players_created: int = 0
     markets_created: int = 0
     snapshots_pruned: int = 0
+    odds_carried_forward: int = 0
+    odds_filtered: int = 0
+    odds_pruned: int = 0
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -155,11 +175,15 @@ class WinamaxOddsIngester:
         max_matches: int = 10,
         only_top5: bool = True,
         sport: Literal["football", "basketball"] = "football",
+        balance_top5_football: bool = True,
         commit: bool = True,
     ) -> WinamaxIngestResult:
         """Busca partidos próximos en BD y los empareja con Winamax.
 
         :param sport: ``football`` (home /sport/1) o ``basketball`` (/sport/2).
+        :param balance_top5_football: si ``True`` y ``only_top5``, reparte
+            ``max_matches`` entre las 5 grandes ligas (evita que la próxima
+            cascada horaria sea solo La Liga u otra competición).
         :param commit: si ``False``, deja toda la transacción abierta para
             que el caller pueda hacer ``rollback()`` (útil para ``--dry-run``).
         """
@@ -168,7 +192,11 @@ class WinamaxOddsIngester:
 
         # 1. Cargar partidos candidatos en BD.
         upcoming = self._load_upcoming_matches(
-            days_ahead=days_ahead, only_top5=only_top5, sport=sport,
+            days_ahead=days_ahead,
+            only_top5=only_top5,
+            sport=sport,
+            max_matches=max_matches,
+            balance_top5_football=balance_top5_football,
         )
         result.matches_in_db = len(upcoming)
         if not upcoming:
@@ -189,13 +217,26 @@ class WinamaxOddsIngester:
             "Winamax: %d partidos disponibles (sport=%s).",
             len(wm_matches), sport,
         )
+        if sport == "football" and len(wm_matches) < 80:
+            by_tournament = Counter(
+                (m.tournament_name or "(sin nombre)").strip() for m in wm_matches
+            )
+            self.log.warning(
+                "Cobertura Winamax muy baja para fútbol (%s partidos en el overview). "
+                "La SPA sólo SSR ~50 líneas globales en ``matches``: la Premier inglesa y "
+                "otras ligas suelen llegar por Socket.IO, no están en esta descarga HTTP. "
+                "Histograma (liga→n): %s",
+                len(wm_matches),
+                dict(by_tournament.most_common(12)),
+            )
 
         # 3. Bookmaker (los snapshots se crean por liga en el bucle).
         self._bookmaker = self._get_or_create_bookmaker()
         self._scrape_started_at = datetime.now(timezone.utc)
+        self._scraped_match_ids_by_league: dict[int, set[int]] = {}
 
         # 4. Match a match.
-        for db_match in upcoming[:max_matches]:
+        for db_match in upcoming:
             wm_info = self._find_winamax_match(db_match, wm_matches)
             if wm_info is None:
                 result.matches_unmatched += 1
@@ -206,6 +247,7 @@ class WinamaxOddsIngester:
                 snapshot = self._get_or_create_snapshot(db_match.league_id, result)
                 self._ingest_one_match(db_match, wm_info, snapshot, result)
                 result.matches_matched += 1
+                self._scraped_match_ids_by_league.setdefault(db_match.league_id, set()).add(db_match.id)
             except Exception as exc:  # noqa: BLE001
                 self.log.warning(
                     "Error ingiriendo match db=%s wm=%s: %s",
@@ -217,6 +259,29 @@ class WinamaxOddsIngester:
                 self._market_cache.clear()
                 self._player_external_cache.clear()
                 self._snapshot_by_league.clear()
+
+        carried_total = 0
+        now_carry = datetime.now(timezone.utc)
+        result.odds_pruned = self._purge_non_storable_winamax_odds()
+        if result.odds_pruned:
+            self.log.info(
+                "Winamax: %d cuotas antiguas >= %.2f eliminadas.",
+                result.odds_pruned,
+                MAX_STORED_ODDS,
+            )
+        for lid, snap in list(self._snapshot_by_league.items()):
+            scraped_ids = self._scraped_match_ids_by_league.get(lid, set())
+            carried_total += self._carry_forward_odds_from_previous_snapshot(
+                lid, snap, scraped_ids, now=now_carry, result=result,
+            )
+        result.odds_carried_forward = carried_total
+        if carried_total:
+            self.log.info(
+                "Winamax: %d líneas de cuota arrastradas desde snapshot anterior "
+                "(partidos futuros no re-scrapeados en esta corrida).",
+                carried_total,
+            )
+        self.session.flush()
 
         touched_leagues = list(self._snapshot_by_league.keys())
         if commit and touched_leagues:
@@ -236,33 +301,156 @@ class WinamaxOddsIngester:
         result.finished_at = datetime.now(timezone.utc)
         return result
 
+    def _carry_forward_odds_from_previous_snapshot(
+        self,
+        league_id: int,
+        current_snap: Snapshot,
+        scraped_match_ids: set[int],
+        *,
+        now: datetime,
+        result: WinamaxIngestResult | None = None,
+    ) -> int:
+        """Copia cuotas del snapshot Winamax previo de esta liga para partidos futuros no tocados hoy.
+
+        Sin esto, al crear un snapshot nuevo y purgar los viejos (CASCADE), los partidos que no entran
+        en ``max_matches`` pierden todas sus filas ``odds`` hasta la próxima vez que sí se scrapeen.
+        """
+        prev = self.session.scalar(
+            select(Snapshot)
+            .where(Snapshot.league_id == league_id)
+            .where(Snapshot.source == WINAMAX_BOOKMAKER_KEY)
+            .where(Snapshot.id != current_snap.id)
+            .order_by(Snapshot.captured_at.desc(), Snapshot.id.desc())
+            .limit(1)
+        )
+        if prev is None:
+            return 0
+        stmt = (
+            select(Odds)
+            .where(Odds.snapshot_id == prev.id)
+            .join(Match, Match.id == Odds.match_id)
+            .where(Match.status == MATCH_STATUS_SCHEDULED)
+            .where(Match.commence_time >= now)
+        )
+        if scraped_match_ids:
+            stmt = stmt.where(~Odds.match_id.in_(scraped_match_ids))
+        rows = list(self.session.scalars(stmt).all())
+        carried = 0
+        for o in rows:
+            if not self._is_storable_price(o.price):
+                if result is not None:
+                    result.odds_filtered += 1
+                continue
+            self.session.add(
+                Odds(
+                    snapshot_id=current_snap.id,
+                    match_id=o.match_id,
+                    bookmaker_id=o.bookmaker_id,
+                    market_id=o.market_id,
+                    player_id=o.player_id,
+                    outcome_name=o.outcome_name,
+                    outcome_point=o.outcome_point,
+                    price=o.price,
+                    bookmaker_last_update=o.bookmaker_last_update,
+                ),
+            )
+            carried += 1
+        return carried
+
+    def _purge_non_storable_winamax_odds(self) -> int:
+        """Elimina del histórico activo las cuotas que ya no cumplen el límite."""
+        snapshot_ids = select(Snapshot.id).where(
+            Snapshot.source == WINAMAX_BOOKMAKER_KEY,
+        )
+        deleted = self.session.execute(
+            delete(Odds).where(
+                Odds.snapshot_id.in_(snapshot_ids),
+                Odds.price >= MAX_STORED_ODDS,
+            ),
+        )
+        return int(deleted.rowcount or 0)
+
+    @staticmethod
+    def _is_storable_price(price: Decimal) -> bool:
+        """Conserva solo cuotas válidas y estrictamente inferiores a 4.00."""
+        return price > Decimal("1") and price < MAX_STORED_ODDS
+
     # ------------------------------------------------------------- Internos
 
     def _load_upcoming_matches(
-        self, *, days_ahead: int, only_top5: bool,
+        self,
+        *,
+        days_ahead: int,
+        only_top5: bool,
         sport: Literal["football", "basketball"] = "football",
+        max_matches: int = 50_000,
+        balance_top5_football: bool = True,
     ) -> list[Match]:
         from backend.models import League
+
         now = datetime.now(timezone.utc)
         until = now + timedelta(days=days_ahead)
-        stmt = (
+        base = (
             select(Match)
             .where(Match.status == MATCH_STATUS_SCHEDULED)
             .where(Match.commence_time >= now)
             .where(Match.commence_time <= until)
             .options(joinedload(Match.home_team), joinedload(Match.away_team))
-            .order_by(Match.commence_time)
         )
         if sport == "basketball":
-            stmt = stmt.join(Match.league).where(League.sport_key.ilike("%basketball%"))
-        elif only_top5:
-            top5 = (
-                "soccer_spain_la_liga", "soccer_epl",
-                "soccer_germany_bundesliga", "soccer_italy_serie_a",
-                "soccer_france_ligue_one",
+            stmt_bb = base.join(Match.league).where(League.sport_key.ilike("%basketball%"))
+            return list(self.session.scalars(stmt_bb.order_by(Match.commence_time)).all())
+        if not only_top5:
+            return list(self.session.scalars(base.order_by(Match.commence_time)).all())
+
+        keys = WINAMAX_TOP5_FOOTBALL_KEYS
+        if not balance_top5_football or max_matches <= 0:
+            stmt_t5 = (
+                base.join(Match.league)
+                .where(League.sport_key.in_(keys))
+                .order_by(Match.commence_time)
+                .limit(max_matches)
             )
-            stmt = stmt.join(Match.league).where(League.sport_key.in_(top5))
-        return list(self.session.scalars(stmt).all())
+            return list(self.session.scalars(stmt_t5).all())
+
+        per_league = max(1, max_matches // len(keys))
+        seen: set[int] = set()
+        out: list[Match] = []
+        for sk in keys:
+            q = (
+                base.join(Match.league)
+                .where(League.sport_key == sk)
+                .order_by(Match.commence_time)
+                .limit(per_league)
+            )
+            for row in self.session.scalars(q).all():
+                if row.id not in seen:
+                    seen.add(row.id)
+                    out.append(row)
+        if len(out) < max_matches and seen:
+            need = max_matches - len(out)
+            q_fill = (
+                base.join(Match.league)
+                .where(League.sport_key.in_(keys))
+                .where(Match.id.not_in(seen))
+                .order_by(Match.commence_time)
+                .limit(need)
+            )
+            for row in self.session.scalars(q_fill).all():
+                if row.id not in seen:
+                    seen.add(row.id)
+                    out.append(row)
+        elif len(out) < max_matches and not seen:
+            # Ningún partido en la 1ª pasada: fallback a orden global.
+            stmt_t5 = (
+                base.join(Match.league)
+                .where(League.sport_key.in_(keys))
+                .order_by(Match.commence_time)
+                .limit(max_matches)
+            )
+            return list(self.session.scalars(stmt_t5).all())
+        out.sort(key=lambda m: m.commence_time)
+        return out[:max_matches]
 
     def _find_winamax_match(
         self, db_match: Match, wm_matches: list[wm.WinamaxMatchInfo],
@@ -319,6 +507,10 @@ class WinamaxOddsIngester:
             home_n = db_match.home_team.name
             away_n = db_match.away_team.name
             for oc in bet.outcomes:
+                price = Decimal(str(oc.odds))
+                if not self._is_storable_price(price):
+                    result.odds_filtered += 1
+                    continue
                 out_name = oc.label
                 line: float | None = bet_line
                 if canon == "h2h":
@@ -336,6 +528,14 @@ class WinamaxOddsIngester:
                     "team_away_first_half_totals_goals",
                     "match_first_half_corners_totals",
                     "match_first_half_cards_totals",
+                    "match_second_half_totals",
+                    "team_home_second_half_totals_goals",
+                    "team_away_second_half_totals_goals",
+                    "match_second_half_corners_totals",
+                    "match_second_half_cards_totals",
+                    "match_total_goals_odd_even",
+                    "match_highest_scoring_half",
+                    "match_most_goals_half",
                 ):
                     out_name = normalize_totals_outcome(oc.label)
                     if line is None:
@@ -357,7 +557,7 @@ class WinamaxOddsIngester:
                     player_id=None,
                     outcome_name=_truncate(str(out_name), 128),
                     outcome_point=Decimal(str(line)) if line is not None else None,
-                    price=Decimal(str(oc.odds)),
+                    price=price,
                     bookmaker_last_update=captured_at,
                 ))
                 result.odds_inserted += 1
@@ -375,6 +575,10 @@ class WinamaxOddsIngester:
         # en None si no podemos confirmarlo. (En el futuro se puede
         # enriquecer cruzando con lineups esperadas.)
         for prop in props:
+            price = Decimal(str(prop.odds))
+            if not self._is_storable_price(price):
+                result.odds_filtered += 1
+                continue
             player = self._get_or_create_player(prop, result)
             market = self._get_or_create_market(prop.market_key, prop.market_key, result)
             line = prop.line
@@ -387,7 +591,7 @@ class WinamaxOddsIngester:
                 player_id=player.id if player is not None else None,
                 outcome_name=_truncate(outcome_name, 128),
                 outcome_point=Decimal(str(line)) if line is not None else None,
-                price=Decimal(str(prop.odds)),
+                price=price,
                 bookmaker_last_update=captured_at,
             ))
             result.odds_inserted += 1
@@ -581,4 +785,4 @@ def _truncate(text: str, max_len: int) -> str:
     return text if len(text) <= max_len else text[: max_len - 1] + "…"
 
 
-__all__ = ["WinamaxOddsIngester", "WinamaxIngestResult"]
+__all__ = ["WINAMAX_TOP5_FOOTBALL_KEYS", "WinamaxOddsIngester", "WinamaxIngestResult"]

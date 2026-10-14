@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -16,6 +16,73 @@ class LeagueOut(BaseModel):
     sport_key: str
     name: str
     country: str | None = None
+
+
+class CompetitionStatsOut(BaseModel):
+    sport_key: str
+    name: str
+    teams_count: int
+    players_count: int
+    matches_with_stats: int
+
+
+class TeamStatisticsOut(BaseModel):
+    team_id: int
+    name: str
+    logo_url: str | None = None
+    matches_played: int | None = None
+    wins: int | None = None
+    draws: int | None = None
+    losses: int | None = None
+    goals_for: int | None = None
+    goals_against: int | None = None
+    points: int | None = None
+    xg_for: Decimal | None = None
+    xg_against: Decimal | None = None
+
+
+class PlayerStatisticsOut(BaseModel):
+    player_id: int
+    name: str
+    image_url: str | None = None
+    team_name: str | None = None
+    goals: int | None = None
+    assists: int | None = None
+    shots: int | None = None
+    shots_on_target: int | None = None
+    xg: Decimal | None = None
+    matches_played: int | None = None
+
+
+class StatisticsOverviewOut(BaseModel):
+    selected_sport_key: str | None = None
+    competitions: list[CompetitionStatsOut]
+    teams: list[TeamStatisticsOut]
+    players: list[PlayerStatisticsOut]
+
+
+class TeamRecentMatchOut(BaseModel):
+    match_id: int
+    opponent: str
+    is_home: bool
+    commence_time: datetime
+    team_score: int | None = None
+    opponent_score: int | None = None
+    result: str = "pending"
+    shots_on_target: int | None = None
+    corners: int | None = None
+    yellow_cards: int | None = None
+
+
+class TeamDetailStatisticsOut(BaseModel):
+    team: TeamStatisticsOut
+    competition_name: str | None = None
+    home_win_pct: float | None = None
+    away_win_pct: float | None = None
+    recent_form: list[str] = Field(default_factory=list)
+    recent_matches: list[TeamRecentMatchOut] = Field(default_factory=list)
+    totals: dict[str, int | float | None] = Field(default_factory=dict)
+    players: list[PlayerStatisticsOut] = Field(default_factory=list)
 
 
 class TeamOut(BaseModel):
@@ -168,6 +235,7 @@ class GradedOddsLineOut(BaseModel):
 
     match_id: int
     league: str
+    league_sport_key: str = ""
     home_team: str
     away_team: str
     commence_time: datetime
@@ -232,6 +300,38 @@ class SavedParlayOut(BaseModel):
     overall_result: str
     last_graded_at: datetime | None = None
     created_at: datetime
+
+
+class FeaturedDailyPickOut(BaseModel):
+    """Picks del día con patas corregidas si ya hay marcador."""
+
+    pick_date: date
+    legs: list[dict[str, Any]]
+    last_graded_at: datetime | None = None
+    created_at: datetime
+
+
+class FeaturedPicksMetricsOut(BaseModel):
+    """Métricas agregadas de las patas propuestas por la app (histórico)."""
+
+    total_pick_days: int
+    total_legs: int
+    hits: int
+    misses: int
+    pending: int
+    needs_review: int
+    rate_pct: float | None = None
+
+
+class UserParlayMetricsOut(BaseModel):
+    """Resumen de combinadas guardadas del usuario (misma escala que mis apuestas)."""
+
+    total: int
+    pending: int
+    needs_review: int
+    hits: int
+    misses: int
+    rate_pct: float | None = None
 
 
 class UserProfileOut(BaseModel):

@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     #: Tras ingestar Winamax: cuántos snapshots recientes conservar por liga;
     #: el resto se borran (CASCADE borra odds). Evita crecimiento ilimitado.
     winamax_snapshot_retention: int = Field(
-        default=2,
+        default=12,
         ge=1,
         le=50,
         description="Snapshots Winamax por liga a mantener; los más antiguos se purgan.",

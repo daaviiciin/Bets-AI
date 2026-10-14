@@ -10,7 +10,7 @@ Encadena:
 Uso típico (local manual o vía cron / Task Scheduler de Windows)::
 
     python -m backend.tools.daily_refresh
-    python -m backend.tools.daily_refresh --stats-days-back 14
+    python -m backend.tools.daily_refresh --stats-days-back 120
     python -m backend.tools.daily_refresh --stats-limit 10 --stats-all-leagues
 """
 
@@ -43,8 +43,8 @@ def main(argv: list[str] | None = None) -> int:
         help="Páginas de Sofascore por liga al actualizar resultados (default 3 ≈ 90 partidos).",
     )
     parser.add_argument(
-        "--stats-days-back", type=int, default=7,
-        help="Ventana hacia atrás en días para buscar partidos sin stats (default 7).",
+        "--stats-days-back", type=int, default=120,
+        help="Antigüedad máxima de partidos para el histórico Flashscore (default 120).",
     )
     parser.add_argument(
         "--stats-all-leagues", action="store_true",

@@ -19,6 +19,14 @@ Estructura del PRELOADED_STATE
                           ``pre:playerprops:...``).
 * ``odds[outcomeId]``     cuota decimal (float).
 
+Winamax sólo expone este JSON en páginas concretas: la lista global de
+partidos no está disponible mediante XHR público desde curl; el navegador
+completa el catálogo (centenares/todavía mayor en ``sports[].mainMatchCount``)
+mediante Socket.IO (véase ``BETTING_CONFIGURATION`` en el HTML). Una petición a
+``/sport/1`` deja sólo unos ~50 stubs en ``matches`` y pocas decenas de
+fútbol, por eso competiciones muy visibles en la UI (Premier League inglesa,
+etc.) pueden no aparecer ahí hasta integrar ese canal.
+
 Cuando ``moreBets`` > nº de bets cargadas en la home, hay que pedir
 explícitamente la URL del partido para conseguir los 500+ mercados con
 player props.
@@ -203,6 +211,7 @@ class WinamaxMatchInfo:
     tournament_name: str | None
     sport_id: int
     kickoff: datetime
+    sr_tournament_id: str | None  # ej. sr:tournament:8 (Sportradar vía Winamax)
     home_competitor_id: str | None
     away_competitor_id: str | None
     more_bets: int
@@ -271,6 +280,7 @@ def parse_sport_matches(state: dict, sport_id: int) -> list[WinamaxMatchInfo]:
             kickoff = datetime.fromtimestamp(int(kickoff_ts), tz=timezone.utc)
         except (TypeError, ValueError, OverflowError):
             continue
+        sr_raw = m.get("srTournamentId")
         out.append(WinamaxMatchInfo(
             match_id=str(m.get("matchId")),
             title=str(m.get("title") or ""),
@@ -280,6 +290,7 @@ def parse_sport_matches(state: dict, sport_id: int) -> list[WinamaxMatchInfo]:
             tournament_name=tour.get("tournamentName"),
             sport_id=int(sport_id),
             kickoff=kickoff,
+            sr_tournament_id=str(sr_raw) if sr_raw else None,
             home_competitor_id=(
                 str(m["competitor1Id"]) if m.get("competitor1Id") is not None else None
             ),
