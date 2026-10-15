@@ -27,6 +27,11 @@ class Team(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
     external_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     external_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # ID del equipo en Flashscore (``PX``/``PY`` en el calendario, ``TI`` en la
+    # clasificación). Permite enlazar por id en vez de por nombre.
+    flashscore_id: Mapped[str | None] = mapped_column(
+        String(16), unique=True, nullable=True, index=True,
+    )
 
     home_matches: Mapped[list["Match"]] = relationship(
         back_populates="home_team",

@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.models import League, Match, Team
+from backend.models import League, Match
 from backend.models.match import (
     MATCH_STATUS_CANCELED,
     MATCH_STATUS_POSTPONED,
@@ -27,22 +27,27 @@ from backend.models.match import (
 )
 from backend.scrapers import flashscore as fs
 from backend.services.odds_processor import LEAGUE_METADATA
+from backend.services.entity_resolver import TeamResolver
 
 FLASHSCORE_MATCH_PREFIX = "flashscore:"
-# Mismo orden que ``TOP5_LEAGUE_PREFIXES`` en ``flashscore.py``.
-_TOP5_PREFIX_TO_SPORT_KEY: tuple[tuple[str, str], ...] = (
-    ("SPAIN: LaLiga", "soccer_spain_la_liga"),
-    ("ENGLAND: Premier League", "soccer_epl"),
-    ("GERMANY: Bundesliga", "soccer_germany_bundesliga"),
-    ("ITALY: Serie A", "soccer_italy_serie_a"),
-    ("FRANCE: Ligue 1", "soccer_france_ligue_one"),
-)
 
-_EXTRA_FLASHSCORE_LEAGUES: tuple[tuple[str, str], ...] = (
-    ("CHAMPIONS LEAGUE", "soccer_uefa_champs_league"),
-    ("EUROPA LEAGUE", "soccer_uefa_europa_league"),
-    ("CONFERENCE LEAGUE", "soccer_uefa_europa_conference_league"),
-)
+# Nombre **exacto** de la competición en Flashscore (campo ``ZA``) → ``sport_key``.
+# Se compara sin la fase (" - League phase", " - Qualification"…). Antes se usaba
+# ``startswith`` / ``in`` y se colaban "Premier League 2", "Premier League U18",
+# "LaLiga2", "Bundesliga Women", "Serie A Women", "AFC/CAF Champions League"…
+_TOP5_LEAGUE_NAMES: dict[str, str] = {
+    "SPAIN: LaLiga": "soccer_spain_la_liga",
+    "ENGLAND: Premier League": "soccer_epl",
+    "GERMANY: Bundesliga": "soccer_germany_bundesliga",
+    "ITALY: Serie A": "soccer_italy_serie_a",
+    "FRANCE: Ligue 1": "soccer_france_ligue_one",
+}
+
+_EXTRA_LEAGUE_NAMES: dict[str, str] = {
+    "EUROPE: Champions League": "soccer_uefa_champs_league",
+    "EUROPE: Europa League": "soccer_uefa_europa_league",
+    "EUROPE: Conference League": "soccer_uefa_europa_conference_league",
+}
 
 _DEDUP_WINDOW = timedelta(hours=4)
 _MAX_DAY_OFFSETS = 14
@@ -52,13 +57,15 @@ def flashscore_external_id(match_id: str) -> str:
     return f"{FLASHSCORE_MATCH_PREFIX}{match_id}"
 
 
+def _competition_base_name(league_full_name: str) -> str:
+    """``"EUROPE: Champions League - League phase"`` → ``"EUROPE: Champions League"``."""
+    return league_full_name.split(" - ", 1)[0].strip()
+
+
 def resolve_top5_sport_key(league_full_name: str | None) -> str | None:
     if not league_full_name:
         return None
-    for prefix, sport_key in _TOP5_PREFIX_TO_SPORT_KEY:
-        if league_full_name.startswith(prefix):
-            return sport_key
-    return None
+    return _TOP5_LEAGUE_NAMES.get(_competition_base_name(league_full_name))
 
 
 def resolve_fixtures_sport_key(league_full_name: str | None, *, only_top5: bool) -> str | None:
@@ -68,11 +75,8 @@ def resolve_fixtures_sport_key(league_full_name: str | None, *, only_top5: bool)
         return top
     if only_top5 or not league_full_name:
         return None
-    lu = league_full_name.upper()
-    for needle, sk in _EXTRA_FLASHSCORE_LEAGUES:
-        if needle in lu and sk in LEAGUE_METADATA:
-            return sk
-    return None
+    sk = _EXTRA_LEAGUE_NAMES.get(_competition_base_name(league_full_name))
+    return sk if sk in LEAGUE_METADATA else None
 
 
 @dataclass
@@ -105,6 +109,7 @@ class FlashscoreFixturesIngester:
         self.session = session
         self.log = log or logging.getLogger(__name__)
         self._fetch_fixtures = fetch_fixtures
+        self._teams = TeamResolver(session, log=self.log)
 
     def ingest(
         self,
@@ -195,17 +200,6 @@ class FlashscoreFixturesIngester:
         self.log.info("Liga creada (fixtures Flashscore): %s", sport_key)
         return league
 
-    def _get_or_create_team(self, name: str | None) -> Team | None:
-        if not name or not name.strip():
-            return None
-        clean = name.strip()
-        team = self.session.scalar(select(Team).where(Team.name == clean))
-        if team is None:
-            team = Team(name=clean)
-            self.session.add(team)
-            self.session.flush()
-        return team
-
     def _find_semantic_duplicate(
         self,
         league_id: int,
@@ -231,8 +225,12 @@ class FlashscoreFixturesIngester:
         sport_key: str,
         result: FlashscoreFixturesIngestResult,
     ) -> None:
-        home = self._get_or_create_team(fm.home_team_name)
-        away = self._get_or_create_team(fm.away_team_name)
+        home = self._teams.resolve(
+            fm.home_team_name, fs_id=fm.home_team_fs_id, sport_key=sport_key,
+        )
+        away = self._teams.resolve(
+            fm.away_team_name, fs_id=fm.away_team_fs_id, sport_key=sport_key,
+        )
         if home is None or away is None:
             result.skipped_bad_data += 1
             return

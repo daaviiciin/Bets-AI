@@ -1,0 +1,6 @@
+# Exclusiones de graphify (además de lo que ya ignora .gitignore)
+.playwright-mcp/
+backups/
+data/
+frontend/public/
+*.dump

@@ -59,6 +59,27 @@ class DailyRefreshStatsBlockOut(BaseModel):
     parse_errors: int
 
 
+class DailyRefreshStandingsBlockOut(BaseModel):
+    leagues_ok: list[str]
+    teams_upserted: int
+    teams_created: int
+
+
+class DailyRefreshFsResultsBlockOut(BaseModel):
+    matches_pending: int
+    matches_updated: int
+    still_pending: int
+    feeds_fetched: int
+
+
+class DailyRefreshAbsencesBlockOut(BaseModel):
+    matches_eligible: int
+    matches_fetched: int
+    absences_saved: int
+    doubtful_saved: int
+    fetch_errors: int
+
+
 class DailyRefreshFixturesBlockOut(BaseModel):
     fixtures_fetched: int
     fixtures_inserted: int
@@ -78,6 +99,9 @@ class DailyRefreshSummaryOut(BaseModel):
     fixtures: DailyRefreshFixturesBlockOut | None = None
     results: DailyRefreshResultsBlockOut | None = None
     stats: DailyRefreshStatsBlockOut | None = None
+    fs_results: DailyRefreshFsResultsBlockOut | None = None
+    standings: DailyRefreshStandingsBlockOut | None = None
+    absences: DailyRefreshAbsencesBlockOut | None = None
     errors: list[str] = Field(default_factory=list)
 
 
@@ -141,6 +165,24 @@ def _daily_refresh_summary_to_out(summary: DailyRefreshSummary) -> DailyRefreshS
             fetch_errors=summary.stats.fetch_errors,
             parse_errors=summary.stats.parse_errors,
         ) if summary.stats is not None else None,
+        fs_results=DailyRefreshFsResultsBlockOut(
+            matches_pending=summary.fs_results.matches_pending,
+            matches_updated=summary.fs_results.matches_updated,
+            still_pending=summary.fs_results.still_pending,
+            feeds_fetched=summary.fs_results.feeds_fetched,
+        ) if summary.fs_results is not None else None,
+        standings=DailyRefreshStandingsBlockOut(
+            leagues_ok=summary.standings.leagues_ok,
+            teams_upserted=summary.standings.teams_upserted,
+            teams_created=summary.standings.teams_created,
+        ) if summary.standings is not None else None,
+        absences=DailyRefreshAbsencesBlockOut(
+            matches_eligible=summary.absences.matches_eligible,
+            matches_fetched=summary.absences.matches_fetched,
+            absences_saved=summary.absences.absences_saved,
+            doubtful_saved=summary.absences.doubtful_saved,
+            fetch_errors=summary.absences.fetch_errors,
+        ) if summary.absences is not None else None,
         errors=summary.errors,
     )
 

@@ -14,6 +14,29 @@ CANONICAL_MARKET_KEY: dict[str, str] = {
     "match_double_chance": "double_chance",
 }
 
+# Mercados de verdad "más/menos de N" (sus resultados se normalizan a Over/Under).
+# Par/Impar y "mitad con más goles" NO van aquí: sus resultados no son Over/Under
+# y forzarlos colapsaba todas las opciones en "Under".
+TOTALS_MARKETS: frozenset[str] = frozenset({
+    "totals",
+    "team_home_totals_goals",
+    "team_away_totals_goals",
+    "match_cards_totals",
+    "match_corners_totals",
+    "match_shots_totals",
+    "match_sot_totals",
+    "match_first_half_totals",
+    "team_home_first_half_totals_goals",
+    "team_away_first_half_totals_goals",
+    "match_first_half_corners_totals",
+    "match_first_half_cards_totals",
+    "match_second_half_totals",
+    "team_home_second_half_totals_goals",
+    "team_away_second_half_totals_goals",
+    "match_second_half_corners_totals",
+    "match_second_half_cards_totals",
+})
+
 _EMPATE = frozenset({"empate", "draw", "tie", "x"})
 
 _RE_TOT_LINE = re.compile(r"([\d]+[.,][\d]+|\d+)\s*$")
@@ -24,6 +47,24 @@ _RE_MENOS = re.compile(r"menos\s+de|under", re.I)
 def canonical_market_key(winamax_internal_key: str) -> str:
     """Devuelve la clave de mercado persistida en BD (alineada con Odds API)."""
     return CANONICAL_MARKET_KEY.get(winamax_internal_key, winamax_internal_key)
+
+
+def normalize_match_outcome(
+    canon: str, label: str, *, home_team: str, away_team: str,
+) -> str:
+    """Nombre de resultado para un mercado a nivel partido (clave canónica ``canon``).
+
+    Los mercados sin normalización propia conservan la etiqueta de Winamax tal cual.
+    """
+    if canon == "h2h":
+        return normalize_h2h_outcome(label, home_team=home_team, away_team=away_team)
+    if canon in TOTALS_MARKETS:
+        return normalize_totals_outcome(label)
+    if canon == "btts":
+        return normalize_btts_outcome(label)
+    if canon == "double_chance":
+        return normalize_double_chance_outcome(label, home_team=home_team, away_team=away_team)
+    return label
 
 
 def normalize_h2h_outcome(label: str, *, home_team: str, away_team: str) -> str:

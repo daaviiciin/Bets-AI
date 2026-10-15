@@ -48,11 +48,9 @@ from backend.scrapers import winamax as wm
 from backend.services.match_results_updater import _names_match, _normalize
 from backend.services.odds_history import LineKey, OddsHistoryRecorder, line_key
 from backend.services.winamax_normalization import (
+    TOTALS_MARKETS,
     canonical_market_key,
-    normalize_btts_outcome,
-    normalize_double_chance_outcome,
-    normalize_h2h_outcome,
-    normalize_totals_outcome,
+    normalize_match_outcome,
     parse_totals_line_from_label,
 )
 
@@ -517,43 +515,14 @@ class WinamaxOddsIngester:
                 if not self._is_storable_price(price):
                     result.odds_filtered += 1
                     continue
-                out_name = oc.label
+                out_name = normalize_match_outcome(
+                    canon, oc.label, home_team=home_n, away_team=away_n,
+                )
                 line: float | None = bet_line
-                if canon == "h2h":
-                    out_name = normalize_h2h_outcome(oc.label, home_team=home_n, away_team=away_n)
-                elif canon in (
-                    "totals",
-                    "team_home_totals_goals",
-                    "team_away_totals_goals",
-                    "match_cards_totals",
-                    "match_corners_totals",
-                    "match_shots_totals",
-                    "match_sot_totals",
-                    "match_first_half_totals",
-                    "team_home_first_half_totals_goals",
-                    "team_away_first_half_totals_goals",
-                    "match_first_half_corners_totals",
-                    "match_first_half_cards_totals",
-                    "match_second_half_totals",
-                    "team_home_second_half_totals_goals",
-                    "team_away_second_half_totals_goals",
-                    "match_second_half_corners_totals",
-                    "match_second_half_cards_totals",
-                    "match_total_goals_odd_even",
-                    "match_highest_scoring_half",
-                    "match_most_goals_half",
-                ):
-                    out_name = normalize_totals_outcome(oc.label)
-                    if line is None:
-                        line = (
-                            parse_totals_line_from_label(bet.title)
-                            or parse_totals_line_from_label(oc.label)
-                        )
-                elif canon == "btts":
-                    out_name = normalize_btts_outcome(oc.label)
-                elif canon == "double_chance":
-                    out_name = normalize_double_chance_outcome(
-                        oc.label, home_team=home_n, away_team=away_n,
+                if canon in TOTALS_MARKETS and line is None:
+                    line = (
+                        parse_totals_line_from_label(bet.title)
+                        or parse_totals_line_from_label(oc.label)
                     )
                 outcome_name = _truncate(str(out_name), 128)
                 outcome_point = Decimal(str(line)) if line is not None else None

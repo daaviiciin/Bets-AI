@@ -34,6 +34,11 @@ class Player(Base, TimestampMixin):
     external_source: Mapped[str | None] = mapped_column(
         String(32), nullable=True, default="sofascore",
     )
+    # ID del jugador en Flashscore (stats por partido). Un jugador creado por
+    # Sofascore o Winamax puede recibirlo al emparejarse por nombre.
+    flashscore_id: Mapped[str | None] = mapped_column(
+        String(16), unique=True, nullable=True, index=True,
+    )
     nationality: Mapped[str | None] = mapped_column(String(8), nullable=True)
     position: Mapped[str | None] = mapped_column(String(16), nullable=True)
     team_id: Mapped[int | None] = mapped_column(

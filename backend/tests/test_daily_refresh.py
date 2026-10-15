@@ -1,4 +1,4 @@
-"""Tests del ``DailyRefreshOrchestrator`` con mocks de los servicios."""
+"""Tests del ``DailyRefreshOrchestrator`` con mocks de los servicios (sin red ni BD)."""
 
 from __future__ import annotations
 
@@ -13,58 +13,67 @@ from backend.services.daily_refresh import (
     DailyRefreshSummary,
 )
 from backend.services.flashscore_fixtures_ingester import FlashscoreFixturesIngestResult
+from backend.services.flashscore_results_updater import FlashscoreResultsResult
+from backend.services.flashscore_standings_ingester import StandingsIngestResult
 from backend.services.flashscore_stats_ingester import IngestResult
-from backend.services.match_results_updater import LeagueUpdateResult, UpdateSummary
+from backend.services.match_absences_ingester import AbsencesIngestResult
 from backend.services.player_match_stats_ingester import PlayerStatsIngestResult
 
+NOW = datetime.now(timezone.utc)
 
-def _make_results_updater(updated: int = 3, not_found: int = 10) -> MagicMock:
+
+def _make_fixtures_ingester() -> MagicMock:
     mock = MagicMock()
-    now = datetime.now(timezone.utc)
-    mock.update_all.return_value = UpdateSummary(
-        started_at=now,
-        finished_at=now,
-        per_league=[
-            LeagueUpdateResult(
-                league_name="Test League",
-                sport_key="test",
-                events_fetched=updated + not_found,
-                matches_updated=updated,
-                matches_already_ok=2,
-                matches_not_found=not_found,
-                skipped_unmapped=0,
-            ),
-        ],
+    mock.ingest.return_value = FlashscoreFixturesIngestResult(started_at=NOW, finished_at=NOW)
+    return mock
+
+
+def _make_fs_results_updater(updated: int = 4) -> MagicMock:
+    mock = MagicMock()
+    mock.update.return_value = FlashscoreResultsResult(
+        started_at=NOW, finished_at=NOW, matches_pending=updated, matches_updated=updated,
+    )
+    return mock
+
+
+def _make_standings_ingester(errors: list[str] | None = None) -> MagicMock:
+    mock = MagicMock()
+    mock.ingest.return_value = StandingsIngestResult(
+        started_at=NOW, finished_at=NOW, leagues_ok=["soccer_epl"], teams_upserted=20,
+        errors=errors or [],
     )
     return mock
 
 
 def _make_stats_ingester(matched: int = 2, inserted: int = 4) -> MagicMock:
     mock = MagicMock()
-    now = datetime.now(timezone.utc)
     mock.ingest_recent.return_value = IngestResult(
-        started_at=now,
-        finished_at=now,
+        started_at=NOW,
+        finished_at=NOW,
         matches_eligible=matched,
         matches_matched=matched,
-        matches_unmatched=0,
         stats_inserted=inserted,
-        stats_updated=0,
     )
     return mock
 
 
-def _make_fixtures_ingester() -> MagicMock:
+def _make_player_stats_ingester(processed: int = 0) -> MagicMock:
     mock = MagicMock()
-    now = datetime.now(timezone.utc)
-    mock.ingest.return_value = FlashscoreFixturesIngestResult(started_at=now, finished_at=now)
+    mock.ingest.return_value = PlayerStatsIngestResult(
+        started_at=NOW, finished_at=NOW, matches_processed=processed,
+    )
     return mock
 
 
-def _make_player_stats_ingester() -> MagicMock:
+def _make_absences_ingester(fetched: int = 2, saved: int = 7) -> MagicMock:
     mock = MagicMock()
-    now = datetime.now(timezone.utc)
-    mock.ingest.return_value = PlayerStatsIngestResult(started_at=now, finished_at=now)
+    mock.ingest.return_value = AbsencesIngestResult(
+        started_at=NOW,
+        finished_at=NOW,
+        matches_eligible=fetched,
+        matches_fetched=fetched,
+        absences_saved=saved,
+    )
     return mock
 
 
@@ -76,129 +85,133 @@ def _make_session() -> MagicMock:
 
 
 def _orchestrator(session: MagicMock, **kwargs: Any) -> DailyRefreshOrchestrator:
-    fixtures = kwargs.pop("fixtures_ingester", _make_fixtures_ingester())
-    player = kwargs.pop("player_stats_ingester", _make_player_stats_ingester())
-    return DailyRefreshOrchestrator(
-        session=session,
-        fixtures_ingester=fixtures,
-        player_stats_ingester=player,
-        **kwargs,
-    )
+    # Todos los servicios son mocks: los reales harían peticiones a Flashscore.
+    defaults = {
+        "fixtures_ingester": _make_fixtures_ingester,
+        "fs_results_updater": _make_fs_results_updater,
+        "standings_ingester": _make_standings_ingester,
+        "stats_ingester": _make_stats_ingester,
+        "player_stats_ingester": _make_player_stats_ingester,
+        "absences_ingester": _make_absences_ingester,
+    }
+    for name, factory in defaults.items():
+        kwargs.setdefault(name, factory())
+    return DailyRefreshOrchestrator(session=session, **kwargs)
 
 
 class TestHappyPath:
-    def test_runs_both_steps_and_commits(self) -> None:
+    def test_ejecuta_todos_los_pasos_sin_errores(self) -> None:
         session = _make_session()
-        results_mock = _make_results_updater(updated=5)
-        stats_mock = _make_stats_ingester(matched=3, inserted=6)
-        fixtures_mock = _make_fixtures_ingester()
-
+        fixtures = _make_fixtures_ingester()
+        standings = _make_standings_ingester()
+        stats = _make_stats_ingester(matched=3, inserted=6)
         orchestrator = _orchestrator(
-            session,
-            results_updater=results_mock,
-            stats_ingester=stats_mock,
-            fixtures_ingester=fixtures_mock,
+            session, fixtures_ingester=fixtures, standings_ingester=standings,
+            stats_ingester=stats,
         )
-        summary = orchestrator.run(results_max_pages=2, stats_days_back=10)
+        summary = orchestrator.run(stats_days_back=10)
 
-        fixtures_mock.ingest.assert_called_once_with(days_ahead=7, only_top5=True)
-        results_mock.update_all.assert_called_once_with(max_pages=2)
-        stats_mock.ingest_recent.assert_called_once_with(
-            days_back=10, only_top5=True, limit_matches=None,
+        fixtures.ingest.assert_called_once_with(days_ahead=7, only_top5=True)
+        standings.ingest.assert_called_once_with()
+        stats.ingest_recent.assert_called_once_with(
+            days_back=10, only_top5=True, limit_matches=40,
         )
-        assert session.commit.call_count == 5
         session.rollback.assert_not_called()
-
         assert summary.ok is True
-        assert summary.fixtures is not None
-        assert summary.results is not None and summary.results.total_updated == 5
+        assert summary.fixtures is not None and summary.fs_results is not None
+        assert summary.standings is not None and summary.standings.teams_upserted == 20
         assert summary.stats is not None and summary.stats.stats_inserted == 6
-        assert summary.duration_seconds >= 0
+        assert summary.results is None  # Sofascore ya no se ejecuta
 
-    def test_passes_stats_filters_through(self) -> None:
-        session = _make_session()
-        results_mock = _make_results_updater()
-        stats_mock = _make_stats_ingester()
-        fixtures_mock = _make_fixtures_ingester()
+    def test_pasa_filtros_de_ligas_al_calendario_y_stats(self) -> None:
+        fixtures = _make_fixtures_ingester()
+        stats = _make_stats_ingester()
         orchestrator = _orchestrator(
-            session,
-            results_updater=results_mock,
-            stats_ingester=stats_mock,
-            fixtures_ingester=fixtures_mock,
+            _make_session(), fixtures_ingester=fixtures, stats_ingester=stats,
         )
         orchestrator.run(stats_only_top5=False, stats_limit=5)
-        fixtures_mock.ingest.assert_called_once_with(days_ahead=7, only_top5=False)
-        stats_mock.ingest_recent.assert_called_once_with(
+        fixtures.ingest.assert_called_once_with(days_ahead=7, only_top5=False)
+        stats.ingest_recent.assert_called_once_with(
             days_back=120, only_top5=False, limit_matches=5,
         )
 
 
-class TestFailureIsolation:
-    def test_results_failure_does_not_block_stats(self) -> None:
-        session = _make_session()
-        results_mock = MagicMock()
-        results_mock.update_all.side_effect = RuntimeError("network down")
-        stats_mock = _make_stats_ingester(matched=4, inserted=8)
-        fixtures_mock = _make_fixtures_ingester()
-
-        orchestrator = _orchestrator(
-            session,
-            results_updater=results_mock,
-            stats_ingester=stats_mock,
-            fixtures_ingester=fixtures_mock,
+class TestFlashscoreResultsStep:
+    def test_pasa_dias_atras_y_guarda_el_resumen(self) -> None:
+        fs_mock = _make_fs_results_updater(updated=7)
+        summary = _orchestrator(_make_session(), fs_results_updater=fs_mock).run(
+            results_days_back=5,
         )
-        summary = orchestrator.run()
+        fs_mock.update.assert_called_once_with(days_back=5)
+        assert summary.fs_results is not None and summary.fs_results.matches_updated == 7
 
+
+class TestStandingsStep:
+    def test_errores_de_una_liga_se_reflejan_en_el_resumen(self) -> None:
+        standings = _make_standings_ingester(errors=["clasificación soccer_epl: HTTP 500"])
+        summary = _orchestrator(_make_session(), standings_ingester=standings).run()
         assert summary.ok is False
-        assert any("match_results_updater" in e for e in summary.errors)
-        stats_mock.ingest_recent.assert_called_once()
+        assert any("soccer_epl" in e for e in summary.errors)
+        assert summary.stats is not None  # los pasos siguientes siguen
+
+
+class TestPlayerStatsStep:
+    def test_pasa_limites_al_ingester(self) -> None:
+        players = _make_player_stats_ingester()
+        _orchestrator(_make_session(), player_stats_ingester=players).run(
+            player_stats_max_matches=12, player_stats_days_back=7,
+        )
+        players.ingest.assert_called_once_with(max_matches=12, days_back=7)
+
+    def test_fallo_no_rompe_las_bajas(self) -> None:
+        players = MagicMock()
+        players.ingest.side_effect = RuntimeError("HTTP 403")
+        summary = _orchestrator(_make_session(), player_stats_ingester=players).run()
+        assert summary.player_stats is None
+        assert summary.absences is not None
+        assert any("flashscore_player_stats_ingester" in e for e in summary.errors)
+
+
+class TestAbsencesStep:
+    def test_pasa_los_parametros_de_bajas_y_guarda_el_resumen(self) -> None:
+        absences_mock = _make_absences_ingester(fetched=3, saved=9)
+        summary = _orchestrator(_make_session(), absences_ingester=absences_mock).run(
+            absences_days_ahead=5, absences_max_matches=10,
+        )
+        absences_mock.ingest.assert_called_once_with(days_ahead=5, max_matches=10)
+        assert summary.absences is not None and summary.absences.absences_saved == 9
+
+    def test_fallo_en_bajas_no_rompe_el_resto(self) -> None:
+        absences_mock = _make_absences_ingester()
+        absences_mock.ingest.side_effect = RuntimeError("flashscore caído")
+        summary = _orchestrator(_make_session(), absences_ingester=absences_mock).run()
+        assert summary.stats is not None
+        assert summary.absences is None
+        assert any("match_absences_ingester" in e for e in summary.errors)
+
+
+class TestFailureIsolation:
+    def test_fallo_en_resultados_no_bloquea_stats(self) -> None:
+        session = _make_session()
+        fs_mock = MagicMock()
+        fs_mock.update.side_effect = RuntimeError("feed caído")
+        stats = _make_stats_ingester(inserted=8)
+        summary = _orchestrator(session, fs_results_updater=fs_mock, stats_ingester=stats).run()
+        assert summary.ok is False
+        assert any("flashscore_results_updater" in e for e in summary.errors)
         assert summary.stats is not None and summary.stats.stats_inserted == 8
         session.rollback.assert_called_once()
-        assert session.commit.call_count == 4
 
-    def test_stats_failure_does_not_break_results(self) -> None:
+    def test_dos_fallos_se_registran(self) -> None:
         session = _make_session()
-        results_mock = _make_results_updater(updated=2)
-        stats_mock = MagicMock()
-        stats_mock.ingest_recent.side_effect = ValueError("bad payload")
-        fixtures_mock = _make_fixtures_ingester()
-
-        orchestrator = _orchestrator(
-            session,
-            results_updater=results_mock,
-            stats_ingester=stats_mock,
-            fixtures_ingester=fixtures_mock,
-        )
-        summary = orchestrator.run()
-
-        assert summary.ok is False
-        assert any("flashscore_stats_ingester" in e for e in summary.errors)
-        assert summary.results is not None and summary.results.total_updated == 2
-        assert session.commit.call_count == 4
-        session.rollback.assert_called_once()
-
-    def test_both_failures_recorded(self) -> None:
-        session = _make_session()
-        results_mock = MagicMock()
-        results_mock.update_all.side_effect = RuntimeError("results boom")
-        stats_mock = MagicMock()
-        stats_mock.ingest_recent.side_effect = RuntimeError("stats boom")
-        fixtures_mock = _make_fixtures_ingester()
-
-        orchestrator = _orchestrator(
-            session,
-            results_updater=results_mock,
-            stats_ingester=stats_mock,
-            fixtures_ingester=fixtures_mock,
-        )
-        summary = orchestrator.run()
-
-        assert summary.ok is False
+        fs_mock = MagicMock()
+        fs_mock.update.side_effect = RuntimeError("results boom")
+        stats = MagicMock()
+        stats.ingest_recent.side_effect = RuntimeError("stats boom")
+        summary = _orchestrator(session, fs_results_updater=fs_mock, stats_ingester=stats).run()
         assert len(summary.errors) == 2
-        assert summary.results is None
-        assert summary.stats is None
+        assert summary.fs_results is None and summary.stats is None
         assert session.rollback.call_count == 2
-        assert session.commit.call_count == 3
 
 
 class TestSummary:
@@ -210,16 +223,9 @@ class TestSummary:
         assert s.duration_seconds == pytest.approx(30.0)
 
     def test_ok_is_true_when_no_errors(self) -> None:
-        s = DailyRefreshSummary(
-            started_at=datetime.now(timezone.utc),
-            finished_at=datetime.now(timezone.utc),
-        )
+        s = DailyRefreshSummary(started_at=NOW, finished_at=NOW)
         assert s.ok is True
 
     def test_ok_is_false_when_any_error(self) -> None:
-        s = DailyRefreshSummary(
-            started_at=datetime.now(timezone.utc),
-            finished_at=datetime.now(timezone.utc),
-            errors=["some failure"],
-        )
+        s = DailyRefreshSummary(started_at=NOW, finished_at=NOW, errors=["some failure"])
         assert s.ok is False

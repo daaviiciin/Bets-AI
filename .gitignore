@@ -72,3 +72,9 @@ desktop.ini
 #  Docker
 # =========================================================
 postgres_data/
+
+# Copias de seguridad de la BD (contienen usuarios)
+backups/
+
+# Grafo de graphify (se regenera con `graphify update .`)
+graphify-out/

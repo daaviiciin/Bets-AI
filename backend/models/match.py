@@ -67,6 +67,15 @@ class Match(Base, TimestampMixin):
     played_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )
+    # Última consulta de bajas en Flashscore. Distingue "consultado sin bajas"
+    # (sin filas en ``match_absences``) de "nunca consultado".
+    absences_fetched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    # Última consulta de stats por jugador en Flashscore (aunque viniera vacía).
+    player_stats_fetched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
 
     league: Mapped["League"] = relationship(back_populates="matches")
     home_team: Mapped["Team"] = relationship(

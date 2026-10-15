@@ -45,19 +45,24 @@ class HistoryPlan:
     to_extend: list[int] = field(default_factory=list)
 
 
-def needs_new_row(last: LastSeen | None, price: Decimal, observed_at: datetime) -> bool:
-    """Decide si la observación ``price`` en ``observed_at`` abre una fila nueva.
+def needs_new_row(
+    last: LastSeen | None, price: Decimal, *, previous_refresh_at: datetime | None,
+) -> bool:
+    """Decide si la observación ``price`` abre una fila nueva.
 
-    ``False`` significa que la fila ``last`` sigue vigente y solo se extiende
-    su ``last_seen_at`` hasta ``observed_at``.
+    ``previous_refresh_at`` es el último refresh en el que se vio este partido.
+    Si la línea no estaba en ese refresh (su ``last_seen_at`` es anterior),
+    desapareció y ha vuelto: se abre fila nueva aunque la cuota sea la misma,
+    para que el intervalo ``[first_seen_at, last_seen_at]`` no cubra el hueco.
+
+    ``False`` significa que la fila ``last`` sigue vigente y solo se extiende.
     """
     if last is None:
         return True
     if price != last.price:
         return True
-    # TODO(tú): ¿qué pasa si la línea desapareció un tiempo y vuelve con la
-    # misma cuota? Hoy se extiende la fila y el intervalo [first, last] cubre
-    # también el hueco en el que no se ofrecía.
+    if previous_refresh_at is not None and last.last_seen_at < previous_refresh_at:
+        return True
     return False
 
 
@@ -67,11 +72,19 @@ def plan_history_changes(
     *,
     observed_at: datetime,
 ) -> HistoryPlan:
-    """Compara lo observado con lo último registrado y devuelve el plan."""
+    """Compara lo observado con lo último registrado y devuelve el plan.
+
+    ``last_by_key`` debe contener todas las líneas del partido (y bookie): de
+    ahí se deduce cuándo fue el refresh anterior.
+    """
     plan = HistoryPlan()
+    previous_refresh_at = max(
+        (ls.last_seen_at for ls in last_by_key.values() if ls.last_seen_at < observed_at),
+        default=None,
+    )
     for key, price in observed.items():
         last = last_by_key.get(key)
-        if needs_new_row(last, price, observed_at):
+        if needs_new_row(last, price, previous_refresh_at=previous_refresh_at):
             plan.to_insert[key] = price
         elif last is not None:
             plan.to_extend.append(last.history_id)

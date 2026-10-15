@@ -1,11 +1,13 @@
 """CLI: pipeline diario unificado (gratis).
 
-Encadena:
+Encadena (todo desde Flashscore, ver ``backend/services/daily_refresh.py``):
 
-1. Próximos partidos desde calendario Flashscore (``matches``).
-2. Actualizar resultados (Sofascore unofficial API).
-3. Ingerir stats post-partido (Flashscore ``df_st_1``).
-4. Stats por jugador (Sofascore lineups).
+1. Próximos partidos (calendario).
+2. Resultados.
+3. Clasificación → ``team_season_stats``.
+4. Stats post-partido por equipo.
+5. Stats por jugador + totales de temporada.
+6. Bajas y dudas.
 
 Uso típico (local manual o vía cron / Task Scheduler de Windows)::
 
@@ -36,11 +38,11 @@ def _configurar_logging(level: str) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Pipeline diario: actualiza resultados + stats post-partido (gratis).",
+        description="Pipeline diario Flashscore: calendario, resultados, clasificación y stats.",
     )
     parser.add_argument(
-        "--results-max-pages", type=int, default=3,
-        help="Páginas de Sofascore por liga al actualizar resultados (default 3 ≈ 90 partidos).",
+        "--results-days-back", type=int, default=3,
+        help="Días hacia atrás del feed diario Flashscore para buscar resultados (máx. 7).",
     )
     parser.add_argument(
         "--stats-days-back", type=int, default=120,
@@ -69,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     with SessionLocal() as session:
         orchestrator = DailyRefreshOrchestrator(session, log=log)
         summary = orchestrator.run(
-            results_max_pages=args.results_max_pages,
+            results_days_back=args.results_days_back,
             stats_days_back=args.stats_days_back,
             stats_only_top5=not args.stats_all_leagues,
             stats_limit=args.stats_limit,
@@ -88,12 +90,17 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         log.info("  Fixtures Flashscore: NO EJECUTADO (ver errores)")
-    if summary.results is not None:
-        r = summary.results
-        log.info("  Resultados: actualizados=%d  ya_ok=%d  no_encontrados=%d",
-                 r.total_updated, r.total_already_ok, r.total_not_found)
+    if summary.fs_results is not None:
+        r = summary.fs_results
+        log.info("  Resultados: terminados=%d  pendientes=%d  siguen_pendientes=%d",
+                 r.matches_updated, r.matches_pending, r.still_pending)
     else:
         log.info("  Resultados: NO EJECUTADO (ver errores)")
+    if summary.standings is not None:
+        st = summary.standings
+        log.info("  Clasificación: ligas=%d  equipos=%d", len(st.leagues_ok), st.teams_upserted)
+    else:
+        log.info("  Clasificación: NO EJECUTADO (ver errores)")
     if summary.stats is not None:
         s = summary.stats
         log.info("  Stats post-partido: emparejados=%d  nuevos=%d  actualizados=%d",

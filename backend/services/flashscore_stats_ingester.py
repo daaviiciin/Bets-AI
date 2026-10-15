@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session, joinedload
 from backend.models import Match, MatchStats, Team
 from backend.models.match import MATCH_STATUS_FINISHED
 from backend.scrapers import flashscore as fs
+from backend.services.match_absences_ingester import flashscore_id_from_external_id
 from backend.services.match_results_updater import _names_match, _normalize
 
 TOP5_SPORT_KEYS = frozenset({
@@ -173,10 +174,26 @@ class FlashscoreStatsIngester:
             result.finished_at = datetime.now(timezone.utc)
             return result
 
-        # Standings publica resultados e IDs de los últimos eventos de la temporada,
-        # incluso cuando el feed diario f_-{offset} ya dejó de servirlos.
+        # Partidos creados desde Flashscore: ya tenemos su id, no hace falta buscarlos
+        # por nombre (y así también funcionan las competiciones UEFA).
+        direct = [m for m in eligible if flashscore_id_from_external_id(m.external_id)]
+        for i, match in enumerate(direct):
+            if i:
+                time.sleep(HISTORY_REQUEST_SLEEP_SECONDS)
+            result.matches_matched += 1
+            self._ingest_one(
+                match,
+                flashscore_id_from_external_id(match.external_id),
+                reversed_sides=False,
+                result=result,
+            )
+
+        # Resto (partidos de otras fuentes): standings publica resultados e IDs de los
+        # últimos eventos de la temporada, incluso cuando el feed diario ya no los sirve.
         by_league: dict[str, list[Match]] = {}
         for match in eligible:
+            if match in direct:
+                continue
             by_league.setdefault(match.league.sport_key, []).append(match)
 
         for sport_key, matches in sorted(by_league.items()):
@@ -255,49 +272,58 @@ class FlashscoreStatsIngester:
                 continue
             fs_match, reversed_sides = matched
             result.matches_matched += 1
-            try:
-                records = fs.fetch_match_statistics(fs_match.match_id)
-            except Exception as exc:  # noqa: BLE001
-                msg = f"  [ERR] {m.home_team.name} vs {m.away_team.name}: {exc}"
-                self.log.warning(msg)
-                result.errors.append(msg)
-                result.fetch_errors += 1
-                continue
+            self._ingest_one(m, fs_match.match_id, reversed_sides=reversed_sides, result=result)
 
-            try:
-                parsed = fs.parse_match_statistics(records)
-            except Exception as exc:  # noqa: BLE001
-                msg = f"  [PARSE] {m.home_team.name} vs {m.away_team.name}: {exc}"
-                self.log.warning(msg)
-                result.errors.append(msg)
-                result.parse_errors += 1
-                continue
+    def _ingest_one(
+        self,
+        m: Match,
+        fs_match_id: str,
+        *,
+        reversed_sides: bool,
+        result: IngestResult,
+    ) -> None:
+        """Descarga ``df_st`` + ``df_su`` de un partido ya identificado y lo persiste."""
+        try:
+            records = fs.fetch_match_statistics(fs_match_id)
+        except Exception as exc:  # noqa: BLE001
+            msg = f"  [ERR] {m.home_team.name} vs {m.away_team.name}: {exc}"
+            self.log.warning(msg)
+            result.errors.append(msg)
+            result.fetch_errors += 1
+            return
 
-            su_home: dict[str, int] = {}
-            su_away: dict[str, int] = {}
-            try:
-                su_recs = fs.fetch_match_summary_events(fs_match.match_id)
-                su_home, su_away = fs.parse_team_half_metrics_from_summary_events(su_recs)
-            except Exception as exc:  # noqa: BLE001
-                self.log.debug(
-                    "df_su sin datos o error para %s: %s", fs_match.match_id, exc,
-                )
+        try:
+            parsed = fs.parse_match_statistics(records)
+        except Exception as exc:  # noqa: BLE001
+            msg = f"  [PARSE] {m.home_team.name} vs {m.away_team.name}: {exc}"
+            self.log.warning(msg)
+            result.errors.append(msg)
+            result.parse_errors += 1
+            return
 
-            parsed, su_home, su_away = _orient_stats_to_database(
-                parsed,
-                su_home,
-                su_away,
-                reversed_sides=reversed_sides,
+        su_home: dict[str, int] = {}
+        su_away: dict[str, int] = {}
+        try:
+            su_recs = fs.fetch_match_summary_events(fs_match_id)
+            su_home, su_away = fs.parse_team_half_metrics_from_summary_events(su_recs)
+        except Exception as exc:  # noqa: BLE001
+            self.log.debug("df_su sin datos o error para %s: %s", fs_match_id, exc)
+
+        parsed, su_home, su_away = _orient_stats_to_database(
+            parsed,
+            su_home,
+            su_away,
+            reversed_sides=reversed_sides,
+        )
+
+        if not parsed["home"] and not parsed["away"] and not su_home and not su_away:
+            self.log.info(
+                "  [EMPTY] %s vs %s: feed sin stats (¿partido sin datos?)",
+                m.home_team.name, m.away_team.name,
             )
+            return
 
-            if not parsed["home"] and not parsed["away"] and not su_home and not su_away:
-                self.log.info(
-                    "  [EMPTY] %s vs %s: feed sin stats (¿partido sin datos?)",
-                    m.home_team.name, m.away_team.name,
-                )
-                continue
-
-            self._upsert_match_stats(m, fs_match.match_id, parsed, su_home, su_away, result)
+        self._upsert_match_stats(m, fs_match_id, parsed, su_home, su_away, result)
 
     def _match_db_to_flashscore(
         self, m: Match, fixtures: list[fs.FlashscoreMatch],
