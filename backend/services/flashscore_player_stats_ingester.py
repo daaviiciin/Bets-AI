@@ -66,7 +66,7 @@ class FlashscorePlayerStatsIngester:
         self._sleep_seconds = sleep_seconds
         self._players = PlayerResolver(session, log=self.log)
 
-    def ingest(self, *, max_matches: int = 30, days_back: int = 30) -> PlayerStatsIngestResult:
+    def ingest(self, *, max_matches: int = 30, days_back: int = 60) -> PlayerStatsIngestResult:
         started = datetime.now(timezone.utc)
         result = PlayerStatsIngestResult(started_at=started, finished_at=started)
         eligible = self._eligible(now=started, days_back=days_back)

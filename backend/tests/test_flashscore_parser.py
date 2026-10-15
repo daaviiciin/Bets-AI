@@ -39,6 +39,64 @@ SAMPLE_PAYLOAD = (
 )
 
 
+# Recorte del payload real de Coventry 4-1 Newcastle (2026-10-15), con sus 3 secciones SE.
+# En la 1ª parte no hubo tarjetas: Flashscore no lista "Yellow cards" en esa sección.
+SAMPLE_PAYLOAD_HALVES = (
+    "SE÷Match¬"
+    "~SF÷Top stats¬"
+    "~SD÷432¬SG÷Expected goals (xG)¬SH÷1.48¬SI÷1.83¬"
+    "~SD÷16¬SG÷Corner kicks¬SH÷2¬SI÷6¬"
+    "~SD÷23¬SG÷Yellow cards¬SH÷1¬SI÷1¬"
+    "~SE÷1st Half¬"
+    "~SF÷Top stats¬"
+    "~SD÷432¬SG÷Expected goals (xG)¬SH÷0.86¬SI÷1.17¬"
+    "~SD÷16¬SG÷Corner kicks¬SH÷0¬SI÷3¬"
+    "~SD÷21¬SG÷Fouls¬SH÷3¬SI÷7¬"
+    "~SE÷2nd Half¬"
+    "~SF÷Top stats¬"
+    "~SD÷432¬SG÷Expected goals (xG)¬SH÷0.62¬SI÷0.66¬"
+    "~SD÷16¬SG÷Corner kicks¬SH÷2¬SI÷3¬"
+    "~SD÷23¬SG÷Yellow cards¬SH÷1¬SI÷1¬"
+)
+
+
+class TestParseMatchStatisticsPorMitad:
+    def setup_method(self) -> None:
+        self.stats = parse_match_statistics(parse_payload(SAMPLE_PAYLOAD_HALVES))
+
+    def test_corners_por_mitad(self) -> None:
+        assert (self.stats["home"]["corners_1h"], self.stats["home"]["corners_2h"]) == (0, 2)
+        assert (self.stats["away"]["corners_1h"], self.stats["away"]["corners_2h"]) == (3, 3)
+
+    def test_totales_salen_de_la_seccion_del_partido(self) -> None:
+        assert self.stats["home"]["corners"] == 2
+        assert self.stats["away"]["corners"] == 6
+        assert self.stats["home"]["xg"] == pytest.approx(1.48)
+
+    def test_tarjeta_ausente_en_una_mitad_es_cero(self) -> None:
+        assert self.stats["home"]["yellow_cards_1h"] == 0
+        assert self.stats["home"]["yellow_cards_2h"] == 1
+        assert self.stats["home"]["red_cards_1h"] == 0
+        assert self.stats["away"]["red_cards_2h"] == 0
+
+    def test_roja_ausente_en_el_partido_es_cero(self) -> None:
+        assert self.stats["home"]["red_cards"] == 0
+        assert self.stats["away"]["red_cards"] == 0
+
+    def test_mitades_cuadran_con_el_total(self) -> None:
+        for side in ("home", "away"):
+            s = self.stats[side]
+            assert s["corners_1h"] + s["corners_2h"] == s["corners"]
+            assert s["yellow_cards_1h"] + s["yellow_cards_2h"] == s["yellow_cards"]
+
+    def test_por_mitad_no_se_guardan_otras_stats(self) -> None:
+        assert not any(k.startswith(("xg_1h", "xg_2h", "fouls_")) for k in self.stats["home"])
+
+    def test_stat_de_una_mitad_no_se_cuela_como_total_del_partido(self) -> None:
+        # "Fouls" solo viene en la sección de la 1ª parte: no es el total del partido.
+        assert "fouls" not in self.stats["home"]
+
+
 class TestPrimitiveParsers:
     def test_parse_int_basic(self) -> None:
         assert _parse_int("21") == 21

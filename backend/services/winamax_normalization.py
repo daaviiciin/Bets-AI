@@ -92,8 +92,7 @@ def _substring_team(raw: str, team: str) -> bool:
 
 
 def normalize_totals_outcome(label: str) -> str:
-    l = (label or "").strip()
-    ll = l.lower()
+    ll = (label or "").strip().lower()
     if _RE_MAS.search(ll) or ll.startswith("+") or ll.startswith("más"):
         return "Over"
     if _RE_MENOS.search(ll) or ll.startswith("-"):

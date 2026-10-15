@@ -29,7 +29,6 @@ from backend.models import (
     PlayerMatchStats,
     PlayerSeasonStats,
     Season,
-    Team,
 )
 
 router = APIRouter(prefix="/players", tags=["players"])

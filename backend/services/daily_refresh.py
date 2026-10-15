@@ -130,7 +130,7 @@ class DailyRefreshOrchestrator:
         fixtures_days_ahead: int = 7,
         results_days_back: int = 3,
         player_stats_max_matches: int = 30,
-        player_stats_days_back: int = 30,
+        player_stats_days_back: int = 60,
         absences_days_ahead: int = 3,
         absences_max_matches: int = 40,
     ) -> DailyRefreshSummary:
@@ -147,7 +147,8 @@ class DailyRefreshOrchestrator:
             resultados (máx. 7; 1 request por día).
         :param player_stats_max_matches: máximo de partidos con stats por jugador
             por ejecución (2 requests por partido).
-        :param player_stats_days_back: solo partidos jugados en los últimos N días.
+        :param player_stats_days_back: solo partidos jugados en los últimos N días
+            (60: cubre el histórico de la temporada para los props de tiros a puerta).
         :param absences_days_ahead: bajas de los partidos de los próximos N días
             (además del histórico pendiente).
         :param absences_max_matches: máximo de consultas de bajas (1 request por partido).

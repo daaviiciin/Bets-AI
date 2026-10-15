@@ -10,9 +10,9 @@ Flujo:
 3. Persiste los mercados de interés (1X2, totales, player props) en la
    tabla ``Odds``, vinculados al :class:`Snapshot` recién creado y al
    bookmaker ``winamax_es``.
-4. Para player props, hace upsert de :class:`Player` por ``external_id``
-   (Sportradar) si no existe, y vincula la cuota al jugador via
-   ``Odds.player_id``.
+4. Para player props, enlaza la cuota (``Odds.player_id``) con el jugador de uno de
+   los dos equipos del partido cuyo nombre encaje (el mismo que tiene las stats de
+   Flashscore). Si no hay ninguno, crea un :class:`Player` por id de Sportradar.
 
 En cada corrida se crean snapshots nuevos por liga; antes del ``commit``
 se purgan los antiguos (por defecto se conservan los ``N`` últimos por
@@ -41,10 +41,10 @@ from backend.models import (
     Odds,
     Player,
     Snapshot,
-    Team,
 )
 from backend.models.match import MATCH_STATUS_SCHEDULED
 from backend.scrapers import winamax as wm
+from backend.services.entity_resolver import find_unique_team_player
 from backend.services.match_results_updater import _names_match, _normalize
 from backend.services.odds_history import LineKey, OddsHistoryRecorder, line_key
 from backend.services.winamax_normalization import (
@@ -543,23 +543,16 @@ class WinamaxOddsIngester:
                 result.odds_inserted += 1
 
         # ---- 2) Player props.
-        # Mapear nombres de jugadores → home/away team_id (los Sportradar
-        # IDs no nos los vamos a guardar como external_id porque el resto
-        # de stats viene en Sofascore IDs; usamos nombre + equipo).
-        side_team_id = {
-            "home": db_match.home_team_id,
-            "away": db_match.away_team_id,
-        }
-        # Sin lineup probable, no podemos saber a qué equipo pertenece
-        # cada jugador. Hacemos un upsert "neutro": Player.team_id queda
-        # en None si no podemos confirmarlo. (En el futuro se puede
-        # enriquecer cruzando con lineups esperadas.)
+        # El prop no dice de qué equipo es el jugador: se busca entre los jugadores de los
+        # dos equipos del partido (nombre flexible, candidato único), para que la cuota
+        # quede en el mismo jugador que tiene las stats de Flashscore.
+        match_team_ids = [db_match.home_team_id, db_match.away_team_id]
         for prop in props:
             price = Decimal(str(prop.odds))
             if not self._is_storable_price(price):
                 result.odds_filtered += 1
                 continue
-            player = self._get_or_create_player(prop, result)
+            player = self._get_or_create_player(prop, result, match_team_ids)
             market = self._get_or_create_market(prop.market_key, prop.market_key, result)
             line = prop.line
             outcome_name = _truncate(self._format_outcome_name(prop), 128)
@@ -678,24 +671,30 @@ class WinamaxOddsIngester:
             return fresh
 
     def _get_or_create_player(
-        self, prop: wm.WinamaxPlayerProp, result: WinamaxIngestResult,
+        self,
+        prop: wm.WinamaxPlayerProp,
+        result: WinamaxIngestResult,
+        match_team_ids: list[int],
     ) -> Player | None:
-        # Si Winamax no nos dio external_id, buscamos por nombre simple
-        # (último recurso). De momento nos limitamos a los que sí lo traen.
-        if not prop.player_external_id:
-            # Intentar match por nombre
-            existing = self.session.scalar(
-                select(Player).where(Player.name == prop.player_name).limit(1)
-            )
-            return existing
-
-        cache_k = f"{WINAMAX_PLAYER_SOURCE}:{prop.player_external_id}"
+        cache_k = f"{WINAMAX_PLAYER_SOURCE}:{prop.player_external_id or prop.player_name}"
         cached = self._player_external_cache.get(cache_k)
         if cached is not None:
-            if prop.player_name and cached.name != prop.player_name:
-                cached.name = prop.player_name
             return cached
 
+        # 1) Jugador de uno de los dos equipos del partido (el que tiene las stats de
+        #    Flashscore). No se le renombra: su nombre viene de Flashscore/Sofascore.
+        in_match = find_unique_team_player(self.session, prop.player_name, match_team_ids)
+        if in_match is not None:
+            self._player_external_cache[cache_k] = in_match
+            return in_match
+
+        # Sin id de Winamax: último recurso por nombre exacto, sin crear nada.
+        if not prop.player_external_id:
+            return self.session.scalar(
+                select(Player).where(Player.name == prop.player_name).limit(1)
+            )
+
+        # 2) Jugador creado antes desde Winamax con el mismo id de Sportradar.
         player = self.session.scalar(
             select(Player).where(
                 Player.external_source == WINAMAX_PLAYER_SOURCE,
@@ -708,10 +707,7 @@ class WinamaxOddsIngester:
             self._player_external_cache[cache_k] = player
             return player
 
-        # Probar matching cruzado con un jugador Sofascore por nombre
-        # (mejor que crear duplicado). Si el nombre encaja exactamente y
-        # hay sólo un Player con ese nombre, lo reutilizamos pero NO le
-        # tocamos su external_id (Sofascore ya lo tiene).
+        # 3) Nombre exacto único en toda la BD (jugador que aún no tiene equipo asignado).
         existing_by_name = list(self.session.scalars(
             select(Player).where(Player.name == prop.player_name)
         ).all())

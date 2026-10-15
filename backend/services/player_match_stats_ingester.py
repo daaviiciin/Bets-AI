@@ -19,7 +19,6 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload

@@ -15,7 +15,7 @@ from backend.app.schemas.responses import (
     TeamRecentMatchOut,
     TeamStatisticsOut,
 )
-from backend.models import League, Match, MatchStats, Player, PlayerSeasonStats, Season, Team, TeamSeasonStats
+from backend.models import League, Match, MatchStats, PlayerSeasonStats, Season, Team, TeamSeasonStats
 
 router = APIRouter(prefix="/statistics", tags=["statistics"])
 
@@ -63,7 +63,6 @@ def statistics_overview(
             .order_by(PlayerSeasonStats.goals.desc().nullslast(), PlayerSeasonStats.shots_on_target.desc().nullslast())
             .limit(limit)
         ).all()) if season else []
-        team_ids = [row.team_id for row in team_rows]
         match_stats_count = db.scalar(
             select(func.count(MatchStats.id)).join(Match, Match.id == MatchStats.match_id)
             .where(Match.league_id == league.id)

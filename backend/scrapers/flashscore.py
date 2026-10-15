@@ -470,11 +470,26 @@ _STAT_MAP: dict[str, tuple[str, str]] = {
     "Tackles": ("pct_d", "tackles"),
 }
 
-# Solo estas stats se pueden desdoblar por mitad usando el texto de SF (cabeceras
-# tipo "First half"; en práctica el feed inglés apenas las usa para córners).
+# Stats que se guardan también por mitad (``corners_1h``…). ``df_st`` trae ~40 stats por
+# mitad (secciones ``SE÷1st Half`` / ``SE÷2nd Half``), pero por decisión del usuario
+# (2026-10-15) por mitad solo interesan córners y tarjetas; los goles por mitad salen de
+# ``df_su``. Si la sección existe y la stat no aparece, vale 0 (Flashscore omite los ceros).
 _STAT_KEYS_HALF_SUFFIXABLE: frozenset[str] = frozenset({
     "corners", "yellow_cards", "red_cards",
 })
+
+# Stats de recuento que Flashscore omite cuando valen 0: si el feed trae la sección, se
+# guardan como 0 en vez de quedar vacías.
+_ZERO_WHEN_MISSING: frozenset[str] = _STAT_KEYS_HALF_SUFFIXABLE
+
+
+def _period_from_se(title: str | None) -> str | None:
+    """Sección ``SE`` de ``df_st`` → ``""`` (partido), ``"_1h"``, ``"_2h"`` o ``None`` (otra)."""
+    t = (title or "").strip().lower()
+    if t in ("", "match", "partido"):
+        return ""
+    suffix = _half_suffix_from_section_title(t)
+    return suffix or None
 
 # Row labels de goles dentro de una sección de tiempo (caso futuro cuando SF
 # marque primera/segunda parte en df_st).
@@ -613,8 +628,10 @@ def parse_match_statistics(records: list[dict[str, str]]) -> dict[str, dict[str,
     repetidas (la misma stat puede listarse en varias secciones SF) se
     almacenan una sola vez (la primera ocurrencia gana salvo errores evidentes).
 
-    Si el texto de grupo ``SF`` indica primera/segunda parte, algunas estadísticas
-    (córneres/tarjetas) se guardan también como ``corners_1h``, etc.
+    El feed viene en secciones ``SE`` (``Match``, ``1st Half``, ``2nd Half``). Los totales
+    salen **solo** de ``Match``; de las mitades solo se guardan córners y tarjetas
+    (``corners_1h``, ``yellow_cards_2h``…). Si una sección existe pero no lista una de
+    esas stats de recuento, vale 0.
 
     Para stats con detalle pct+raw (``passes``), añade tres claves:
     ``passes_pct``, ``passes_completed``, ``passes_attempted``.
@@ -623,16 +640,36 @@ def parse_match_statistics(records: list[dict[str, str]]) -> dict[str, dict[str,
     away: dict[str, float | int] = {}
 
     current_sf_title: str | None = None
+    period: str | None = ""  # feeds antiguos sin SE: todo es del partido
+    periods_seen: set[str] = set()
 
     for rec in records:
+        if "SE" in rec:
+            period = _period_from_se(rec.get("SE"))
+            current_sf_title = None
         if rec.get("SF"):
             stripped = rec["SF"].strip()
             current_sf_title = stripped if stripped else None
 
         sg_raw = rec.get("SG")
-        if not sg_raw:
+        if not sg_raw or period is None:
             continue
         name = sg_raw.strip()
+
+        if name in _STAT_MAP:
+            # La sección cuenta como recibida (para rellenar ceros) si trae alguna stat conocida.
+            periods_seen.add(period)
+        if period:  # sección de una mitad: solo córners y tarjetas
+            kind, key = _STAT_MAP.get(name, ("", ""))
+            if key not in _STAT_KEYS_HALF_SUFFIXABLE:
+                continue
+            nk = key + period
+            vh, va = _parse_int(rec.get("SH")), _parse_int(rec.get("SI"))
+            if vh is not None and nk not in home:
+                home[nk] = vh
+            if va is not None and nk not in away:
+                away[nk] = va
+            continue
 
         sf_suffix = _half_suffix_from_section_title(current_sf_title)
         ac_suffix = _half_suffix_from_section_title(rec.get("AC"))
@@ -686,6 +723,12 @@ def parse_match_statistics(records: list[dict[str, str]]) -> dict[str, dict[str,
                 k = f"{key}{sub}"
                 if val is not None and k not in away:
                     away[k] = val
+
+    # Flashscore no lista los recuentos a 0: si la sección llegó, el que falta es un 0.
+    for suffix in periods_seen:
+        for key in _ZERO_WHEN_MISSING:
+            home.setdefault(key + suffix, 0)
+            away.setdefault(key + suffix, 0)
 
     return {"home": home, "away": away}
 

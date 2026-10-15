@@ -16,7 +16,6 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from backend.app.cli_utils import force_utf8_stdio
-from backend.app.config import get_settings
 from backend.app.database import get_session_factory
 from backend.models import (
     League,
@@ -192,7 +191,6 @@ def _print_standings_per_league(session: Session) -> None:
 def main() -> int:
     force_utf8_stdio()
     logging.basicConfig(level=logging.WARNING)
-    settings = get_settings()
     SessionLocal = get_session_factory()
 
     with SessionLocal() as session:

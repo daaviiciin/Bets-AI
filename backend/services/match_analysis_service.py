@@ -25,7 +25,6 @@ probablemente hay información que una de las dos fuentes no está viendo.
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -36,7 +35,6 @@ from sqlalchemy.orm import Session, joinedload
 
 from backend.models import (
     CalibrationReport,
-    League,
     Match,
     Odds,
     Player,
@@ -441,12 +439,13 @@ class MatchAnalysisService:
 
     def _fallback_no_stats(self, match: Match, note: str) -> MatchAnalysis:
         """Devuelve un análisis vacío cuando no hay stats para el partido."""
-        empty_team = lambda team: TeamSnapshot(
-            id=team.id, name=team.name,
-            matches_played=None, wins=None, draws=None, losses=None,
-            goals_for=None, goals_against=None, points=None,
-            goals_for_per_match=None, goals_against_per_match=None,
-        )
+        def empty_team(team) -> TeamSnapshot:
+            return TeamSnapshot(
+                id=team.id, name=team.name,
+                matches_played=None, wins=None, draws=None, losses=None,
+                goals_for=None, goals_against=None, points=None,
+                goals_for_per_match=None, goals_against_per_match=None,
+            )
         return MatchAnalysis(
             match_id=match.id,
             league_name=match.league.name,

@@ -21,7 +21,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.models import League, Match, Player, Season, Team, TeamSeasonStats
-from backend.services.team_name_matching import find_matching_team_id, player_name_key
+from backend.services.team_name_matching import (
+    find_matching_team_id,
+    player_name_key,
+    player_names_match,
+)
 
 FLASHSCORE_SOURCE = "flashscore"
 UEFA_SPORT_KEY_PREFIX = "soccer_uefa"
@@ -102,6 +106,25 @@ class TeamResolver:
         return f"{name} ({n})"
 
 
+def find_unique_team_player(
+    session: Session, name: str | None, team_ids: list[int],
+) -> Player | None:
+    """Jugador de ``team_ids`` cuyo nombre encaja (:func:`player_names_match`), si es único.
+
+    Se compara contra **todos** los jugadores de esos equipos: si "Gabriel" encaja con dos,
+    no se elige ninguno.
+    """
+    ids = [t for t in team_ids if t]
+    if not name or not ids:
+        return None
+    players = session.scalars(select(Player).where(Player.team_id.in_(ids))).all()
+    exact = [p for p in players if p.name == name]
+    if len(exact) == 1:
+        return exact[0]
+    matches = [p for p in players if player_names_match(name, p.name)]
+    return matches[0] if len(matches) == 1 else None
+
+
 class PlayerResolver:
     def __init__(self, session: Session, *, log: logging.Logger | None = None) -> None:
         self.session = session
@@ -133,6 +156,11 @@ class PlayerResolver:
         return player, True
 
     def _unique_name_match(self, name: str, team_id: int | None) -> Player | None:
+        if team_id is not None:
+            # Dentro del equipo, regla flexible ("Paz Nicolás" ~ "Nico Paz") con candidato único.
+            found = find_unique_team_player(self.session, name, [team_id])
+            if found is not None:
+                return found if found.flashscore_id is None else None
         key = player_name_key(name)
         if not key:
             return None

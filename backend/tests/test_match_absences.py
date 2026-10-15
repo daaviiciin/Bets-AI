@@ -11,6 +11,7 @@ from backend.scrapers.flashscore import (
     parse_missing_players,
 )
 from backend.services.match_absences_ingester import (
+    choose_absences_batch,
     dedupe_absences,
     flashscore_id_from_external_id,
     needs_absences_refresh,
@@ -134,8 +135,19 @@ class TestNeedsAbsencesRefresh:
             days_ahead=days_ahead,
         )
 
-    def test_proximo_dentro_de_la_ventana_se_consulta_siempre(self):
-        assert self._call("scheduled", NOW + timedelta(days=2), fetched=NOW) is True
+    def test_proximo_nunca_consultado_se_consulta(self):
+        assert self._call("scheduled", NOW + timedelta(days=2)) is True
+
+    def test_proximo_consultado_en_un_refresh_anterior_del_dia_no_se_repite(self):
+        consultado_a_las_9 = NOW - timedelta(hours=6)
+        assert self._call("scheduled", NOW + timedelta(days=2), fetched=consultado_a_las_9) is False
+
+    def test_proximo_consultado_ayer_se_vuelve_a_consultar(self):
+        ayer = NOW - timedelta(hours=24)
+        assert self._call("scheduled", NOW + timedelta(days=2), fetched=ayer) is True
+
+    def test_proximo_consultado_justo_hace_20_horas_se_vuelve_a_consultar(self):
+        assert self._call("scheduled", NOW + timedelta(days=1), fetched=NOW - timedelta(hours=20)) is True
 
     def test_proximo_fuera_de_la_ventana_no_se_consulta(self):
         assert self._call("scheduled", NOW + timedelta(days=5)) is False
@@ -153,6 +165,21 @@ class TestNeedsAbsencesRefresh:
 
     def test_aplazado_no_se_consulta(self):
         assert self._call("postponed", NOW + timedelta(days=1)) is False
+
+
+class TestChooseAbsencesBatch:
+    def test_proximos_primero_y_el_resto_del_cupo_al_historico(self):
+        assert choose_absences_batch(["p1", "p2"], ["h1", "h2", "h3"], 4) == ["p1", "p2", "h1", "h2"]
+
+    def test_semana_europea_reparte_en_varios_refreshes(self):
+        proximos = [f"p{i}" for i in range(61)]
+        historico = [f"h{i}" for i in range(300)]
+        # 09:00: el cupo entero para los 40 próximos más cercanos.
+        primero = choose_absences_batch(proximos, historico, 40)
+        assert primero == proximos[:40]
+        # 15:00: los 40 ya consultados no son elegibles; entran los 21 restantes + 19 del histórico.
+        segundo = choose_absences_batch(proximos[40:], historico, 40)
+        assert segundo == proximos[40:] + historico[:19]
 
 
 class TestDedupeAbsences:

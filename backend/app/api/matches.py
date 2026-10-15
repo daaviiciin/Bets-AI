@@ -18,7 +18,7 @@ from backend.app.schemas.responses import (
     TeamSnapshotOut,
     TopPlayerStatOut,
 )
-from backend.models import Bookmaker, League, Market, Match, MatchStats, Odds, Player
+from backend.models import League, Match, MatchStats, Odds
 from backend.scrapers.winamax import PLAYER_PROP_MARKETS
 from backend.services.match_analysis_service import (
     MatchAnalysis,

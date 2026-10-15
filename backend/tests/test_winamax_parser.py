@@ -17,8 +17,6 @@ import pytest
 from backend.scrapers.winamax import (
     MARKET_TYPES,
     PLAYER_PROP_MARKETS,
-    WinamaxBet,
-    WinamaxOutcome,
     WinamaxPlayerProp,
     _extract_balanced_json,
     parse_football_matches,
@@ -320,7 +318,6 @@ class TestParsePlayerProps:
         assert all(p.market_key == "player_sot_alt" for p in saka)
 
     def test_odds_match(self) -> None:
-        props = self._props()
         saka_2plus = next(
             p for p in self._props()
             if p.player_name == "Bukayo Saka" and p.line == 1.5

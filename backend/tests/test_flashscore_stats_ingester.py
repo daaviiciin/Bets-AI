@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
+from backend.services import flashscore_stats_ingester as stats_module
 from backend.services.flashscore_stats_ingester import (
+    FlashscoreStatsIngester,
     _matches_with_complete_stats,
     _orient_stats_to_database,
     _score_match_orientation,
@@ -38,6 +42,60 @@ def test_reversed_fixture_sides_are_reoriented_before_persisting() -> None:
     assert aligned["away"]["shots_on_target"] == 3
     assert aligned_home == summary_away
     assert aligned_away == summary_home
+
+
+def test_limite_se_aplica_despues_de_filtrar_top5(monkeypatch) -> None:
+    def partido(fs_id: str, sport_key: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            id=fs_id,
+            external_id=f"flashscore:{fs_id}",
+            league=SimpleNamespace(sport_key=sport_key),
+        )
+
+    # Orden de la BD: los más recientes primero, y los dos primeros son de Champions.
+    pendientes = [
+        partido("ucl1", "soccer_uefa_champs_league"),
+        partido("ucl2", "soccer_uefa_champs_league"),
+        partido("liga1", "soccer_spain_la_liga"),
+        partido("epl1", "soccer_epl"),
+    ]
+    ingester = FlashscoreStatsIngester(session=None)
+    monkeypatch.setattr(ingester, "_load_eligible_matches", lambda **_: pendientes)
+    monkeypatch.setattr(ingester, "_load_matches_without_period_stats", lambda **_: [])
+    procesados: list[str] = []
+    monkeypatch.setattr(
+        ingester, "_ingest_one", lambda match, fs_id, **_: procesados.append(fs_id),
+    )
+    monkeypatch.setattr(stats_module.time, "sleep", lambda _: None)
+
+    result = ingester.ingest_recent(only_top5=True, limit_matches=1)
+
+    assert result.matches_eligible == 1
+    assert procesados == ["liga1"]
+
+
+def test_recarga_de_mitades_va_detras_y_sin_pedir_incidencias(monkeypatch) -> None:
+    def partido(fs_id: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            id=fs_id, external_id=f"flashscore:{fs_id}",
+            league=SimpleNamespace(sport_key="soccer_epl"),
+        )
+
+    ingester = FlashscoreStatsIngester(session=None)
+    monkeypatch.setattr(ingester, "_load_eligible_matches", lambda **_: [partido("nuevo")])
+    monkeypatch.setattr(
+        ingester, "_load_matches_without_period_stats", lambda **_: [partido("antiguo")],
+    )
+    llamadas: list[tuple[str, bool]] = []
+    monkeypatch.setattr(
+        ingester, "_ingest_one",
+        lambda match, fs_id, fetch_summary=True, **_: llamadas.append((fs_id, fetch_summary)),
+    )
+    monkeypatch.setattr(stats_module.time, "sleep", lambda _: None)
+
+    ingester.ingest_recent(only_top5=True, limit_matches=40)
+
+    assert llamadas == [("nuevo", True), ("antiguo", False)]
 
 
 def test_score_fallback_requires_exact_score_and_close_kickoff() -> None:

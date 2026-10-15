@@ -6,7 +6,7 @@ Herramienta para **analizar cuotas de fútbol** (sobre todo **Winamax ES**), **c
 
 ## Qué incluye hoy
 
-1. **Pipeline de datos** (`POST /refresh/official`): calendario y enlace a partidos (**Flashscore**), enriquecimiento con evento **Sofascore**, resultados cuando el partido termina y (opcional) **estadísticas por equipo** tras el encuentro (**Flashscore** `df_st` + incidencias `df_su`: goles y tarjetas por mitad cuando el feed lo permite).
+1. **Pipeline de datos** (`POST /refresh/official` o `python -m backend.tools.daily_refresh`), todo desde **Flashscore** (Sofascore responde `403` desde octubre de 2026 y ya no se usa): calendario, resultados, clasificación, histórico de la temporada actual, **stats por equipo** (xG, tiros, córners, tarjetas… y **goles, córners y tarjetas por mitad**), **stats por jugador** (tiros a puerta, minutos, nota…) y **bajas/dudas** por partido. Las cuotas de **player props** de Winamax se enlazan con esos mismos jugadores.
 2. **Cuotas Winamax** ingeridas desde el HTML (`PRELOADED_STATE`) con **curl_cffi** (sin navegador obligatorio para el catálogo principal).
 3. **The Odds API** (opcional): capa extra de bookmakers si activas `ODDS_API_REFRESH_ENABLED` y defines `ODDS_API_KEY`.
 4. **Backend FastAPI**: partidos, cuotas, análisis por partido, value bets, calibración, jugadores, refresco.
@@ -38,7 +38,7 @@ Desactivado por defecto para no consumir créditos. Mercados típicos configurad
 
 ### Flashscore
 
-Feeds internos tipo `global.flashscore.ninja`: fixtures, **stats de partido** y **incidencias por mitad** (mejor soporte para goles/tarjetas por parte que para córners por mitad en la práctica).
+Feeds internos tipo `global.flashscore.ninja`: fixtures, página de clasificación (con todos los partidos jugados de la temporada), **stats de partido** (`df_st`, con secciones partido / 1ª parte / 2ª parte) e **incidencias** (`df_su`, goles por mitad). API GraphQL `pq_graphql` para **stats por jugador** (`epmsse`/`epmsd`) y **bajas** (`dmpe2`). Son feeds internos: no se lanzan en bucle (pueden bloquear por IP).
 
 ## Frontend (rutas)
 
@@ -75,7 +75,7 @@ Documentación interactiva: **`http://127.0.0.1:8000/docs`**.
 | `POST` | `/refresh` | Refresco Odds API (si está habilitado) |
 | `POST` | `/refresh/results` | Actualizar marcadores |
 | `POST` | `/refresh/daily` | Orquestación diaria |
-| `POST` | `/refresh/official` | **Pipeline oficial** (Flashscore + Sofascore + Winamax según flags) |
+| `POST` | `/refresh/official` | **Pipeline oficial** (Flashscore + Winamax según flags) |
 
 ## Setup local
 
@@ -132,14 +132,18 @@ npm start
 
 ### Poblar datos
 
-- Tras levantar la API: **`POST /refresh/official`** (desde Swagger o tu cliente HTTP) para sincronizar fixtures/cuotas según `.env`.
-- Stats post-partido: por ejemplo `python -m backend.tools.import_flashscore_stats` desde la raíz del repo (o el paso equivalente dentro de tu orquestación `/refresh`).
+- Tras levantar la API: **`POST /refresh/official`** (desde Swagger o tu cliente HTTP) para sincronizar fixtures y cuotas Winamax según `.env`.
+- Stats (sin cuotas): `.\.venv\Scripts\python.exe -m backend.tools.daily_refresh` desde la raíz.
+- **Refresh programado (Windows):** la tarea "Bets AI - Refresh Flashscore" lanza
+  `refresh_programado.ps1` a las 09:00, 15:00 y 21:00. Si Docker Desktop está cerrado lo abre,
+  y deja un log por día en `logs/refresh_AAAA-MM-DD.log`. Quitarla:
+  `Unregister-ScheduledTask -TaskName 'Bets AI - Refresh Flashscore'`.
 
 ### Cobertura de estadísticas de partido
 
-- Flashscore aporta xG, tiros, tiros a puerta, córners, tarjetas, pases y otras estadísticas por equipo cuando el feed del partido está disponible.
-- Para el histórico, el ingester lee IDs de partidos finalizados publicados en las páginas standings de cada competición y consulta sus feeds de estadísticas (`df_st`/`df_su`). Esto evita depender del feed diario, que solo retiene unos días.
-- Ejecuta `py -3.10 -m backend.tools.daily_refresh` con regularidad. Busca hasta 120 días y requiere estadísticas de local y visitante para marcar un partido como completo; el backfill solo puede cubrir eventos que Flashscore aún publique en su standings actual.
+- Solo **temporada actual**. Los partidos jugados salen de la página de clasificación de cada liga (sin peticiones extra) y sus stats se descargan poco a poco: por refresh, 40 partidos de stats de equipo, 30 de stats por jugador (últimos 60 días) y 40 consultas de bajas, para no arriesgar un bloqueo de IP.
+- Cada partido se consulta una vez (las bajas de los próximos, como mucho una vez al día).
+- Estado y decisiones: [HOJA_DE_RUTA.md](HOJA_DE_RUTA.md).
 - Opta/Stats Perform no ofrece estas estadísticas como un endpoint público para scrapear. Sus productos oficiales incluyen datos históricos y feeds de betting de equipos/jugadores, pero el acceso se gestiona comercialmente: [Opta Data](https://www.statsperform.com/products/opta-data/) y [Bet Trading Data](https://www.statsperform.com/products/bet-trading-data/). Si se contrata, integraríamos el feed documentado con credenciales, no raspando la web pública.
 
 ### Tests backend

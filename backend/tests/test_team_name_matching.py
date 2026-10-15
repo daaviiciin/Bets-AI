@@ -10,8 +10,43 @@ import pytest
 from backend.services.team_name_matching import (
     find_matching_team_id,
     normalize_team_name,
+    player_names_match,
     team_names_match,
 )
+
+
+class TestJugadoresMismaPersona:
+    # Parejas reales Sofascore/Winamax ↔ Flashscore sacadas de la BD el 2026-10-15.
+    @pytest.mark.parametrize(
+        ("sofascore", "flashscore"),
+        [
+            ("Nico Paz", "Paz Nicolás"),
+            ("Oli McBurnie", "McBurnie Oliver"),
+            ("Gleison Bremer", "Bremer"),
+            ("Deniz Undav", "Undav Deniz"),
+            ("Ísak Bergmann Jóhannesson", "Johannesson Isak"),
+            ("Kerim Alajbegović", "Alajbegovic Kerim-Sam"),
+            ("Willian Pacho", "Pacho Tenorio Willian Joel"),
+            ("Dani Lorenzo", "Lorenzo Daniel"),
+        ],
+    )
+    def test_encajan(self, sofascore: str, flashscore: str) -> None:
+        assert player_names_match(sofascore, flashscore)
+        assert player_names_match(flashscore, sofascore)
+
+
+class TestJugadoresDistintos:
+    @pytest.mark.parametrize(
+        ("a", "b"),
+        [
+            ("Gabriel Jesus", "Gabriel Magalhães"),
+            ("Nico Williams", "Nico Paz"),
+            ("Jo Paz", "Josep Paz"),  # "jo" es demasiado corto para contar como diminutivo
+            ("", "Paz Nicolás"),
+        ],
+    )
+    def test_no_encajan(self, a: str, b: str) -> None:
+        assert not player_names_match(a, b)
 
 
 class TestParejasReales:

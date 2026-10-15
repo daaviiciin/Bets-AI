@@ -61,7 +61,6 @@ from backend.models import (
     Odds,
     PlayerSeasonStats,
     Season,
-    Team,
     TeamSeasonStats,
 )
 from backend.services import basketball_model as bbm

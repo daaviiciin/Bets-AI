@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
 
 from backend.services.parlay_builder import (
     ParlayBuilder,
-    ParlayCandidate,
     ParlayStrategy,
     _market_family,
 )

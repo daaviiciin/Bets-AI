@@ -54,7 +54,6 @@ import sys
 from dataclasses import dataclass
 from typing import Iterable
 
-from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select

@@ -57,8 +57,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Días de ventana de feeds Flashscore para calendario próximo (default 7).",
     )
     parser.add_argument(
-        "--stats-limit", type=int, default=None,
-        help="Procesar como mucho N partidos en el paso de stats (útil para pruebas).",
+        "--stats-limit", type=int, default=40,
+        help="Procesar como mucho N partidos en el paso de stats (default 40, igual que la API; "
+             "evita lanzar cientos de peticiones a Flashscore de golpe).",
     )
     args = parser.parse_args(argv)
 

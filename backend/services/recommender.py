@@ -15,12 +15,6 @@ from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from itertools import combinations
 
-CENTIMO = Decimal("0.01")
-
-
-def _redondear(v: Decimal) -> Decimal:
-    return v.quantize(CENTIMO, rounding=ROUND_HALF_UP)
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -30,6 +24,12 @@ from backend.app.database import get_session_factory
 from backend.models import UserProfile
 from backend.services import value_calculator as vc
 from backend.services.value_detector import ValueBet, ValueDetector
+
+CENTIMO = Decimal("0.01")
+
+
+def _redondear(v: Decimal) -> Decimal:
+    return v.quantize(CENTIMO, rounding=ROUND_HALF_UP)
 
 
 @dataclass(frozen=True)

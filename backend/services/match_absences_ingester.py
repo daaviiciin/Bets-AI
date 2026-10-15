@@ -31,6 +31,9 @@ from backend.scrapers import flashscore as fs
 
 FLASHSCORE_EXTERNAL_PREFIX = "flashscore:"
 REQUEST_SLEEP_SECONDS = 1.0
+# Con 3 refreshes al día (09, 15, 21 h), 20 h = una consulta diaria por partido próximo,
+# con margen por si un refresh se retrasa.
+UPCOMING_REFETCH_AFTER = timedelta(hours=20)
 
 
 @dataclass
@@ -64,12 +67,37 @@ def needs_absences_refresh(
     now: datetime,
     days_ahead: int,
 ) -> bool:
-    """Decide si un partido necesita consultar sus bajas en este refresh."""
+    """Decide si un partido necesita consultar sus bajas en este refresh.
+
+    Los próximos se consultan como mucho una vez al día (``UPCOMING_REFETCH_AFTER``): si ya
+    se miraron en un refresh anterior del mismo día, su hueco pasa al backfill del histórico.
+    """
     if status == MATCH_STATUS_SCHEDULED:
-        return now <= commence_time <= now + timedelta(days=days_ahead)
+        if not now <= commence_time <= now + timedelta(days=days_ahead):
+            return False
+        return absences_fetched_at is None or now - absences_fetched_at >= UPCOMING_REFETCH_AFTER
     if status == MATCH_STATUS_FINISHED:
         return absences_fetched_at is None or absences_fetched_at < commence_time
     return False
+
+
+def choose_absences_batch(
+    upcoming: list[Match],
+    finished: list[Match],
+    max_matches: int,
+) -> list[Match]:
+    """Elige qué partidos se consultan en este refresh (como mucho ``max_matches``).
+
+    :param upcoming: próximos partidos (``scheduled``), ya ordenados del más cercano al más
+        lejano. Se reconsultan en cada refresh porque las bajas cambian hasta el último día.
+    :param finished: jugados que aún no tienen la foto definitiva de bajas, del más antiguo
+        al más reciente (backfill del histórico).
+
+    Los próximos van primero. Como cada uno se consulta como mucho una vez al día (ver
+    :func:`needs_absences_refresh`), en una semana con más próximos que cupo los restantes
+    entran en el siguiente refresh y los huecos libres van al histórico.
+    """
+    return (upcoming + finished)[:max_matches]
 
 
 def dedupe_absences(absences: list[fs.FlashscoreAbsence]) -> list[fs.FlashscoreAbsence]:
@@ -106,12 +134,15 @@ class MatchAbsencesIngester:
 
         eligible = self._eligible_matches(now=started, days_ahead=days_ahead)
         result.matches_eligible = len(eligible)
-        if len(eligible) > max_matches:
+        upcoming = [m for m in eligible if m.status == MATCH_STATUS_SCHEDULED]
+        finished = [m for m in eligible if m.status != MATCH_STATUS_SCHEDULED]
+        batch = choose_absences_batch(upcoming, finished, max_matches)
+        if len(eligible) > len(batch):
             self.log.info(
-                "Bajas: %d partidos elegibles, se consultan %d (max_matches).",
-                len(eligible), max_matches,
+                "Bajas: %d elegibles (%d próximos, %d jugados), se consultan %d (max_matches).",
+                len(eligible), len(upcoming), len(finished), len(batch),
             )
-        for i, match in enumerate(eligible[:max_matches]):
+        for i, match in enumerate(batch):
             if i and self._sleep_seconds:
                 time.sleep(self._sleep_seconds)
             fs_id = flashscore_id_from_external_id(match.external_id)

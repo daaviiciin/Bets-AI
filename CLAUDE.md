@@ -38,8 +38,11 @@ frontend/src/app/
 migrations/   Alembic
 ```
 
-Flujo de datos: `POST /refresh/official` → Flashscore (calendario) → Sofascore (evento) → Winamax
-(cuotas) → `graded_odds_service` calcula P(modelo) y EV → `GET /dashboard/graded-odds` → dashboard.
+Flujo de datos: `POST /refresh/official` → Flashscore (calendario, resultados, clasificación, stats de
+equipo/jugador, bajas: `services/daily_refresh.py`) → Winamax (cuotas; los props se enlazan con los
+jugadores de Flashscore) → `graded_odds_service` calcula P(modelo) y EV → `GET /dashboard/graded-odds`.
+**Sofascore ya no se usa** (responde `403` desde 2026-10); su código sigue en `scrapers/` y `services/`.
+Refresh automático: tarea de Windows → `refresh_programado.ps1` (09/15/21 h, log en `logs/`).
 
 ## Convenciones
 
@@ -91,7 +94,7 @@ app), `ui-styling` (es para shadcn/React), `gpt-taste`, `industrial-brutalist-ui
 
 ## Hoja de ruta (en este orden)
 
-1. **Ahora: scraping de estadísticas mucho más completo.** Objetivo: extraer el máximo de datos
+1. **Ahora: scraping de estadísticas mucho más completo** (ahora: stats por mitad). Objetivo: extraer el máximo de datos
    posibles (equipo, jugador, por mitad, histórico) para poder analizar más. Cada dato nuevo necesita
    modelo + migración + parser con test.
 2. **Después: mejorar UX/UI** del dashboard, cuando la fase 1 esté cerrada.

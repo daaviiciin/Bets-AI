@@ -26,7 +26,7 @@ from typing import Iterable
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from backend.models import Match, MatchStats, Team
+from backend.models import Match, MatchStats
 from backend.models.match import MATCH_STATUS_FINISHED
 from backend.scrapers import flashscore as fs
 from backend.services.match_absences_ingester import flashscore_id_from_external_id
@@ -40,6 +40,9 @@ TOP5_SPORT_KEYS = frozenset({
     "soccer_france_ligue_one",
 })
 HISTORY_REQUEST_SLEEP_SECONDS = 1.5
+# Filas capturadas antes de leer las secciones por mitad de df_st: se recargan una vez
+# (solo df_st) para rellenar córners/tarjetas por mitad. Las posteriores ya las traen.
+PERIOD_STATS_SINCE = datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc)
 
 
 # Stats clave -> tipo de columna en MatchStats. Usamos esto para asignar
@@ -164,9 +167,16 @@ class FlashscoreStatsIngester:
         started = datetime.now(timezone.utc)
         result = IngestResult(started_at=started, finished_at=started)
 
-        eligible = self._load_eligible_matches(days_back=days_back, limit=limit_matches)
+        # Primero los partidos sin stats; después, los que solo necesitan las mitades.
+        missing = self._load_eligible_matches(days_back=days_back, limit=None)
+        reload_halves = self._load_matches_without_period_stats(days_back=days_back)
+        reload_ids = {m.id for m in reload_halves}
+        eligible = missing + reload_halves
         if only_top5:
             eligible = [match for match in eligible if match.league.sport_key in TOP5_SPORT_KEYS]
+        # El límite va después del filtro: si no, los partidos UEFA ocupan cupo y se descartan.
+        if limit_matches is not None:
+            eligible = eligible[:limit_matches]
         result.matches_eligible = len(eligible)
         if not eligible:
             self.log.info("No hay partidos finalizados sin stats en los últimos %d días.",
@@ -186,6 +196,7 @@ class FlashscoreStatsIngester:
                 flashscore_id_from_external_id(match.external_id),
                 reversed_sides=False,
                 result=result,
+                fetch_summary=match.id not in reload_ids,
             )
 
         # Resto (partidos de otras fuentes): standings publica resultados e IDs de los
@@ -255,6 +266,30 @@ class FlashscoreStatsIngester:
             out = out[:limit]
         return out
 
+    def _load_matches_without_period_stats(self, *, days_back: int) -> list[Match]:
+        """Partidos de Flashscore con stats completas guardadas antes de leer las mitades."""
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
+        stale_ids = select(MatchStats.match_id).where(
+            MatchStats.corners_1h.is_(None),
+            MatchStats.captured_at < PERIOD_STATS_SINCE,
+        )
+        rows = self.session.execute(
+            select(MatchStats.match_id, MatchStats.is_home)
+            .where(MatchStats.match_id.in_(stale_ids))
+        ).all()
+        complete = _matches_with_complete_stats(rows)
+        if not complete:
+            return []
+        return list(self.session.scalars(
+            select(Match)
+            .where(Match.id.in_(complete))
+            .where(Match.external_id.like("flashscore:%"))
+            .where(Match.commence_time >= cutoff)
+            .options(joinedload(Match.home_team), joinedload(Match.away_team),
+                     joinedload(Match.league))
+            .order_by(Match.commence_time.desc())
+        ).unique().all())
+
     def _ingest_day(
         self,
         db_matches: list[Match],
@@ -281,8 +316,13 @@ class FlashscoreStatsIngester:
         *,
         reversed_sides: bool,
         result: IngestResult,
+        fetch_summary: bool = True,
     ) -> None:
-        """Descarga ``df_st`` + ``df_su`` de un partido ya identificado y lo persiste."""
+        """Descarga ``df_st`` + ``df_su`` de un partido ya identificado y lo persiste.
+
+        :param fetch_summary: ``False`` al recargar un partido que ya tiene stats solo para
+            añadir córners/tarjetas por mitad: los goles por mitad (``df_su``) ya están.
+        """
         try:
             records = fs.fetch_match_statistics(fs_match_id)
         except Exception as exc:  # noqa: BLE001
@@ -303,11 +343,12 @@ class FlashscoreStatsIngester:
 
         su_home: dict[str, int] = {}
         su_away: dict[str, int] = {}
-        try:
-            su_recs = fs.fetch_match_summary_events(fs_match_id)
-            su_home, su_away = fs.parse_team_half_metrics_from_summary_events(su_recs)
-        except Exception as exc:  # noqa: BLE001
-            self.log.debug("df_su sin datos o error para %s: %s", fs_match_id, exc)
+        if fetch_summary:
+            try:
+                su_recs = fs.fetch_match_summary_events(fs_match_id)
+                su_home, su_away = fs.parse_team_half_metrics_from_summary_events(su_recs)
+            except Exception as exc:  # noqa: BLE001
+                self.log.debug("df_su sin datos o error para %s: %s", fs_match_id, exc)
 
         parsed, su_home, su_away = _orient_stats_to_database(
             parsed,
@@ -388,9 +429,11 @@ class FlashscoreStatsIngester:
 
         for is_home, side in ((True, "home"), (False, "away")):
             stats_dict: dict[str, float | int] = dict(parsed.get(side, {}))
+            # df_su (incidencias) solo completa lo que df_st no trae: los goles por mitad, y
+            # las tarjetas por mitad en feeds sin secciones. El recuento de df_st es el oficial.
             su_extra = su_home if is_home else su_away
             for k, v in su_extra.items():
-                stats_dict[k] = v
+                stats_dict.setdefault(k, v)
             if not stats_dict:
                 continue
 

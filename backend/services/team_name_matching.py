@@ -1,4 +1,4 @@
-"""Emparejado de nombres de equipo entre fuentes (Flashscore ↔ Sofascore).
+"""Emparejado de nombres de equipo y de jugador entre fuentes (Flashscore ↔ Sofascore ↔ Winamax).
 
 Cada fuente escribe los clubes a su manera ("Bayern Munich" / "FC Bayern
 München", "Atl. Madrid" / "Atlético Madrid"). Si al insertar un partido se
@@ -104,6 +104,32 @@ def player_name_key(name: str | None) -> frozenset[str]:
     txt = "".join(c for c in txt if not unicodedata.combining(c)).lower()
     txt = re.sub(r"['’]", "", txt)
     return frozenset(re.sub(r"[.\-]", " ", txt).split())
+
+
+def _player_tokens_match(a: str, b: str) -> bool:
+    """Misma palabra, o diminutivo/forma corta como prefijo ("nico" ~ "nicolas")."""
+    return a == b or (min(len(a), len(b)) >= 3 and (a.startswith(b) or b.startswith(a)))
+
+
+def player_names_match(a: str | None, b: str | None) -> bool:
+    """``True`` si dos nombres de jugador pueden ser la misma persona.
+
+    Cada palabra del nombre más corto tiene que encajar con una palabra distinta del
+    largo, en cualquier orden: "Nico Paz" ~ "Paz Nicolás", "Bremer" ~ "Gleison Bremer",
+    "Oli McBurnie" ~ "McBurnie Oliver". Es permisiva a propósito: quien la use tiene que
+    exigir candidato **único** dentro del equipo (hay "Gabriel Jesus" y "Gabriel Magalhães").
+    """
+    ka, kb = player_name_key(a), player_name_key(b)
+    if not ka or not kb:
+        return False
+    short, long_ = sorted((sorted(ka), sorted(kb)), key=len)
+    used: set[str] = set()
+    for token in short:
+        hit = next((t for t in long_ if t not in used and _player_tokens_match(token, t)), None)
+        if hit is None:
+            return False
+        used.add(hit)
+    return True
 
 
 def find_matching_team_id(name: str, candidates: dict[int, str]) -> int | None:

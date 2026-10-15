@@ -7,7 +7,6 @@ import math
 import pytest
 
 from backend.services.poisson_model import (
-    GOAL_GRID_SIZE,
     HOME_ADVANTAGE,
     TeamLeagueAverages,
     _build_grid,

@@ -51,7 +51,7 @@ def _print_team(session: Session, team_name: str) -> None:
         print(f"    Pos. ?  PJ={ts.matches_played}  V={ts.wins}  E={ts.draws}  D={ts.losses}")
         print(f"    GF={ts.goals_for}  GC={ts.goals_against}  Diff={ts.goal_diff}  Pts={ts.points}")
 
-    print(f"\n  --- TOP 10 jugadores por SoT ---")
+    print("\n  --- TOP 10 jugadores por SoT ---")
     print(f"  {'#':>2} {'Jugador':22s} {'Pos':>3} {'Pts':>4} {'Gls':>4} {'Sh':>4} {'SoT':>4} {'SoT/90':>7} {'xG':>6}")
     rows = session.execute(
         select(
