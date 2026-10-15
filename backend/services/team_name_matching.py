@@ -49,6 +49,16 @@ _NAME_ALIASES: dict[str, str] = {
     "rennes": "stade rennais",
 }
 
+# Letras que NFKD no descompone ("Lillestrøm" → "lillestrom").
+_LETTER_FOLD = str.maketrans({"ø": "o", "æ": "ae", "œ": "oe", "ß": "ss", "ł": "l", "đ": "d", "ı": "i"})
+
+# Palabras demasiado comunes para emparejar por sí solas ("Real Madrid" ≠ "Real Sociedad").
+_WEAK_STOPWORDS: frozenset[str] = frozenset({
+    "real", "united", "city", "sporting", "athletic", "atletico", "olympique", "inter",
+    "dinamo", "dynamo", "red", "star", "union", "racing", "deportivo", "sport", "club",
+    "saint", "san", "st", "fk", "nk", "hnk", "sk", "ks", "if", "bk", "aik", "town", "rovers",
+})
+
 # Si uno de los nombres lleva alguno de estos y el otro no, son equipos distintos.
 _SQUAD_MARKERS: frozenset[str] = frozenset({"b", "ii", "w", "women", "u18", "u19", "u21", "u23"})
 
@@ -57,8 +67,8 @@ def normalize_team_name(name: str | None) -> str:
     """Forma canónica para comparar nombres de equipo de distintas fuentes."""
     if not name:
         return ""
-    txt = unicodedata.normalize("NFKD", name)
-    txt = "".join(c for c in txt if not unicodedata.combining(c)).lower()
+    txt = unicodedata.normalize("NFKD", name.lower().translate(_LETTER_FOLD))
+    txt = "".join(c for c in txt if not unicodedata.combining(c))
     txt = re.sub(r"['’]", "", txt)  # M'gladbach → mgladbach
     txt = re.sub(r"[.&\-/()]", " ", txt)
     raw_tokens = txt.split()
@@ -91,6 +101,30 @@ def team_names_match(a: str | None, b: str | None) -> bool:
         return True
     ta, tb = set(na.split()), set(nb.split())
     return ta <= tb or tb <= ta
+
+
+def team_side_score(a: str | None, b: str | None) -> int:
+    """Parecido entre dos nombres de equipo: 2 = mismo club, 1 = indicio, 0 = nada.
+
+    Sirve cuando una fuente escribe en español ("Marsella", "Sparta Praga") y otra en
+    el idioma original: el indicio es compartir una palabra distintiva ("ofi") o la raíz
+    de 4 letras de una palabra larga ("renn" en "Rennes"/"Rennais"). Solo tiene sentido
+    combinado con la hora de inicio y exigiendo un candidato único.
+    """
+    if team_names_match(a, b):
+        return 2
+    na, nb = normalize_team_name(a), normalize_team_name(b)
+    if na and nb and (na in nb or nb in na):
+        return 2
+    ta = [t for t in na.split() if t not in _WEAK_STOPWORDS]
+    tb = [t for t in nb.split() if t not in _WEAK_STOPWORDS]
+    for x in ta:
+        for y in tb:
+            if len(x) >= 3 and x == y:
+                return 1
+            if len(x) >= 4 and len(y) >= 4 and x[:4] == y[:4]:
+                return 1
+    return 0
 
 
 def player_name_key(name: str | None) -> frozenset[str]:

@@ -144,6 +144,12 @@ export function fmtDateShort(iso: string): string {
   });
 }
 
+/** Solo la hora: "14:32". */
+export function fmtTime(iso: string): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+}
+
 export function evColorClass(ev: string | number | null): string {
   const n = toNumber(ev);
   if (n >= 0.1) return 'text-brand-cyan';

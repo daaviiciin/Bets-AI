@@ -19,13 +19,16 @@ Estructura del PRELOADED_STATE
                           ``pre:playerprops:...``).
 * ``odds[outcomeId]``     cuota decimal (float).
 
-Winamax sólo expone este JSON en páginas concretas: la lista global de
-partidos no está disponible mediante XHR público desde curl; el navegador
-completa el catálogo (centenares/todavía mayor en ``sports[].mainMatchCount``)
-mediante Socket.IO (véase ``BETTING_CONFIGURATION`` en el HTML). Una petición a
-``/sport/1`` deja sólo unos ~50 stubs en ``matches`` y pocas decenas de
-fútbol, por eso competiciones muy visibles en la UI (Premier League inglesa,
-etc.) pueden no aparecer ahí hasta integrar ese canal.
+Catálogo de partidos
+--------------------
+
+El HTML de **cualquier** página solo pre-renderiza los ~50 eventos de la portada
+(unos 20 de fútbol). El resto lo pide la web por **Socket.IO** (``BETTING_CONFIGURATION``
+en el HTML: servidor ``sports-eu-west-3.winamax.es``, ruta ``/uof-sports-server/socket.io``,
+Engine.IO v3). :func:`fetch_calendar` hace lo mismo que la página "Calendario" de la web:
+emite ``["m", {"route": "calendar:24"}]`` y recibe los partidos de las próximas 24 h de
+todos los deportes, con el mismo formato que ``PRELOADED_STATE["matches"]``. Comprobado
+el 2026-10-15: 590 partidos (120 de fútbol), 36/36 de los nuestros de ese día.
 
 Cuando ``moreBets`` > nº de bets cargadas en la home, hay que pedir
 explícitamente la URL del partido para conseguir los 500+ mercados con
@@ -34,6 +37,8 @@ player props.
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import json
 import logging
 import re
@@ -45,6 +50,10 @@ from curl_cffi import requests as cf
 
 BASE_URL = "https://www.winamax.es/apuestas-deportivas"
 REQUEST_TIMEOUT = 30
+# Socket.IO de la web (``BETTING_CONFIGURATION.SOCKET_IO_SERVER`` + ``SOCKET_IO_PATH``).
+SOCKET_URL = "wss://sports-eu-west-3.winamax.es/uof-sports-server/socket.io/"
+SOCKET_TIMEOUT = 20.0
+SOCKET_MAX_BYTES = 50 * 1024 * 1024  # calendar:24 ocupa ~1 MB
 SPORT_FOOTBALL = 1
 SPORT_BASKETBALL = 2
 
@@ -193,6 +202,64 @@ def fetch_match(tournament_id: int | str, match_id: int | str) -> dict:
     """Descarga el detalle completo de un partido (todos sus mercados)."""
     url = f"{BASE_URL}/match/{tournament_id}/{match_id}"
     return fetch_state(url)
+
+
+def parse_socketio_event(frame: str) -> tuple[str, dict] | None:
+    """Frame Engine.IO v3 ``42["evento", {...}]`` → ``("evento", {...})``; otro tipo → ``None``."""
+    if not frame.startswith("42"):
+        return None
+    try:
+        data = json.loads(frame[2:])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, list) or len(data) < 2 or not isinstance(data[1], dict):
+        return None
+    return str(data[0]), data[1]
+
+
+async def _fetch_socket_route(route: str, *, timeout: float) -> dict:
+    """Una conexión: pide ``route`` y devuelve la respuesta con nuestro ``requestId``."""
+    import uuid
+
+    import websockets
+
+    request_id = uuid.uuid4().hex
+    url = f"{SOCKET_URL}?language=ES&embed=false&EIO=3&transport=websocket"
+    headers = {"Origin": "https://www.winamax.es", "User-Agent": _HEADERS["User-Agent"]}
+    async with websockets.connect(
+        url, additional_headers=headers, open_timeout=timeout, max_size=SOCKET_MAX_BYTES,
+    ) as ws:
+        sent = False
+        deadline = asyncio.get_running_loop().time() + timeout
+        while True:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise RuntimeError(f"Socket Winamax: sin respuesta a '{route}' en {timeout:.0f}s")
+            frame = str(await asyncio.wait_for(ws.recv(), remaining))
+            if frame == "2":  # ping del servidor → pong
+                await ws.send("3")
+            elif frame.startswith("40") and not sent:  # conectado al namespace
+                await ws.send("42" + json.dumps(["m", {"route": route, "requestId": request_id}]))
+                sent = True
+            event = parse_socketio_event(frame)
+            if event and event[0] == "m" and event[1].get("requestId") == request_id:
+                return event[1]
+
+
+def fetch_calendar(hours: int = 24, *, timeout: float = SOCKET_TIMEOUT) -> dict:
+    """Partidos de las próximas ``hours`` horas (todos los deportes) vía Socket.IO.
+
+    Devuelve un dict con ``matches`` en el mismo formato que ``PRELOADED_STATE``, apto para
+    :func:`parse_football_matches`. Una conexión de pocos segundos por llamada.
+    """
+    coro = _fetch_socket_route(f"calendar:{hours}", timeout=timeout)
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    # Llamado desde código asíncrono: se ejecuta en un hilo con su propio bucle.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 # ---------------------------------------------------------------------------

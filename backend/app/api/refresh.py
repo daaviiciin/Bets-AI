@@ -18,7 +18,7 @@ from backend.services.refresh_service import (
     DEFAULT_STALE_MATCH_BUFFER_HOURS,
     RefreshService,
 )
-from backend.services.winamax_odds_ingester import WinamaxOddsIngester
+from backend.services.winamax_odds_ingester import WinamaxIngestResult, WinamaxOddsIngester
 
 router = APIRouter(prefix="/refresh", tags=["refresh"])
 log = logging.getLogger(__name__)
@@ -385,7 +385,60 @@ def refresh_official_pipeline(
     t1 = datetime.now(timezone.utc)
     pipeline_ok = dsum.ok and not wres.errors
 
-    winamax_out = WinamaxIngestSummaryOut(
+    return OfficialPipelineSummaryOut(
+        started_at=t0.isoformat(),
+        finished_at=t1.isoformat(),
+        duration_seconds=(t1 - t0).total_seconds(),
+        ok=pipeline_ok,
+        daily=_daily_refresh_summary_to_out(dsum),
+        winamax=_winamax_summary_to_out(wres),
+    )
+
+
+class OddsRefreshOut(BaseModel):
+    """Resumen de ``POST /refresh/odds`` (solo cuotas Winamax)."""
+    finished_at: str
+    ok: bool
+    winamax: WinamaxIngestSummaryOut
+
+
+# Alguien espera delante de la pantalla: descargas en paralelo, como un navegador (que abre
+# hasta 6 conexiones por web). La tarea programada va de una en una con 1 s de pausa.
+INTERACTIVE_FETCH_WORKERS = 4
+
+
+@router.post("/odds", response_model=OddsRefreshOut)
+def refresh_odds(
+    days_ahead: int = Query(
+        2, ge=1, le=7, description="Partidos programados de los próximos N días (default hoy y mañana).",
+    ),
+    max_matches: int = Query(200, ge=1, le=220, description="Tope de partidos por corrida."),
+    db: Session = Depends(get_db),
+) -> OddsRefreshOut:
+    """Solo cuotas Winamax (top 5 + competiciones europeas), sin Flashscore.
+
+    Es lo que usa el botón del dashboard (~15 s con una jornada europea completa). Stats,
+    resultados, clasificación y bajas los trae la tarea programada (09/15/21 h).
+    """
+    ingester = WinamaxOddsIngester(
+        db, log=log, settings=get_settings(), fetch_workers=INTERACTIVE_FETCH_WORKERS,
+    )
+    wres = ingester.ingest_upcoming(
+        days_ahead=days_ahead,
+        max_matches=max_matches,
+        only_top5=False,
+        sport="football",
+        commit=True,
+    )
+    return OddsRefreshOut(
+        finished_at=datetime.now(timezone.utc).isoformat(),
+        ok=not wres.errors,
+        winamax=_winamax_summary_to_out(wres),
+    )
+
+
+def _winamax_summary_to_out(wres: WinamaxIngestResult) -> WinamaxIngestSummaryOut:
+    return WinamaxIngestSummaryOut(
         matches_in_db=wres.matches_in_db,
         matches_matched=wres.matches_matched,
         matches_unmatched=wres.matches_unmatched,
@@ -396,13 +449,4 @@ def refresh_official_pipeline(
         odds_carried_forward=wres.odds_carried_forward,
         duration_seconds=wres.duration_seconds,
         errors=wres.errors,
-    )
-
-    return OfficialPipelineSummaryOut(
-        started_at=t0.isoformat(),
-        finished_at=t1.isoformat(),
-        duration_seconds=(t1 - t0).total_seconds(),
-        ok=pipeline_ok,
-        daily=_daily_refresh_summary_to_out(dsum),
-        winamax=winamax_out,
     )

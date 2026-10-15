@@ -764,10 +764,25 @@ def list_graded_winamax_odds(
                 model_summary_lines=summ,
             )
         )
-        if len(out) >= max_lines:
-            break
 
-    return out
+    return keep_best_lines(out, max_lines)
+
+
+def keep_best_lines(lines: list[GradedOddsLine], max_lines: int) -> list[GradedOddsLine]:
+    """Si hay más de ``max_lines``, se quedan las de mayor EV del modelo (sin EV, al final).
+
+    Antes el tope cortaba por orden de recorrido y podía dejar fuera justo las líneas con
+    valor. Se conserva el orden original de las que quedan.
+    """
+    if len(lines) <= max_lines:
+        return lines
+    ranked = sorted(
+        range(len(lines)),
+        key=lambda i: (lines[i].model_ev is not None, lines[i].model_ev or Decimal("0")),
+        reverse=True,
+    )
+    keep = set(ranked[:max_lines])
+    return [line for i, line in enumerate(lines) if i in keep]
 
 
 def summarize_winamax_odds_coverage(

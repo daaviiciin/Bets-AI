@@ -15,6 +15,7 @@ import {
   MatchAnalysis,
   MatchPlayerProps,
   MatchStats,
+  OddsRefreshSummary,
   OfficialPipelineSummary,
   Odds,
   RecommendationSet,
@@ -205,6 +206,11 @@ export class ApiService {
       params = params.set('winamax_max_matches', String(opts.winamaxMaxMatches));
     }
     return this.http.post<OfficialPipelineSummary>(`${this.base}/refresh/official`, null, { params });
+  }
+
+  /** Solo cuotas Winamax de hoy y mañana (~1 min). Las stats las trae la tarea programada. */
+  refreshOdds(): Observable<OddsRefreshSummary> {
+    return this.http.post<OddsRefreshSummary>(`${this.base}/refresh/odds`, null);
   }
 
   getLatestCalibration(): Observable<CalibrationReport> {

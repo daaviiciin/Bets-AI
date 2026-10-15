@@ -1,7 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { of } from 'rxjs';
-import { catchError, finalize, switchMap } from 'rxjs/operators';
+import { finalize } from 'rxjs/operators';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
@@ -13,6 +12,7 @@ import {
   fmtDateShort,
   fmtOdds,
   fmtPct,
+  fmtTime,
   isOddsBelowLongshotCeiling,
   isOddsInLaymanRange,
   LAYMAN_ODDS_MAX,
@@ -20,7 +20,14 @@ import {
   outcomeLabel,
   toNumber,
 } from '../../core/format';
-import { GradedOddsLine, Match, Odds, SavedParlayLegPersist, ValueBetConfidence } from '../../core/models';
+import {
+  GradedOddsLine,
+  Match,
+  Odds,
+  OddsRefreshSummary,
+  SavedParlayLegPersist,
+  ValueBetConfidence,
+} from '../../core/models';
 
 interface Kpi {
   label: string;
@@ -133,7 +140,9 @@ export class Dashboard {
 
   protected readonly loading = signal(true);
   protected readonly busy = signal(false);
-  protected readonly scrapingOfficial = signal(false);
+  protected readonly refreshingOdds = signal(false);
+  /** Resultado de la última actualización de cuotas (se muestra junto al botón). */
+  protected readonly oddsStatus = signal<{ ok: boolean; text: string } | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly matches = signal<Match[]>([]);
   protected readonly selectedMatch = signal<Match | null>(null);
@@ -483,35 +492,43 @@ export class Dashboard {
     };
   }
 
-  /** Pipeline oficial en servidor + tabla calificada (sin mostrar logs de pipeline en UI). */
-  protected runOfficialPipelineThenLoadBets(): void {
+  /**
+   * Solo cuotas Winamax de hoy y mañana (~1 min). Antes lanzaba el pipeline completo
+   * (Flashscore + backfill, ~4 min); eso ya lo hace la tarea programada (09/15/21 h).
+   * La lista de partidos sigue usable mientras tanto.
+   */
+  protected refreshOdds(): void {
     if (this.busy()) return;
     this.busy.set(true);
-    this.scrapingOfficial.set(true);
-    this.loading.set(true);
-    this.error.set(null);
+    this.refreshingOdds.set(true);
+    this.oddsStatus.set(null);
+    const done = () => {
+      this.refreshingOdds.set(false);
+      this.busy.set(false);
+    };
+    this.api.refreshOdds().subscribe({
+      next: (res) => {
+        done();
+        this.oddsStatus.set({ ok: res.ok, text: this.oddsStatusText(res) });
+        this.reloadJornada();
+      },
+      error: (err) => {
+        done();
+        this.oddsStatus.set({
+          ok: false,
+          text: `No se pudieron actualizar las cuotas: ${this.formatError(err)}`,
+        });
+      },
+    });
+  }
 
-    this.api
-      .refreshOfficialPipeline({
-        statsDaysBack: 120,
-        statsAllLeagues: true,
-        fixturesDaysAhead: 14,
-        winamaxDaysAhead: 3,
-        winamaxMaxMatches: 200,
-      })
-      .pipe(
-        catchError(() => of(null)),
-        switchMap(() => this.api.listMatches({ scope: 'target', daysAhead: 7, limit: 500 })),
-        finalize(() => {
-          this.scrapingOfficial.set(false);
-          this.busy.set(false);
-          this.loading.set(false);
-        }),
-      )
-      .subscribe({
-        next: (data) => this.matches.set(data),
-        error: (err) => this.error.set(this.formatError(err)),
-      });
+  private oddsStatusText(res: OddsRefreshSummary): string {
+    const w = res.winamax;
+    if (w.matches_matched === 0) {
+      return `${fmtTime(res.finished_at)} · Winamax no tiene cuotas para los partidos de hoy y mañana`;
+    }
+    const failed = w.matches_failed ? ` · ${w.matches_failed} con error` : '';
+    return `Cuotas actualizadas a las ${fmtTime(res.finished_at)} · ${w.matches_matched} partidos${failed}`;
   }
 
   protected reloadSuggestionsOnly(): void {

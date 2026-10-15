@@ -1,14 +1,89 @@
 # Hoja de ruta — Bets AI
 
-Última actualización: 2026-10-14
+Última actualización: 2026-10-15
 
 | Fase | Objetivo | Estado |
 |---|---|---|
-| **1** | Scraping de estadísticas mucho más completo | **En curso**. Migración a Flashscore hecha y verificada; backfill en marcha solo (3 refreshes/día). Ahora: **stats por mitad** (ver "Cierre de la fase 1" → reabierta) |
-| 2 | Mejorar UX/UI del dashboard | Pendiente (se reabrió la fase 1 el 2026-10-15 antes de empezar) |
+| **1** | Scraping de estadísticas mucho más completo | **Falta 1 tarea** para cerrarla: cuotas Winamax por liga vía WebSocket (ver "▶️ Siguiente tarea"). El backfill de stats termina solo (3 refreshes/día) |
+| 2 | Mejorar UX/UI del dashboard | Empezada (crítica hecha, nota 13/40; siguiente paso: `/impeccable init`). En pausa hasta cerrar la fase 1 |
 | 3 | Mejorar el modelo estadístico y crear el modelo de predicción de apuestas | Pendiente |
 
 Regla: no se empieza una fase hasta cerrar la anterior, salvo decisión explícita.
+
+---
+
+## ▶️ Siguiente tarea (para cerrar la fase 1): cuotas de Winamax por liga vía WebSocket
+
+**Anotado el 2026-10-15 a mediodía; el usuario lo retoma esa tarde.**
+
+### El problema
+
+Winamax **sí tiene cuotas** de partidos de dentro de varios días (p. ej. el 15/10 ya había
+cuotas en su web de partidos del 18/10), pero en el dashboard, al pulsar uno de esos partidos,
+**no sale ninguna cuota**. Hoy solo sabemos descubrir partidos por dos vías y ninguna llega:
+
+| Vía | Qué trae | Límite |
+|---|---|---|
+| HTML de cualquier página (`PRELOADED_STATE`) | ~50 eventos de la portada (~20 de fútbol) | Selección fija de Winamax |
+| Socket `calendar:24` | Todos los partidos de las **próximas 24 h** (590; 120 de fútbol) | Solo 24 h |
+
+Además, el refresh solo intenta los partidos de la BD de **hoy y mañana** (`--days-ahead 2` en
+`refresh_programado.ps1` y `days_ahead=2` por defecto en `POST /refresh/odds`).
+
+### Objetivo
+
+Pedir por el socket **la lista de partidos de cada liga que seguimos** (top 5 + UEFA), igual que
+hace la web al abrir la página de una competición, para tener todos los partidos con cuotas
+publicadas aunque sean de dentro de 3–7 días. Después, ampliar `days_ahead` a 7.
+
+### Ids de Winamax ya identificados (fútbol, de `categories`/`tournaments` de la portada)
+
+| Liga | País (`categoryId`) | Torneo (`tournamentId`) |
+|---|---|---|
+| Premier League | 1 (Inglaterra) | 1 |
+| LaLiga | 32 (España) | 36 |
+| Bundesliga | 30 (Alemania) | 42 (ojo: 29 es la de **Austria**, cat. 17) |
+| Serie A | 31 (Italia) | 33 |
+| Ligue 1 | 7 (Francia) | 4 |
+| Champions League | 800000542 (Europa) | 151665 (comprobar: la 217 de la cat. 800000485 parece de otro deporte) |
+| Europa League | 800000542 (Europa) | 10909 |
+| Conference League | 800000542 (Europa) | 151677 |
+
+URL web de una competición: `/apuestas-deportivas/sport/1/<categoryId>/<tournamentId>`. Su
+HTML **no** trae los partidos de la liga (devuelve los mismos 50 de la portada; comprobado con la
+Europa League), por eso hay que ir al socket.
+
+### Lo que ya sabemos del socket (sacado del bundle `main.*.js` de su web)
+
+- Servidor: `wss://sports-eu-west-3.winamax.es/uof-sports-server/socket.io/?language=ES&embed=false&EIO=3&transport=websocket`
+  (Socket.IO v2, sin autenticación). Implementado en `scrapers/winamax.py`
+  (`_fetch_socket_route(route)`, `fetch_calendar`, `parse_socketio_event`).
+- Protocolo: el servidor envía `0{…}` y `40`; se pide con `42["m",{"route":"…","requestId":"…"}]`;
+  la respuesta llega como `42["m",{…,"requestId":"…"}]`; `2` → contestar `3` (ping/pong).
+- Rutas confirmadas: `calendar:24` (funciona), `match:<matchId>` (la usa la página de partido),
+  `history` (apuestas del usuario, requiere sesión).
+- En el bundle, los menús usan claves `sport:1`, `sport:1-category:32`,
+  `sport:1-category:32-tournament:36`. **No está confirmado** que sean rutas del socket.
+
+### Cómo continuar
+
+1. Buscar en el bundle (y en los chunks `./index.*.js` que carga bajo demanda, la página de
+   competición puede estar en uno de ellos) dónde la página `/sports/:sportId/:categoryId/:tournamentId`
+   hace `jr.send({route: …})`. Pistas: el `ASK_BET_FILTER_ROUTE` (`r={route:a}`) y quien llama
+   a `menuSetKey`. Candidatas a probar: `tournament:36`, `sport:1-category:32-tournament:36`,
+   `category:32`, `sport:1`.
+2. Probar **1 conexión** con la ruta candidata para una liga (p. ej. LaLiga) y guardar la
+   respuesta. Comprobar que `parse_football_matches` la lee y que trae partidos de >24 h.
+3. Implementar `fetch_tournament(tournament_id)` y en el ingester pedir las 8 ligas de la tabla
+   (8 mensajes por la misma conexión o 8 conexiones cortas), unirlas con
+   `merge_winamax_matches` y mantener la caída a home + calendario si falla.
+4. Subir `days_ahead` a 7 en `refresh_programado.ps1` y en `POST /refresh/odds`, y medir el
+   tiempo del botón (hoy ~30 s con 36 partidos; con 7 días pueden ser 80–100 partidos → valorar
+   saltar los actualizados hace < 15 min, propuesta pendiente de respuesta del usuario).
+5. Tests con una respuesta real recortada (como `CALENDAR_FRAME` en `test_winamax_matching.py`).
+
+Si `calendar:<horas>` acepta más de 24 (p. ej. `calendar:168`), sería una alternativa más
+simple: probarlo también (no se ha probado; la web solo usa 24).
 
 ---
 
@@ -261,6 +336,63 @@ cuotas Winamax (limitación previa: el overview HTTP solo trae ~17 partidos).
 
 **Sofascore devuelve `403 challenge`** → sustituido todo por Flashscore (fase 1 cerrada el
 2026-10-15, ver "Cierre de la fase 1" al principio de este archivo).
+
+## Cuotas Winamax de los partidos del día (2026-10-15)
+
+El usuario necesita como mínimo las cuotas de los partidos que se juegan hoy.
+
+- **Diagnóstico:** el HTML de Winamax (`PRELOADED_STATE`) solo trae los ~50 eventos de su
+  portada (22 de fútbol), **pida la página que se pida** (comprobado con la de la Europa League:
+  `/sport/1/800000542/10909` devuelve los mismos ids; el estado dice 20 partidos y trae 13). El
+  resto lo carga la web por Socket.IO. Además se perdían partidos que sí llegaban por los
+  nombres en español ("Marsella", "Friburgo", "Sparta Praga", "Lillestrøm").
+- **Hecho:** segundo intento de emparejado por hora de inicio (±10 min) + `team_side_score`
+  (2 = mismo club, 1 = palabra distintiva o raíz de 4 letras; ignora "real", "united"…) con
+  ganador único; "ø/æ/ß…" normalizados. Portada del día: 11 → 17 emparejados, 0 errores.
+  Tests en `test_winamax_matching.py`. 416 en verde.
+- **Hecho:** la tarea programada (09/15/21 h) también trae las cuotas de **hoy y mañana**
+  (`import_winamax_props --days-ahead 2 --all-leagues`): ~1 + N partidos peticiones. De paso da
+  tres tomas diarias para el historial de cuotas (CLV en la fase 3).
+- **Resultado con solo el HTML:** Europa League 8 → 13 de 18 y Conference 2 → 3 de 18.
+- **Hecho — Socket.IO de Winamax** (el usuario lo considera un mínimo indispensable):
+  - Protocolo sacado del bundle de su web (`main.*.js`): Socket.IO v2 (`EIO=3`) en
+    `wss://sports-eu-west-3.winamax.es/uof-sports-server/socket.io/`, sin autenticación; se emite
+    `42["m", {"route": "calendar:24", "requestId": …}]` (lo que hace su página "Calendario") y
+    responde con los partidos de las próximas 24 h de todos los deportes (590; 120 de fútbol)
+    en el mismo formato que `PRELOADED_STATE`.
+  - `scrapers/winamax.py`: `fetch_calendar()` + `parse_socketio_event()`; el ingester une home +
+    calendario (`merge_winamax_matches`) y, si el socket falla, sigue solo con la home.
+  - 1 s de pausa entre descargas de detalle de partido (ahora son ~40 por corrida).
+  - `websockets==16.1.1` añadido a `requirements.txt`.
+  - **Resultado: 36 de 36 partidos de hoy con cuotas** (EL 18/18, ECL 18/18), 4.657 cuotas
+    (584 de jugadores), 57 s. Los de liga del viernes/sábado entran en los refreshes de las
+    15:00 y 21:00 (el calendario cubre 24 h). Tests: `test_winamax_matching.py`. 428 en verde.
+- **Hecho — tope de `/dashboard/graded-odds`** (4.000 por defecto): antes cortaba por orden de
+  recorrido; ahora, si sobra, se quedan las de mayor EV (`keep_best_lines`). Calificar las 4.657
+  tarda ~1 s.
+- **Para la fase 3:** hoy **ninguna** línea de Europa League/Conference tiene P del modelo (0 de
+  4.657): el Poisson usa las stats de temporada de la liga y las competiciones UEFA no tienen.
+- Incidencia: la API (arrancada con `py -3.10` desde `start_bets_ai.bat`, **no** el `.venv`) se
+  quedó colgada tras una recarga automática a mitad de petición; hubo que reiniciarla.
+  Causa (confirmada la 2ª vez): con `--reload`, al cambiar un `.py` uvicorn deja de aceptar
+  peticiones y **espera a que termine la que está en curso**; si es "Actualizar jornada"
+  (~4 min), toda la app parece desconectada de la BD durante ese tiempo.
+
+### Botón del dashboard: "Actualizar jornada" → "Actualizar cuotas" (2026-10-15)
+
+- Queja del usuario: "antes era instantáneo". Antes no había backfill pendiente y Winamax daba
+  ~7 partidos; hoy el botón lanzaba el pipeline completo (stats 40 + jugadores 30 + bajas 40 +
+  Winamax 36) ≈ **4 min**, bloqueando "Recargar partidos".
+- Hecho: `POST /refresh/odds` (solo Winamax, hoy y mañana, top 5 + UEFA) y el botón lo usa. Las
+  stats las trae la tarea programada. El resultado se muestra junto al botón ("Cuotas
+  actualizadas a las 12:30 · 36 partidos", o el error) en vez de tragarse los fallos, y la lista
+  de partidos sigue usable mientras tanto. Helper `fmtTime` en `core/format.ts`.
+- Descargas de detalle en paralelo para el botón (`fetch_workers=4`); la tarea programada sigue
+  de una en una con 1 s de pausa. Guardado en BD siempre en serie (la sesión no es multihilo).
+- Medido con 36 partidos: **4 min → 29–34 s**. Desglose: páginas de partido 16,9 s (~1,3 s
+  cada una, son pesadas), socket 7 s (~1 MB), BD 3,7 s, portada 1,2 s.
+- Frontend: compila. `app.spec.ts` tiene 2 tests que **ya fallaban antes** (falta configurar el
+  router en el test); pendiente de arreglar.
 
 ## Fase 2 — UX/UI (en curso desde 2026-10-15)
 

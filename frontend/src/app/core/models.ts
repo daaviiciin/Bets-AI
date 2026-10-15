@@ -560,6 +560,13 @@ export interface WinamaxIngestSummary {
   errors: string[];
 }
 
+/** Resumen de ``POST /refresh/odds``: solo cuotas Winamax (botón del dashboard). */
+export interface OddsRefreshSummary {
+  finished_at: string;
+  ok: boolean;
+  winamax: WinamaxIngestSummary;
+}
+
 /** Pipeline oficial: diario (Sofascore + Flashscore) + Winamax. */
 export interface OfficialPipelineSummary {
   started_at: string;

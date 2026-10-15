@@ -23,7 +23,9 @@ liga, véase ``WINAMAX_SNAPSHOT_RETENTION``): las odds ligadas borran por
 from __future__ import annotations
 
 import logging
+import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -45,6 +47,7 @@ from backend.models import (
 from backend.models.match import MATCH_STATUS_SCHEDULED
 from backend.scrapers import winamax as wm
 from backend.services.entity_resolver import find_unique_team_player
+from backend.services.team_name_matching import team_side_score
 from backend.services.match_results_updater import _names_match, _normalize
 from backend.services.odds_history import LineKey, OddsHistoryRecorder, line_key
 from backend.services.winamax_normalization import (
@@ -55,6 +58,10 @@ from backend.services.winamax_normalization import (
 )
 
 DEFAULT_TIME_WINDOW_HOURS = 4
+# Segundo intento de emparejado: misma hora de inicio (Flashscore y Winamax coinciden al minuto).
+KICKOFF_FALLBACK_WINDOW = timedelta(minutes=10)
+# Pausa entre descargas de detalle de partido (con el calendario completo son ~40 por corrida).
+MATCH_REQUEST_SLEEP_SECONDS = 1.0
 WINAMAX_BOOKMAKER_KEY = "winamax_es"
 WINAMAX_BOOKMAKER_TITLE = "Winamax (ES)"
 WINAMAX_PLAYER_SOURCE = "winamax-sr"  # Sportradar IDs vienen vía Winamax
@@ -152,6 +159,9 @@ class WinamaxOddsIngester:
         fetch_overview=wm.fetch_football_overview,
         fetch_overview_basketball=wm.fetch_basketball_overview,
         fetch_match=wm.fetch_match,
+        fetch_calendar=wm.fetch_calendar,
+        sleep_seconds: float = MATCH_REQUEST_SLEEP_SECONDS,
+        fetch_workers: int = 1,
     ) -> None:
         self.session = session
         self.log = log or logging.getLogger(__name__)
@@ -159,6 +169,9 @@ class WinamaxOddsIngester:
         self._fetch_overview = fetch_overview
         self._fetch_overview_bb = fetch_overview_basketball
         self._fetch_match = fetch_match
+        self._fetch_calendar = fetch_calendar
+        self._sleep_seconds = sleep_seconds
+        self._fetch_workers = max(1, fetch_workers)
         self._history = OddsHistoryRecorder(session)
 
         self._bookmaker: Bookmaker | None = None
@@ -215,6 +228,17 @@ class WinamaxOddsIngester:
             self.log.info("Descargando home Winamax fútbol…")
             overview = self._fetch_overview()
             wm_matches = wm.parse_football_matches(overview)
+            # La home solo trae ~20 partidos de fútbol; el resto llega por Socket.IO.
+            try:
+                calendar = self._fetch_calendar()
+                wm_matches = merge_winamax_matches(
+                    wm_matches, wm.parse_football_matches(calendar),
+                )
+            except Exception as exc:  # noqa: BLE001
+                self.log.warning(
+                    "Calendario Winamax (Socket.IO) no disponible: %s. Se sigue solo con la "
+                    "home (~20 partidos de fútbol).", exc,
+                )
         self.log.info(
             "Winamax: %d partidos disponibles (sport=%s).",
             len(wm_matches), sport,
@@ -224,10 +248,8 @@ class WinamaxOddsIngester:
                 (m.tournament_name or "(sin nombre)").strip() for m in wm_matches
             )
             self.log.warning(
-                "Cobertura Winamax muy baja para fútbol (%s partidos en el overview). "
-                "La SPA sólo SSR ~50 líneas globales en ``matches``: la Premier inglesa y "
-                "otras ligas suelen llegar por Socket.IO, no están en esta descarga HTTP. "
-                "Histograma (liga→n): %s",
+                "Cobertura Winamax muy baja para fútbol (%s partidos). ¿Falló el calendario "
+                "por Socket.IO? Histograma (liga→n): %s",
                 len(wm_matches),
                 dict(by_tournament.most_common(12)),
             )
@@ -237,17 +259,26 @@ class WinamaxOddsIngester:
         self._scrape_started_at = datetime.now(timezone.utc)
         self._scraped_match_ids_by_league: dict[int, set[int]] = {}
 
-        # 4. Match a match.
+        # 4. Emparejar, descargar el detalle de cada partido y guardarlo.
+        pairs: list[tuple[Match, wm.WinamaxMatchInfo]] = []
         for db_match in upcoming:
             wm_info = self._find_winamax_match(db_match, wm_matches)
             if wm_info is None:
                 result.matches_unmatched += 1
-                continue
+            else:
+                pairs.append((db_match, wm_info))
+        states = self._download_match_states([info for _, info in pairs])
+
+        # La sesión de BD no es compartible entre hilos: el guardado va siempre en serie.
+        for db_match, wm_info in pairs:
             db_mid = db_match.id
             wm_mid = wm_info.match_id
             try:
+                state = states[wm_mid]
+                if isinstance(state, Exception):
+                    raise state
                 snapshot = self._get_or_create_snapshot(db_match.league_id, result)
-                self._ingest_one_match(db_match, wm_info, snapshot, result)
+                self._ingest_one_match(db_match, wm_info, snapshot, result, state)
                 result.matches_matched += 1
                 self._scraped_match_ids_by_league.setdefault(db_match.league_id, set()).add(db_match.id)
             except Exception as exc:  # noqa: BLE001
@@ -302,6 +333,31 @@ class WinamaxOddsIngester:
             self.session.commit()
         result.finished_at = datetime.now(timezone.utc)
         return result
+
+    def _download_match_states(
+        self, infos: list[wm.WinamaxMatchInfo],
+    ) -> dict[str, dict | Exception]:
+        """Página de detalle de cada partido (~1,3 s cada una): ``match_id`` → estado o error.
+
+        Con ``fetch_workers == 1`` va de una en una con ``sleep_seconds`` de pausa (tarea
+        programada, nadie espera). Con más, descarga en paralelo como haría un navegador
+        (botón del dashboard): 36 partidos pasan de ~1 min a ~15 s.
+        """
+        def fetch(info: wm.WinamaxMatchInfo) -> dict | Exception:
+            try:
+                return self._fetch_match(info.tournament_id, info.match_id)
+            except Exception as exc:  # noqa: BLE001
+                return exc
+
+        if self._fetch_workers <= 1:
+            out: dict[str, dict | Exception] = {}
+            for i, info in enumerate(infos):
+                if i and self._sleep_seconds:
+                    time.sleep(self._sleep_seconds)
+                out[info.match_id] = fetch(info)
+            return out
+        with ThreadPoolExecutor(max_workers=self._fetch_workers) as pool:
+            return dict(zip((i.match_id for i in infos), pool.map(fetch, infos)))
 
     def _carry_forward_odds_from_previous_snapshot(
         self,
@@ -474,7 +530,12 @@ class WinamaxOddsIngester:
             candidates.append((delta, wmi))
 
         if not candidates:
-            return None
+            # Winamax escribe en español ("Marsella", "Sparta Praga"): segundo intento por
+            # hora de inicio + parecido de nombres, con candidato único.
+            return pick_winamax_match_by_kickoff(
+                db_match.home_team.name, db_match.away_team.name,
+                db_match.commence_time, wm_matches,
+            )
         candidates.sort(key=lambda x: x[0])
         return candidates[0][1]
 
@@ -484,13 +545,13 @@ class WinamaxOddsIngester:
         wm_info: wm.WinamaxMatchInfo,
         snapshot: Snapshot,
         result: WinamaxIngestResult,
+        state: dict,
     ) -> None:
+        """Guarda las cuotas de un partido a partir de su página ya descargada (``state``)."""
         self.log.info(
             "Match db=%s wm=%s: %s vs %s",
             db_match.id, wm_info.match_id, wm_info.home_team, wm_info.away_team,
         )
-        # Detalle completo del partido (con player props).
-        state = self._fetch_match(wm_info.tournament_id, wm_info.match_id)
         bets = wm.parse_match_bets(state, wm_info.match_id)
         props = wm.parse_player_props(bets)
 
@@ -766,6 +827,50 @@ class WinamaxOddsIngester:
         if prop.side == "under":
             return f"{prop.player_name} under {prop.line}"
         return f"{prop.player_name} {prop.side} {prop.line}"
+
+
+def merge_winamax_matches(
+    *lists: list[wm.WinamaxMatchInfo],
+) -> list[wm.WinamaxMatchInfo]:
+    """Une catálogos de Winamax sin repetir partido; gana la primera aparición.
+
+    La home va primero porque trae ``tournament_name``; el calendario del socket solo
+    trae ``tournamentId``.
+    """
+    seen: dict[str, wm.WinamaxMatchInfo] = {}
+    for matches in lists:
+        for m in matches:
+            seen.setdefault(m.match_id, m)
+    return sorted(seen.values(), key=lambda m: (m.kickoff, m.match_id))
+
+
+def pick_winamax_match_by_kickoff(
+    home: str,
+    away: str,
+    kickoff: datetime,
+    wm_matches: list[wm.WinamaxMatchInfo],
+    *,
+    window: timedelta = KICKOFF_FALLBACK_WINDOW,
+) -> wm.WinamaxMatchInfo | None:
+    """Partido de Winamax que empieza a la misma hora y cuyos equipos se parecen.
+
+    Puntúa cada lado con :func:`team_side_score` (2 = mismo club, 1 = indicio) y exige
+    al menos 2 en total y un **único** mejor candidato: en una jornada europea empiezan
+    18 partidos a la vez, así que un empate significa que no hay forma segura de elegir.
+    """
+    scored: list[tuple[int, wm.WinamaxMatchInfo]] = []
+    for wmi in wm_matches:
+        if abs(wmi.kickoff - kickoff) > window:
+            continue
+        score = team_side_score(home, wmi.home_team) + team_side_score(away, wmi.away_team)
+        if score >= 2:
+            scored.append((score, wmi))
+    if not scored:
+        return None
+    scored.sort(key=lambda x: x[0], reverse=True)
+    if len(scored) > 1 and scored[0][0] == scored[1][0]:
+        return None
+    return scored[0][1]
 
 
 def _truncate(text: str, max_len: int) -> str:

@@ -9,20 +9,31 @@
             Selecciona un partido de las cinco grandes ligas o de las competiciones UEFA para consultar sus cuotas Winamax.
           </p>
         </div>
-        <div class="flex flex-wrap gap-3 shrink-0">
-          <button type="button" (click)="runOfficialPipelineThenLoadBets()" [disabled]="busy()"
-                  class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-brand-cyan/12 border border-brand-cyan/35 text-brand-cyan hover:bg-brand-cyan/18 transition-all disabled:opacity-45">
-            @if (busy()) {
-              <span class="size-4 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin"></span>
-              <span>Sincronizando...</span>
-            } @else {
-              <span>Actualizar jornada</span>
+        <div class="flex flex-col gap-2 shrink-0 lg:items-end">
+          <div class="flex flex-wrap gap-3">
+            <button type="button" (click)="refreshOdds()" [disabled]="busy()"
+                    class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-brand-cyan/12 border border-brand-cyan/35 text-brand-cyan hover:bg-brand-cyan/18 transition-all disabled:opacity-45">
+              @if (refreshingOdds()) {
+                <span class="size-4 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>
+                <span>Actualizando cuotas...</span>
+              } @else {
+                <span>Actualizar cuotas</span>
+              }
+            </button>
+            <button type="button" (click)="reloadJornada()" [disabled]="busy()"
+                    class="inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-medium bg-brand-bg-panel/80 border border-brand-blue/25 text-brand-muted hover:border-brand-cyan/30 hover:bg-brand-bg-panel transition-all disabled:opacity-45">
+              Recargar partidos
+            </button>
+          </div>
+          <p class="text-xs min-h-4" role="status"
+             [class.text-brand-muted]="oddsStatus()?.ok !== false"
+             [class.text-rose-300]="oddsStatus()?.ok === false">
+            @if (refreshingOdds()) {
+              Descargando cuotas de Winamax (hoy y mañana), puede tardar un minuto...
+            } @else if (oddsStatus(); as status) {
+              {{ status.text }}
             }
-          </button>
-          <button type="button" (click)="reloadJornada()" [disabled]="busy()"
-                  class="inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-medium bg-brand-bg-panel/80 border border-brand-blue/25 text-brand-muted hover:border-brand-cyan/30 hover:bg-brand-bg-panel transition-all disabled:opacity-45">
-            Recargar partidos
-          </button>
+          </p>
         </div>
       </div>
     </div>
@@ -32,7 +43,7 @@
     @if (loading()) {
       <div class="flex flex-col items-center justify-center py-28 gap-5 text-brand-muted">
         <span class="size-11 border-[3px] border-brand-cyan/35 border-t-brand-cyan rounded-full animate-spin"></span>
-        <p class="text-sm">{{ scrapingOfficial() ? 'Sincronizando jornada...' : 'Cargando partidos...' }}</p>
+        <p class="text-sm">Cargando partidos...</p>
       </div>
     } @else if (error()) {
       <div class="rounded-2xl border border-rose-500/35 bg-rose-950/20 px-8 py-7 text-center max-w-xl mx-auto">
