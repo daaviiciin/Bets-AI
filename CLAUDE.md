@@ -95,11 +95,10 @@ app), `ui-styling` (es para shadcn/React), `gpt-taste`, `industrial-brutalist-ui
 
 ## Hoja de ruta (en este orden)
 
-1. **Ahora: scraping de estadísticas mucho más completo.** Falta 1 tarea para cerrarla: cuotas de
-   Winamax por liga vía WebSocket (ver "▶️ Siguiente tarea" en HOJA_DE_RUTA.md). El backfill sigue solo. Objetivo: extraer el máximo de datos
-   posibles (equipo, jugador, por mitad, histórico) para poder analizar más. Cada dato nuevo necesita
-   modelo + migración + parser con test.
-2. **Después: mejorar UX/UI** del dashboard (empezada: crítica hecha; en pausa hasta cerrar la fase 1).
+1. **Cerrada (2026-10-16): scraping de estadísticas mucho más completo.** Última tarea: cuotas de
+   Winamax por liga vía WebSocket (`tournament:<id>`, 5 días vista). El backfill de stats sigue solo.
+   Cada dato nuevo que se añada necesita modelo + migración + parser con test.
+2. **Ahora: mejorar UX/UI** del dashboard (crítica hecha; siguiente paso `/impeccable init`).
 3. **Por último: mejorar el modelo estadístico** y empezar el **modelo de predicción de apuestas**.
 
 **El detalle, el diagnóstico, el estado de cada bloque y las decisiones pendientes están en

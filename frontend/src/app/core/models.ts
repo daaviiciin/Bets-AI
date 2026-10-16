@@ -551,6 +551,8 @@ export interface WinamaxIngestSummary {
   matches_matched: number;
   matches_unmatched: number;
   matches_failed: number;
+  /** Emparejados pero no descargados: sus cuotas se leyeron hace poco (botón). */
+  matches_skipped_fresh?: number;
   snapshots_created: number;
   snapshots_pruned?: number;
   odds_inserted: number;

@@ -493,7 +493,8 @@ export class Dashboard {
   }
 
   /**
-   * Solo cuotas Winamax de hoy y mañana (~1 min). Antes lanzaba el pipeline completo
+   * Solo cuotas Winamax de los próximos 5 días (~1 min la primera vez; las siguientes
+   * pulsaciones saltan los partidos leídos hace poco). Antes lanzaba el pipeline completo
    * (Flashscore + backfill, ~4 min); eso ya lo hace la tarea programada (09/15/21 h).
    * La lista de partidos sigue usable mientras tanto.
    */
@@ -524,11 +525,15 @@ export class Dashboard {
 
   private oddsStatusText(res: OddsRefreshSummary): string {
     const w = res.winamax;
+    const fresh = w.matches_skipped_fresh ?? 0;
     if (w.matches_matched === 0) {
-      return `${fmtTime(res.finished_at)} · Winamax no tiene cuotas para los partidos de hoy y mañana`;
+      return fresh
+        ? `${fmtTime(res.finished_at)} · Las cuotas ya estaban al día (${fresh} partidos)`
+        : `${fmtTime(res.finished_at)} · Winamax no tiene cuotas para los partidos de los próximos 5 días`;
     }
     const failed = w.matches_failed ? ` · ${w.matches_failed} con error` : '';
-    return `Cuotas actualizadas a las ${fmtTime(res.finished_at)} · ${w.matches_matched} partidos${failed}`;
+    const skipped = fresh ? ` · ${fresh} ya al día` : '';
+    return `Cuotas actualizadas a las ${fmtTime(res.finished_at)} · ${w.matches_matched} partidos${skipped}${failed}`;
   }
 
   protected reloadSuggestionsOnly(): void {

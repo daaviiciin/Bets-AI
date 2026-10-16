@@ -1,15 +1,18 @@
 """Tests del emparejado Winamax ↔ BD por hora de inicio + parecido de nombres (sin BD ni red).
 
-Parejas reales de la jornada europea del 2026-10-15: Winamax escribe en español.
+Parejas reales de la jornada europea del 2026-10-15: Winamax escribe en español. También el
+protocolo del socket y el catálogo por ligas (``tournament:<id>``), con respuestas simuladas.
 """
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from backend.scrapers.winamax import (
+    SocketRouteCollector,
     WinamaxMatchInfo,
     parse_football_matches,
     parse_socketio_event,
@@ -18,7 +21,9 @@ from backend.services.team_name_matching import team_side_score
 from backend.services.winamax_odds_ingester import (
     WinamaxOddsIngester,
     merge_winamax_matches,
+    needs_odds_refresh,
     pick_winamax_match_by_kickoff,
+    winamax_tournament_ids,
 )
 
 T0 = datetime(2026, 10, 15, 19, 0, tzinfo=timezone.utc)
@@ -149,3 +154,119 @@ class TestPickWinamaxMatchByKickoff:
     def test_empate_entre_candidatos_no_elige_ninguno(self) -> None:
         dobles = [wm_match("a", "Sparta Praga", "X"), wm_match("b", "Sparta Rotterdam", "Y")]
         assert pick_winamax_match_by_kickoff("Sparta Prague", "Z", T0, dobles) is None
+
+
+class TestSocketRouteCollector:
+    def _collector(self, routes: list[str]) -> SocketRouteCollector:
+        ids = iter(["r1", "r2", "r3"])
+        return SocketRouteCollector(routes, new_request_id=lambda: next(ids))
+
+    def test_pide_todas_las_rutas_al_conectar_y_solo_una_vez(self) -> None:
+        c = self._collector(["tournament:36", "tournament:1"])
+        assert c.on_frame('0{"sid":"x"}') == []
+        enviados = [parse_socketio_event(f) for f in c.on_frame("40")]
+        assert enviados == [
+            ("m", {"route": "tournament:36", "requestId": "r1"}),
+            ("m", {"route": "tournament:1", "requestId": "r2"}),
+        ]
+        assert c.on_frame("40") == []
+
+    def test_contesta_al_ping(self) -> None:
+        assert self._collector(["calendar:24"]).on_frame("2") == ["3"]
+
+    def test_cada_respuesta_va_a_su_ruta_y_las_ajenas_se_ignoran(self) -> None:
+        c = self._collector(["tournament:36", "tournament:1"])
+        c.on_frame("40")
+        c.on_frame('42["m",{"requestId":"r2","matches":{}}]')
+        c.on_frame('42["m",{"requestId":"de-otro","matches":{}}]')
+        assert list(c.responses) == ["tournament:1"]
+        assert c.pending == ["tournament:36"]
+
+    def test_rutas_repetidas_se_piden_una_vez(self) -> None:
+        assert len(self._collector(["tournament:36", "tournament:36"]).on_frame("40")) == 1
+
+
+def wm_state(*partidos: tuple[int, int, str, datetime]) -> dict:
+    """Respuesta mínima del socket: ``(matchId, tournamentId, "Local - Visitante", inicio)``."""
+    matches = {}
+    for mid, tid, title, start in partidos:
+        home, away = title.split(" - ")
+        matches[str(mid)] = {
+            "matchId": mid, "sportId": 1, "tournamentId": tid, "title": title,
+            "competitor1Name": home, "competitor2Name": away, "matchStart": int(start.timestamp()),
+        }
+    return {"matches": matches}
+
+
+class TestCatalogoPorLigas:
+    def _ingester(self, torneos, calendario, pedidos: list[list[int]]) -> WinamaxOddsIngester:
+        def fake_tournaments(ids: list[int]) -> dict:
+            pedidos.append(list(ids))
+            if isinstance(torneos, Exception):
+                raise torneos
+            return torneos
+
+        def fake_calendar() -> dict:
+            if isinstance(calendario, Exception):
+                raise calendario
+            return calendario
+
+        return WinamaxOddsIngester(
+            session=None, fetch_tournaments=fake_tournaments, fetch_calendar=fake_calendar,
+        )
+
+    def test_solo_se_piden_ligas_conocidas_sin_repetir(self) -> None:
+        claves = ["soccer_spain_la_liga", "soccer_epl", "soccer_spain_la_liga", None, "otra"]
+        assert winamax_tournament_ids(claves) == [1, 36]
+
+    def test_trae_partidos_de_dentro_de_varios_dias_y_une_con_el_calendario(self) -> None:
+        pedidos: list[list[int]] = []
+        derbi = (1, 36, "Sevilla - Real Betis", T0 + timedelta(days=5))
+        ing = self._ingester(
+            {"36": wm_state(derbi)}, wm_state((2, 999, "Brann - Molde", T0), derbi), pedidos,
+        )
+        catalogo = ing._socket_catalog({"soccer_spain_la_liga"})
+        assert pedidos == [[36]]
+        assert [m.match_id for m in catalogo] == ["2", "1"]  # sin repetir, por hora de inicio
+
+    def test_si_fallan_las_ligas_queda_el_calendario(self) -> None:
+        ing = self._ingester(RuntimeError("timeout"), wm_state((2, 999, "Brann - Molde", T0)), [])
+        assert [m.match_id for m in ing._socket_catalog({"soccer_epl"})] == ["2"]
+
+    def test_si_falla_el_calendario_quedan_las_ligas(self) -> None:
+        leeds = (3, 1, "Leeds United - Everton", T0 + timedelta(days=3))
+        ing = self._ingester({"1": wm_state(leeds)}, RuntimeError("timeout"), [])
+        assert [m.match_id for m in ing._socket_catalog({"soccer_epl"})] == ["3"]
+
+    def test_sin_ligas_conocidas_no_se_piden_torneos(self) -> None:
+        pedidos: list[list[int]] = []
+        self._ingester({}, wm_state(), pedidos)._socket_catalog({None, "otra"})
+        assert pedidos == []
+
+    def test_avisa_si_una_liga_con_partidos_en_bd_llega_vacia(
+        self, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        ing = self._ingester({"151665": {"matches": {}}}, wm_state(), [])
+        with caplog.at_level(logging.WARNING):
+            ing._socket_catalog({"soccer_uefa_champs_league"})
+        assert "soccer_uefa_champs_league" in caplog.text
+
+
+class TestNeedsOddsRefresh:
+    """Mínimos que debe cumplir cualquier criterio de frescura (margen de 15 min)."""
+
+    def test_partido_nunca_leido_se_descarga(self) -> None:
+        assert needs_odds_refresh(T0 + timedelta(days=3), None, T0, fresh_minutes=15)
+
+    def test_leido_hace_5_min_y_dentro_de_3_dias_se_salta(self) -> None:
+        leido = T0 - timedelta(minutes=5)
+        assert not needs_odds_refresh(T0 + timedelta(days=3), leido, T0, fresh_minutes=15)
+
+    def test_leido_hace_20_min_se_descarga(self) -> None:
+        leido = T0 - timedelta(minutes=20)
+        assert needs_odds_refresh(T0 + timedelta(hours=2), leido, T0, fresh_minutes=15)
+
+    def test_cerca_del_inicio_el_margen_baja_a_5_min(self) -> None:
+        leido = T0 - timedelta(minutes=6)
+        assert needs_odds_refresh(T0 + timedelta(minutes=90), leido, T0, fresh_minutes=15)
+        assert not needs_odds_refresh(T0 + timedelta(days=1), leido, T0, fresh_minutes=15)

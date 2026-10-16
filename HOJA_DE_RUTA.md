@@ -1,18 +1,18 @@
 # Hoja de ruta — Bets AI
 
-Última actualización: 2026-10-15
+Última actualización: 2026-10-16
 
 | Fase | Objetivo | Estado |
 |---|---|---|
-| **1** | Scraping de estadísticas mucho más completo | **Falta 1 tarea** para cerrarla: cuotas Winamax por liga vía WebSocket (ver "▶️ Siguiente tarea"). El backfill de stats termina solo (3 refreshes/día) |
-| 2 | Mejorar UX/UI del dashboard | Empezada (crítica hecha, nota 13/40; siguiente paso: `/impeccable init`). En pausa hasta cerrar la fase 1 |
+| 1 | Scraping de estadísticas mucho más completo | ✅ **Cerrada el 2026-10-16** (última tarea: cuotas Winamax por liga vía WebSocket, 5 días vista). El backfill de stats termina solo (3 refreshes/día) |
+| **2** | Mejorar UX/UI del dashboard | **Siguiente** (crítica hecha, nota 13/40; siguiente paso: `/impeccable init`) |
 | 3 | Mejorar el modelo estadístico y crear el modelo de predicción de apuestas | Pendiente |
 
 Regla: no se empieza una fase hasta cerrar la anterior, salvo decisión explícita.
 
 ---
 
-## ▶️ Siguiente tarea (para cerrar la fase 1): cuotas de Winamax por liga vía WebSocket
+## ✅ Hecho (cerró la fase 1): cuotas de Winamax por liga vía WebSocket
 
 **Anotado el 2026-10-15 a mediodía; el usuario lo retoma esa tarde.**
 
@@ -84,6 +84,32 @@ Europa League), por eso hay que ir al socket.
 
 Si `calendar:<horas>` acepta más de 24 (p. ej. `calendar:168`), sería una alternativa más
 simple: probarlo también (no se ha probado; la web solo usa 24).
+
+### Estado (2026-10-16): hecho y verificado (el usuario pulsó "Actualizar cuotas": funciona)
+
+- **Ruta confirmada** por el usuario en DevTools: al abrir LaLiga la web envía
+  `42["m",{"route":"tournament:36","requestId":"…"}]` y la respuesta trae `matches`, `bets`,
+  `outcomes`… (mismo formato que `PRELOADED_STATE`). La URL del socket lleva además
+  `version=3.71.0` (`SOCKET_CLIENT_VERSION`). Claude no pudo probarla: el clasificador de permisos
+  bloquea descargar el bundle y conectarse al socket desde la sesión.
+- `scrapers/winamax.py`: `SocketRouteCollector` (protocolo sin red, testeado) +
+  `_fetch_socket_routes` (todas las rutas por **una** conexión) + `fetch_tournaments(ids)`.
+- Ingester: `WINAMAX_TOURNAMENT_IDS` (sport_key → torneo); `_socket_catalog` une home +
+  ligas con partidos en la ventana + `calendar:24`; si una fuente falla sigue con las demás.
+  Log por liga: `Winamax por liga (Socket.IO): {liga: "N hasta dd/mm"}` y aviso si una liga
+  con partidos en BD llega vacía (para detectar un id de torneo mal puesto).
+- **5 días** en `refresh_programado.ps1` (`--days-ahead 5`) y en `POST /refresh/odds`.
+- Botón: `skip_fresh_minutes=15` → no descarga los partidos con cuotas frescas según
+  `needs_odds_refresh` (**la escribe el usuario**); conservan sus cuotas por el arrastre del
+  snapshot anterior. El dashboard muestra "· N ya al día".
+- **Probado contra Winamax (2026-10-16, 1 conexión, 0,4 s): 8/8 ligas responden** y los 8 ids
+  son correctos (Champions 151665, Europa League 10909 y Conference 151677 confirmados). Cada liga
+  trae ~2 jornadas: Premier 21, LaLiga 22, Bundesliga 19, Serie A 21, Ligue 1 19 partidos (desde
+  hoy), Champions 18 (desde el 20/10), Europa League 18 y Conference 10 (desde el 22/10). Además
+  llegan 1 "MultiFútbol <liga>" (torneo 9000068xx) y 1 entrada de ganador de la competición
+  (inicio a final de temporada) por liga; no emparejan con la BD y se ignoran.
+- `needs_odds_refresh`: nunca leído → se descarga; si empieza en < 2 h, margen de 5 min; si no,
+  15 min. 444 tests en verde.
 
 ---
 

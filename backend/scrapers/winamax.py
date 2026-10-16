@@ -30,6 +30,11 @@ emite ``["m", {"route": "calendar:24"}]`` y recibe los partidos de las próximas
 todos los deportes, con el mismo formato que ``PRELOADED_STATE["matches"]``. Comprobado
 el 2026-10-15: 590 partidos (120 de fútbol), 36/36 de los nuestros de ese día.
 
+Para ir más allá de 24 h, :func:`fetch_tournaments` hace lo que la página de una competición:
+``["m", {"route": "tournament:36"}]`` (LaLiga; visto en DevTools el 2026-10-16) devuelve todos
+los partidos de esa liga con cuota publicada, aunque sean de dentro de varios días. Todas las
+rutas van por una sola conexión (:class:`SocketRouteCollector` empareja por ``requestId``).
+
 Cuando ``moreBets`` > nº de bets cargadas en la home, hay que pedir
 explícitamente la URL del partido para conseguir los 500+ mercados con
 player props.
@@ -52,6 +57,9 @@ BASE_URL = "https://www.winamax.es/apuestas-deportivas"
 REQUEST_TIMEOUT = 30
 # Socket.IO de la web (``BETTING_CONFIGURATION.SOCKET_IO_SERVER`` + ``SOCKET_IO_PATH``).
 SOCKET_URL = "wss://sports-eu-west-3.winamax.es/uof-sports-server/socket.io/"
+# Versión de su web que va en la URL del socket (vista en DevTools el 2026-10-16). Sin ella
+# también responde; se manda para pedir lo mismo que un navegador.
+SOCKET_CLIENT_VERSION = "3.71.0"
 SOCKET_TIMEOUT = 20.0
 SOCKET_MAX_BYTES = 50 * 1024 * 1024  # calendar:24 ocupa ~1 MB
 SPORT_FOOTBALL = 1
@@ -217,33 +225,87 @@ def parse_socketio_event(frame: str) -> tuple[str, dict] | None:
     return str(data[0]), data[1]
 
 
-async def _fetch_socket_route(route: str, *, timeout: float) -> dict:
-    """Una conexión: pide ``route`` y devuelve la respuesta con nuestro ``requestId``."""
-    import uuid
+class SocketRouteCollector:
+    """Protocolo de una conexión que pide varias rutas (sin red, para poder testearlo).
 
+    Por cada frame del servidor, :meth:`on_frame` dice qué contestar: ``2`` (ping) → ``3``;
+    ``40`` (conectado) → una petición ``42["m", {"route", "requestId"}]`` por ruta. Las
+    respuestas se guardan en :attr:`responses` según su ``requestId``.
+    """
+
+    def __init__(self, routes: Iterable[str], *, new_request_id=None) -> None:
+        import uuid
+
+        make_id = new_request_id or (lambda: uuid.uuid4().hex)
+        self._route_by_id = {make_id(): route for route in dict.fromkeys(routes)}
+        self._sent = False
+        self.responses: dict[str, dict] = {}
+
+    @property
+    def pending(self) -> list[str]:
+        """Rutas que aún no han recibido respuesta."""
+        return [r for r in self._route_by_id.values() if r not in self.responses]
+
+    def on_frame(self, frame: str) -> list[str]:
+        """Procesa un frame recibido y devuelve los frames que hay que enviar."""
+        if frame == "2":
+            return ["3"]
+        if frame.startswith("40"):
+            if self._sent:
+                return []
+            self._sent = True
+            return [
+                "42" + json.dumps(["m", {"route": route, "requestId": rid}])
+                for rid, route in self._route_by_id.items()
+            ]
+        event = parse_socketio_event(frame)
+        if event and event[0] == "m":
+            route = self._route_by_id.get(event[1].get("requestId"))
+            if route is not None:
+                self.responses[route] = event[1]
+        return []
+
+
+async def _fetch_socket_routes(routes: Iterable[str], *, timeout: float) -> dict[str, dict]:
+    """Una conexión: pide todas las ``routes`` y devuelve ``ruta → respuesta``.
+
+    Las rutas que no respondan en ``timeout`` segundos no aparecen en el resultado.
+    """
     import websockets
 
-    request_id = uuid.uuid4().hex
-    url = f"{SOCKET_URL}?language=ES&embed=false&EIO=3&transport=websocket"
+    collector = SocketRouteCollector(routes)
+    url = (
+        f"{SOCKET_URL}?language=ES&version={SOCKET_CLIENT_VERSION}"
+        "&embed=false&EIO=3&transport=websocket"
+    )
     headers = {"Origin": "https://www.winamax.es", "User-Agent": _HEADERS["User-Agent"]}
     async with websockets.connect(
         url, additional_headers=headers, open_timeout=timeout, max_size=SOCKET_MAX_BYTES,
     ) as ws:
-        sent = False
-        deadline = asyncio.get_running_loop().time() + timeout
-        while True:
-            remaining = deadline - asyncio.get_running_loop().time()
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while collector.pending:
+            remaining = deadline - loop.time()
             if remaining <= 0:
-                raise RuntimeError(f"Socket Winamax: sin respuesta a '{route}' en {timeout:.0f}s")
-            frame = str(await asyncio.wait_for(ws.recv(), remaining))
-            if frame == "2":  # ping del servidor → pong
-                await ws.send("3")
-            elif frame.startswith("40") and not sent:  # conectado al namespace
-                await ws.send("42" + json.dumps(["m", {"route": route, "requestId": request_id}]))
-                sent = True
-            event = parse_socketio_event(frame)
-            if event and event[0] == "m" and event[1].get("requestId") == request_id:
-                return event[1]
+                break
+            try:
+                frame = str(await asyncio.wait_for(ws.recv(), remaining))
+            except asyncio.TimeoutError:
+                break
+            for out in collector.on_frame(frame):
+                await ws.send(out)
+    return collector.responses
+
+
+def _run_sync(coro):
+    """Ejecuta ``coro`` desde código síncrono, aunque ya haya un bucle de asyncio en marcha."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    # Llamado desde código asíncrono: se ejecuta en un hilo con su propio bucle.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 def fetch_calendar(hours: int = 24, *, timeout: float = SOCKET_TIMEOUT) -> dict:
@@ -252,14 +314,27 @@ def fetch_calendar(hours: int = 24, *, timeout: float = SOCKET_TIMEOUT) -> dict:
     Devuelve un dict con ``matches`` en el mismo formato que ``PRELOADED_STATE``, apto para
     :func:`parse_football_matches`. Una conexión de pocos segundos por llamada.
     """
-    coro = _fetch_socket_route(f"calendar:{hours}", timeout=timeout)
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    # Llamado desde código asíncrono: se ejecuta en un hilo con su propio bucle.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(asyncio.run, coro).result()
+    route = f"calendar:{hours}"
+    responses = _run_sync(_fetch_socket_routes([route], timeout=timeout))
+    if route not in responses:
+        raise RuntimeError(f"Socket Winamax: sin respuesta a '{route}' en {timeout:.0f}s")
+    return responses[route]
+
+
+def fetch_tournaments(
+    tournament_ids: Iterable[int | str], *, timeout: float = SOCKET_TIMEOUT,
+) -> dict[str, dict]:
+    """Partidos de cada torneo con cuota publicada, como la página de la competición.
+
+    Todas las ligas por una sola conexión. Devuelve ``tournamentId`` (str) → respuesta en el
+    formato de ``PRELOADED_STATE`` (``matches``, ``bets``, ``outcomes``…); los torneos que no
+    respondan a tiempo no aparecen.
+    """
+    ids = [str(t) for t in tournament_ids]
+    responses = _run_sync(
+        _fetch_socket_routes([f"tournament:{t}" for t in ids], timeout=timeout),
+    )
+    return {t: responses[f"tournament:{t}"] for t in ids if f"tournament:{t}" in responses}
 
 
 # ---------------------------------------------------------------------------

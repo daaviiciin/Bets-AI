@@ -208,7 +208,7 @@ export class ApiService {
     return this.http.post<OfficialPipelineSummary>(`${this.base}/refresh/official`, null, { params });
   }
 
-  /** Solo cuotas Winamax de hoy y mañana (~1 min). Las stats las trae la tarea programada. */
+  /** Solo cuotas Winamax de los próximos 5 días (~1 min). Las stats las trae la tarea programada. */
   refreshOdds(): Observable<OddsRefreshSummary> {
     return this.http.post<OddsRefreshSummary>(`${this.base}/refresh/odds`, null);
   }

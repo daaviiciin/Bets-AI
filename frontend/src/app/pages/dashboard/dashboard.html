@@ -29,7 +29,7 @@
              [class.text-brand-muted]="oddsStatus()?.ok !== false"
              [class.text-rose-300]="oddsStatus()?.ok === false">
             @if (refreshingOdds()) {
-              Descargando cuotas de Winamax (hoy y mañana), puede tardar un minuto...
+              Descargando cuotas de Winamax (próximos 5 días), puede tardar un minuto...
             } @else if (oddsStatus(); as status) {
               {{ status.text }}
             }
