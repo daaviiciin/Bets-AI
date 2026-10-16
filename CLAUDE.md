@@ -81,6 +81,7 @@ Refresh automático: tarea de Windows → `refresh_programado.ps1` (09/15/21 h, 
 
 | Tarea | Skill |
 |---|---|
+| Documentación de librerías o repos (`curl_cffi`, FastAPI, SQLAlchemy, Alembic, Angular…) | `find-docs` (context7), **siempre antes que la búsqueda web** |
 | Diseñar o rediseñar una pantalla del dashboard | `impeccable` (`/impeccable shape`, `critique`, `polish`) |
 | Repaso final de detalles antes de dar una UI por terminada | `make-interfaces-feel-better` (modo rápido) |
 | Decidir si algo debe animarse y cómo | `emil-design-eng`; para implementarlo, `animate` |
