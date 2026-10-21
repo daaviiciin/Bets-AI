@@ -525,6 +525,8 @@ class GradedOddsLine:
     confidence: str
     model_probability: Decimal | None
     model_ev: Decimal | None
+    # ``True`` si la cuota es <= ``MAX_RECOMMENDABLE_ODDS``; si no, la línea es solo informativa.
+    recommendable: bool
     lambda_home: Decimal | None = None
     lambda_away: Decimal | None = None
     implied_probability: Decimal | None = None
@@ -543,6 +545,18 @@ def confidence_from_model_ev(model_ev: Decimal | None) -> str:
     if mv >= -0.025:
         return "low"
     return "low"
+
+
+def grade_line(offered_odds: Decimal, model_ev: Decimal | None) -> tuple[str, bool]:
+    """``(confidence, recommendable)`` de una línea del libro.
+
+    Por encima de ``MAX_RECOMMENDABLE_ODDS`` la línea se muestra (con P(modelo) y EV si los
+    hay) pero no se califica: ``confidence`` queda en ``unknown`` y ``recommendable`` en
+    ``False``, así nunca cuenta como valor.
+    """
+    if not vc.is_recommendable_odds(offered_odds):
+        return "unknown", False
+    return confidence_from_model_ev(model_ev), True
 
 
 def _best_winamax_snapshot_per_match(session: Session, match_ids: set[int]) -> dict[int, int]:
@@ -609,12 +623,18 @@ def list_graded_winamax_odds(
     max_lines: int = 3500,
     bookmaker_key: str | None = None,
     sport_key: str | None = None,
+    match_id: int | None = None,
     log: logging.Logger | None = None,
 ) -> list[GradedOddsLine]:
     """Últimas cuotas Winamax por liga sobre partidos próximos, todas calificadas.
 
+    ``match_id`` limita a un partido (página de partido): todas sus líneas, sin el reparto
+    entre partidos del dashboard.
+
     * ``confidence`` y ``model_ev`` salen del modelo donde aplica (misma lógica
       que ``ValueDetector``); el resto queda como ``unknown`` / ``model_ev=null``.
+    * Las líneas con cuota > ``MAX_RECOMMENDABLE_ODDS`` salen igual (con P(modelo) y EV),
+      pero con ``recommendable=False`` y ``confidence='unknown'`` (ver :func:`grade_line`).
     """
     _log = log or logging.getLogger(__name__)
     now = datetime.now(timezone.utc)
@@ -639,6 +659,10 @@ def list_graded_winamax_odds(
     if sport_key:
         sk_filter = sport_key.strip()
         matches = [m for m in matches if m.league is not None and m.league.sport_key == sk_filter]
+        if not matches:
+            return []
+    if match_id is not None:
+        matches = [m for m in matches if m.id == match_id]
         if not matches:
             return []
 
@@ -728,7 +752,7 @@ def list_graded_winamax_odds(
                 model_ev = vc.expected_value(safe_price, model_prob_out)
             except ValueError:
                 model_ev = None
-        conf = confidence_from_model_ev(model_ev)
+        conf, recommendable = grade_line(safe_price, model_ev)
         lh, la, implied = _model_pricing_snapshot(exp_match, safe_price)
         hp, asp = season_pair_for(m.id)
         summ = _summary_lines_for_bet(
@@ -758,6 +782,7 @@ def list_graded_winamax_odds(
                 confidence=conf,
                 model_probability=model_prob_out,
                 model_ev=_finite_decimal_or_none(model_ev),
+                recommendable=recommendable,
                 lambda_home=_finite_decimal_or_none(lh),
                 lambda_away=_finite_decimal_or_none(la),
                 implied_probability=_finite_decimal_or_none(implied),
@@ -772,13 +797,19 @@ def keep_best_lines(lines: list[GradedOddsLine], max_lines: int) -> list[GradedO
     """Si hay más de ``max_lines``, se quedan las de mayor EV del modelo (sin EV, al final).
 
     Antes el tope cortaba por orden de recorrido y podía dejar fuera justo las líneas con
-    valor. Se conserva el orden original de las que quedan.
+    valor. Primero van las recomendables con EV; las de cuota > ``MAX_RECOMMENDABLE_ODDS``
+    con EV van detrás (son informativas, no pueden quitarles sitio). Se conserva el orden
+    original de las que quedan.
     """
     if len(lines) <= max_lines:
         return lines
     ranked = sorted(
         range(len(lines)),
-        key=lambda i: (lines[i].model_ev is not None, lines[i].model_ev or Decimal("0")),
+        key=lambda i: (
+            lines[i].recommendable and lines[i].model_ev is not None,
+            lines[i].model_ev is not None,
+            lines[i].model_ev or Decimal("0"),
+        ),
         reverse=True,
     )
     keep = set(ranked[:max_lines])

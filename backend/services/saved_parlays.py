@@ -12,6 +12,9 @@ from sqlalchemy.orm import Session, joinedload
 from backend.models import Match, SavedParlay
 from backend.services.saved_parlay_grading import grade_single_leg, overall_from_leg_results
 
+#: Resultados que el usuario puede fijar a mano; ``void`` = nula (se devuelve el importe).
+RESULTADOS_MANUALES = frozenset({"hit", "miss", "void"})
+
 
 def snapshots_from_payload(legs: list[Any]) -> list[dict[str, Any]]:
     """Lista JSON-friendly para PostgreSQL."""
@@ -58,8 +61,9 @@ def refresh_one_parlay(session: Session, row: SavedParlay) -> None:
         graded.append({**dict(lg), **g})
 
     ov = overall_from_leg_results([str(x["result"]) for x in graded])
-    row.grading_snapshot = {"legs": graded}
-    row.overall_result = ov
+    # El automático se guarda siempre, para enseñar qué dijo la corrección aunque el usuario mande.
+    row.grading_snapshot = {"legs": graded, "auto_result": ov}
+    row.overall_result = row.manual_result or ov
     row.last_graded_at = datetime.now(timezone.utc)
 
 
@@ -71,3 +75,53 @@ def refresh_all_parlays_for_user(session: Session, user_id: int) -> int:
         refresh_one_parlay(session, r)
     session.commit()
     return len(rows)
+
+
+def beneficio_apuesta(resultado: str, importe: Decimal | None, cuota: Decimal) -> Decimal | None:
+    """Beneficio neto en euros de una apuesta ya liquidada, o ``None`` si no cuenta.
+
+    ``resultado`` es ``overall_result`` (pending | hit | miss | needs_review | void), ``importe``
+    lo apostado (``None`` en apuestas guardadas antes de existir el campo) y ``cuota`` la cuota
+    combinada decimal.
+    """
+    # Sin importe no hay dinero que contar; pendientes y "a revisar" aún no están liquidadas.
+    if importe is None or resultado not in ("hit", "miss", "void"):
+        return None
+    if resultado == "hit":
+        return (importe * (cuota - 1)).quantize(Decimal("0.01"))
+    if resultado == "miss":
+        return -importe
+    # Nula: se devuelve el importe. Cuenta como liquidada con 0 €, pero no entra en lo apostado del ROI.
+    return Decimal("0")
+
+
+def resumen_apuestas(rows: list[SavedParlay]) -> dict[str, Any]:
+    """Aciertos, % de acierto y dinero (apostado, beneficio, ROI) de las apuestas de un usuario."""
+    hits = sum(1 for r in rows if r.overall_result == "hit")
+    misses = sum(1 for r in rows if r.overall_result == "miss")
+    settled = hits + misses
+    rate = round(1000.0 * hits / settled) / 10.0 if settled else None
+
+    staked = Decimal("0")
+    profit = Decimal("0")
+    for r in rows:
+        b = beneficio_apuesta(r.overall_result, r.stake, r.combined_odds)
+        if b is None:
+            continue
+        profit += b
+        if r.overall_result in ("hit", "miss") and r.stake is not None:
+            staked += r.stake
+    roi = (profit / staked * 100).quantize(Decimal("0.1")) if staked > 0 else None
+
+    return {
+        "total": len(rows),
+        "pending": sum(1 for r in rows if r.overall_result == "pending"),
+        "needs_review": sum(1 for r in rows if r.overall_result == "needs_review"),
+        "hits": hits,
+        "misses": misses,
+        "voids": sum(1 for r in rows if r.overall_result == "void"),
+        "rate_pct": rate,
+        "staked": staked.quantize(Decimal("0.01")),
+        "profit": profit.quantize(Decimal("0.01")),
+        "roi_pct": roi,
+    }

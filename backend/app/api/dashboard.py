@@ -50,6 +50,7 @@ def list_graded_dashboard_odds(
         None,
         description="Clave ``League.sport_key`` (p. ej. soccer_epl). Vacío = todas las ligas de fútbol en horizonte.",
     ),
+    match_id: int | None = Query(None, description="Solo las líneas de este partido."),
     db: Session = Depends(get_db),
 ) -> list[GradedOddsLineOut]:
     rows = list_graded_winamax_odds(
@@ -58,6 +59,7 @@ def list_graded_dashboard_odds(
         max_lines=max_lines,
         bookmaker_key=bookmaker_key,
         sport_key=sport_key,
+        match_id=match_id,
     )
     return [
         GradedOddsLineOut(
@@ -77,6 +79,7 @@ def list_graded_dashboard_odds(
             confidence=r.confidence,
             model_probability=r.model_probability,
             model_ev=r.model_ev,
+            recommendable=r.recommendable,
             lambda_home=r.lambda_home,
             lambda_away=r.lambda_away,
             implied_probability=r.implied_probability,

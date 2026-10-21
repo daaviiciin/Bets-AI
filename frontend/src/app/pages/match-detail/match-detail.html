@@ -1,538 +1,865 @@
-<section class="max-w-7xl mx-auto px-6 py-10">
-  <a routerLink="/matches" class="text-sm text-emerald-300 hover:text-emerald-200">← Volver a partidos</a>
+<section class="mx-auto max-w-[1440px] px-4 pb-16 pt-6 sm:px-8">
+  <a
+    routerLink="/dashboard"
+    class="inline-flex items-center gap-1 text-sm text-tv-muted transition-colors hover:text-tv-ink">
+    <app-icon name="chevron-left" [size]="16" />
+    Partidos
+  </a>
 
   @if (loading()) {
-    <div class="text-center py-20 text-slate-400">Cargando partido...</div>
+    <div class="mt-4 space-y-4" aria-hidden="true">
+      <div class="tv-carga h-28"></div>
+      <div class="grid grid-cols-3 gap-2">
+        <div class="tv-carga h-16" style="--i: 1"></div>
+        <div class="tv-carga h-16" style="--i: 2"></div>
+        <div class="tv-carga h-16" style="--i: 3"></div>
+      </div>
+    </div>
   } @else if (error()) {
-    <div class="bg-rose-500/10 border border-rose-400/30 rounded-xl p-6 text-rose-300 mt-6">{{ error() }}</div>
-  } @else if (match(); as m) {
-    <div class="mt-4 mb-8">
-      <div class="text-sm text-slate-400">{{ m.league.name }}</div>
-      <h1 class="text-3xl font-bold tracking-tight mt-1">
-        {{ m.home_team.name }}
-        <span class="text-slate-500 font-normal">vs</span>
-        {{ m.away_team.name }}
-      </h1>
-      <div class="text-slate-400 mt-2">{{ fmtDate(m.commence_time) }}</div>
+    <div class="tv-barrido mt-6 border border-tv-line bg-tv-panel p-8 text-center" role="alert">
+      <app-icon name="alert" [size]="28" class="mx-auto text-tv-alert" />
+      <p class="mt-3 font-semibold">{{ error() }}</p>
+      <div class="mt-4 flex justify-center gap-6">
+        <button type="button" (click)="load()" class="text-tv-go underline underline-offset-4">
+          Reintentar
+        </button>
+        <a routerLink="/dashboard" class="text-tv-muted underline underline-offset-4">Volver a Partidos</a>
+      </div>
+    </div>
+  } @else if (preview(); as p) {
+    @let c = paint()!;
+    <h1 class="sr-only">{{ p.home.name }} – {{ p.away.name }}, {{ competition() }}</h1>
+
+    <!-- Marcador: cada club barre desde el centro con su color -->
+    <div class="marcador mt-4" aria-hidden="true">
+      <div
+        class="marcador-local flex items-center justify-end px-5 py-4 sm:px-10 sm:py-6"
+        [style.background]="panelBg(c.home.bg, 'home')"
+        [style.color]="c.home.fg">
+        <div class="marcador-contenido flex min-w-0 items-center justify-end gap-3 sm:gap-5">
+          <span class="rotulo tv-sube truncate text-lg sm:text-4xl xl:text-5xl">{{ p.home.name }}</span>
+          <app-team-crest class="tv-sube !hidden sm:!inline-flex" [name]="p.home.name" [logo]="p.home.logo_url" [color]="c.home.bg" [size]="56" />
+        </div>
+      </div>
+      <div
+        class="marcador-centro flex flex-col items-center justify-center px-3 sm:px-8"
+        [class]="darkCenter() ? 'bg-tv-raised text-tv-ink' : 'bg-tv-ink text-tv-night'">
+        <div class="marcador-contenido text-center">
+          @if (played()) {
+            <p class="rotulo tv-sube text-3xl sm:text-5xl">
+              <span
+                [tvCifra]="p.home_score ?? 0"
+                [tvFormato]="fmtEntero"
+                [tvDesde]="0"
+                [tvDuracion]="500"></span
+              >–<span
+                [tvCifra]="p.away_score ?? 0"
+                [tvFormato]="fmtEntero"
+                [tvDesde]="0"
+                [tvDuracion]="500"></span>
+            </p>
+            <p class="font-display tv-sube text-xs font-bold uppercase">
+              {{ p.status === 'live' ? 'En juego' : 'Final' }}
+            </p>
+          } @else {
+            <p class="rotulo tv-sube text-3xl sm:text-5xl">{{ fmtTime(p.commence_time) }}</p>
+            <p class="font-display tv-sube text-xs font-bold uppercase">{{ competition() }}</p>
+          }
+        </div>
+      </div>
+      <div
+        class="marcador-visitante flex items-center px-5 py-4 sm:px-10 sm:py-6"
+        [style.background]="panelBg(c.away.bg, 'away')"
+        [style.color]="c.away.fg">
+        <div class="marcador-contenido flex min-w-0 items-center gap-3 sm:gap-5">
+          <app-team-crest class="tv-sube !hidden sm:!inline-flex" [name]="p.away.name" [logo]="p.away.logo_url" [color]="c.away.bg" [size]="56" />
+          <span class="rotulo tv-sube truncate text-lg sm:text-4xl xl:text-5xl">{{ p.away.name }}</span>
+        </div>
+      </div>
     </div>
 
-    @if (m.status === 'finished' && m.home_score !== null && m.away_score !== null) {
-      <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-6 mb-8 flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <div class="text-xs uppercase tracking-wider text-emerald-300/80">Resultado final</div>
-          <div class="text-4xl font-mono font-bold mt-1">
-            {{ m.home_score }} <span class="text-slate-500">–</span> {{ m.away_score }}
-          </div>
-        </div>
-        <div class="text-sm text-slate-400 text-right">
-          <div>{{ m.home_team.name }} {{ m.home_score! > m.away_score! ? 'gana' : (m.home_score === m.away_score ? 'empata' : 'pierde') }}</div>
-          @if (m.played_at) {
-            <div class="text-xs mt-1">Jugado el {{ fmtDate(m.played_at) }}</div>
-          }
-        </div>
+    <div
+      class="tv-sube mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm text-tv-muted"
+      style="--tv-t: 380ms">
+      <p>{{ fmtKickoff(p.commence_time) }} · {{ competition() }}</p>
+      <div class="flex items-center gap-4">
+        @if (p.odds_updated_at) {
+          <span class="flex items-center gap-1.5">
+            <app-icon name="clock" [size]="15" />
+            Cuotas leídas {{ fmtAgo(p.odds_updated_at) }}
+          </span>
+        }
+        <button
+          type="button"
+          disabled
+          title="Llega en la fase 3: las mejores cuotas del partido según el modelo"
+          class="flex cursor-not-allowed items-center gap-1.5 border border-dashed border-tv-line px-3 py-1.5 text-tv-muted">
+          <app-icon name="lock" [size]="14" />
+          Mejores cuotas · próximamente
+        </button>
       </div>
-    }
+    </div>
 
-    @if (stats(); as st) {
-      <div class="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden mb-8">
-        <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h2 class="font-semibold">Estadísticas del partido</h2>
-            <div class="text-xs text-slate-500 mt-0.5">
-              Vía Flashscore · capturado {{ fmtDate(st.captured_at) }}
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-8 text-center">
-            <div>
-              <div class="text-xs text-slate-500 uppercase tracking-wider">{{ st.home.team.name }}</div>
-              <div class="text-2xl font-mono font-bold text-emerald-300">{{ statValue(st.home.xg) }}</div>
-              <div class="text-[10px] text-slate-500">xG</div>
-            </div>
-            <div>
-              <div class="text-xs text-slate-500 uppercase tracking-wider">{{ st.away.team.name }}</div>
-              <div class="text-2xl font-mono font-bold text-cyan-300">{{ statValue(st.away.xg) }}</div>
-              <div class="text-[10px] text-slate-500">xG</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="p-6 space-y-4">
-          <!-- Tiros principales -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
-            @for (row of [
-              { label: 'Posesión', h: st.home.possession_pct, a: st.away.possession_pct, suffix: '%' },
-              { label: 'Tiros totales', h: st.home.shots_total, a: st.away.shots_total, suffix: '' },
-              { label: 'Tiros a puerta', h: st.home.shots_on_target, a: st.away.shots_on_target, suffix: '', highlight: true },
-              { label: 'Ocasiones claras', h: st.home.big_chances, a: st.away.big_chances, suffix: '' },
-              { label: 'Tiros dentro área', h: st.home.shots_inside_box, a: st.away.shots_inside_box, suffix: '' },
-              { label: 'Tiros fuera área', h: st.home.shots_outside_box, a: st.away.shots_outside_box, suffix: '' },
-              { label: 'Córners', h: st.home.corners, a: st.away.corners, suffix: '' },
-              { label: 'Faltas', h: st.home.fouls, a: st.away.fouls, suffix: '' },
-              { label: 'Tarjetas amarillas', h: st.home.yellow_cards, a: st.away.yellow_cards, suffix: '' },
-              { label: 'Fueras de juego', h: st.home.offsides, a: st.away.offsides, suffix: '' },
-            ]; track row.label) {
-              <div class="text-sm">
-                <div class="flex items-center justify-between mb-1">
-                  <span class="font-mono w-10 text-emerald-300 text-right" [class.text-base]="row.highlight" [class.font-bold]="row.highlight">{{ statValue(row.h) }}{{ row.suffix }}</span>
-                  <span class="text-slate-400 text-xs uppercase tracking-wider mx-2">{{ row.label }}</span>
-                  <span class="font-mono w-10 text-cyan-300" [class.text-base]="row.highlight" [class.font-bold]="row.highlight">{{ statValue(row.a) }}{{ row.suffix }}</span>
-                </div>
-                <div class="h-1 rounded-full bg-slate-800 overflow-hidden flex">
-                  <div class="h-full bg-emerald-400/60" [style.width.%]="statShareHome(row.h, row.a)"></div>
-                  <div class="h-full bg-cyan-400/60 flex-1"></div>
-                </div>
-              </div>
-            }
-          </div>
-
-          @if (hasHalfSlice(st)) {
-            <div class="border-t border-slate-800 pt-4">
-              <div class="text-xs text-slate-500 uppercase tracking-wider mb-3">Por mitad (Flashscore)</div>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
-                @for (row of [
-                  { label: 'Goles 1ª mitad', h: st.home.goals_1h, a: st.away.goals_1h },
-                  { label: 'Goles 2ª mitad', h: st.home.goals_2h, a: st.away.goals_2h },
-                  { label: 'Córners 1ª mitad', h: st.home.corners_1h, a: st.away.corners_1h },
-                  { label: 'Córners 2ª mitad', h: st.home.corners_2h, a: st.away.corners_2h },
-                  { label: 'Amarillas 1ª', h: st.home.yellow_cards_1h, a: st.away.yellow_cards_1h },
-                  { label: 'Amarillas 2ª', h: st.home.yellow_cards_2h, a: st.away.yellow_cards_2h },
-                  { label: 'Rojas 1ª', h: st.home.red_cards_1h, a: st.away.red_cards_1h },
-                  { label: 'Rojas 2ª', h: st.home.red_cards_2h, a: st.away.red_cards_2h },
-                ]; track row.label) {
-                  @if (row.h != null || row.a != null) {
-                    <div class="text-sm">
-                      <div class="flex items-center justify-between mb-1">
-                        <span class="font-mono w-10 text-emerald-300 text-right">{{ statValue(row.h) }}</span>
-                        <span class="text-slate-400 text-xs uppercase tracking-wider mx-2">{{ row.label }}</span>
-                        <span class="font-mono w-10 text-cyan-300">{{ statValue(row.a) }}</span>
-                      </div>
-                      <div class="h-1 rounded-full bg-slate-800 overflow-hidden flex">
-                        <div class="h-full bg-emerald-400/60" [style.width.%]="statShareHome(row.h, row.a)"></div>
-                        <div class="h-full bg-cyan-400/60 flex-1"></div>
-                      </div>
-                    </div>
+    <!-- 1X2 -->
+    @if (!played()) {
+      <div class="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3" role="group" aria-label="Resultado (1X2)">
+        @for (o of h2h(); track o.label; let i = $index) {
+          <button
+            #b
+            type="button"
+            (click)="pick(o.line, b)"
+            [disabled]="!o.line"
+            [style.--tv-t]="280 + i * 60 + 'ms'"
+            [attr.aria-pressed]="picked(o.line)"
+            [attr.title]="o.line ? lineInfo(o.line) : null"
+            class="linea tv-barrido disabled:cursor-not-allowed disabled:opacity-50"
+            [class.linea-on]="picked(o.line)"
+            [class.con-valor]="valueMark(o.line)"
+            [class.sin-modelo]="o.line && o.line.model_probability == null">
+            <span class="min-w-0">
+              <span class="flex items-baseline gap-2">
+                <span class="font-display text-sm font-bold text-tv-muted">{{ o.label }}</span>
+                <span class="truncate font-semibold">{{ o.caption }}</span>
+              </span>
+              <span class="block text-xs text-tv-muted">
+                @if (o.line?.model_probability != null) {
+                  Modelo {{ fmtProb(o.line!.model_probability) }} ·
+                  @if (highOdds(o.line)) {
+                    cuota alta, solo informativa
+                  } @else {
+                    EV <b [class.ev-valor]="valueMark(o.line)">{{ fmtEv(o.line!.model_ev) }}</b>
                   }
+                } @else if (o.line) {
+                  Sin modelo para este partido
+                } @else {
+                  Sin cuota todavía
                 }
-              </div>
-            </div>
-          }
-
-          <!-- Pases -->
-          <div class="border-t border-slate-800 pt-4 grid grid-cols-3 gap-4 text-sm">
-            <div class="text-center">
-              <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Pases (home)</div>
-              <div class="font-mono text-emerald-300">{{ fmtPasses(st.home.passes_completed, st.home.passes_attempted, st.home.passes_pct) }}</div>
-            </div>
-            <div class="text-center">
-              <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">xG on target</div>
-              <div class="font-mono">
-                <span class="text-emerald-300">{{ statValue(st.home.xg_on_target) }}</span>
-                <span class="text-slate-500 mx-1">·</span>
-                <span class="text-cyan-300">{{ statValue(st.away.xg_on_target) }}</span>
-              </div>
-            </div>
-            <div class="text-center">
-              <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Pases (away)</div>
-              <div class="font-mono text-cyan-300">{{ fmtPasses(st.away.passes_completed, st.away.passes_attempted, st.away.passes_pct) }}</div>
-            </div>
-          </div>
-        </div>
+              </span>
+            </span>
+            <!-- La cifra sube cuando llega la cuota (las cuotas se cargan después del partido). -->
+            @if (o.line) {
+              <span class="rotulo cifra-1x2 tv-sube text-3xl">{{ fmtCuota(o.line.offered_odds) }}</span>
+            } @else {
+              <span class="rotulo text-3xl">–</span>
+            }
+          </button>
+        }
       </div>
     }
 
-    @if (analysis(); as a) {
-      @if (a.notes.length > 0) {
-        <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-6 text-amber-200 text-sm mb-8">
-          <div class="font-semibold mb-1">Sin análisis predictivo disponible</div>
-          @for (note of a.notes; track $index) {
-            <div>{{ note }}</div>
-          }
-        </div>
-      } @else {
-        <div class="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden mb-8">
-          <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <h2 class="font-semibold">Análisis predictivo del partido</h2>
-              <div class="text-xs text-slate-500 mt-0.5">
-                Modelo Poisson independiente · media liga {{ fmtLambda(a.league_avg_goals) }} g/p
-              </div>
-            </div>
-            <div class="flex items-center gap-3">
-              <div class="text-center">
-                <div class="text-xs text-slate-500 uppercase tracking-wider">λ {{ a.home.name }}</div>
-                <div class="text-2xl font-mono font-bold text-emerald-300">{{ fmtLambda(a.expected_goals_home) }}</div>
-              </div>
-              <div class="text-slate-600 text-2xl">·</div>
-              <div class="text-center">
-                <div class="text-xs text-slate-500 uppercase tracking-wider">λ {{ a.away.name }}</div>
-                <div class="text-2xl font-mono font-bold text-emerald-300">{{ fmtLambda(a.expected_goals_away) }}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800">
-            <div class="p-6">
-              <div class="text-sm text-slate-400 mb-3 font-semibold">{{ a.home.name }} (local)</div>
-              <div class="grid grid-cols-3 gap-3 text-sm">
-                <div>
-                  <div class="text-xs text-slate-500">PJ</div>
-                  <div class="font-mono">{{ formNumber(a.home.matches_played) }}</div>
-                </div>
-                <div>
-                  <div class="text-xs text-slate-500">V-E-D</div>
-                  <div class="font-mono">{{ formNumber(a.home.wins) }}-{{ formNumber(a.home.draws) }}-{{ formNumber(a.home.losses) }}</div>
-                </div>
-                <div>
-                  <div class="text-xs text-slate-500">Pts</div>
-                  <div class="font-mono">{{ formNumber(a.home.points) }}</div>
-                </div>
-                <div>
-                  <div class="text-xs text-slate-500">GF/GC</div>
-                  <div class="font-mono">{{ formNumber(a.home.goals_for) }}/{{ formNumber(a.home.goals_against) }}</div>
-                </div>
-                <div>
-                  <div class="text-xs text-slate-500">GF/p</div>
-                  <div class="font-mono">{{ goalsForPerMatch(a.home.goals_for_per_match) }}</div>
-                </div>
-                <div>
-                  <div class="text-xs text-slate-500">GC/p</div>
-                  <div class="font-mono">{{ goalsForPerMatch(a.home.goals_against_per_match) }}</div>
-                </div>
-              </div>
-
-              @if (a.home_top_players.length > 0) {
-                <div class="mt-4">
-                  <div class="text-xs text-slate-500 uppercase tracking-wider mb-2">Top atacantes</div>
-                  <table class="w-full text-xs">
-                    <thead class="text-slate-500">
-                      <tr>
-                        <th class="text-left font-medium pb-1">Jugador</th>
-                        <th class="text-right font-medium pb-1">PJ</th>
-                        <th class="text-right font-medium pb-1">Gls</th>
-                        <th class="text-right font-medium pb-1">SoT</th>
-                        <th class="text-right font-medium pb-1">SoT/90</th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-800/60">
-                      @for (p of a.home_top_players; track p.name) {
-                        <tr>
-                          <td class="py-1 truncate max-w-[180px]">{{ p.name }}</td>
-                          <td class="text-right font-mono">{{ formNumber(p.matches_played) }}</td>
-                          <td class="text-right font-mono">{{ formNumber(p.goals) }}</td>
-                          <td class="text-right font-mono">{{ formNumber(p.shots_on_target) }}</td>
-                          <td class="text-right font-mono text-emerald-300">{{ fmtPerNine(p.shots_on_target_per_90) }}</td>
-                        </tr>
-                      }
-                    </tbody>
-                  </table>
-                </div>
-              }
-            </div>
-
-            <div class="p-6">
-              <div class="text-sm text-slate-400 mb-3 font-semibold">{{ a.away.name }} (visitante)</div>
-              <div class="grid grid-cols-3 gap-3 text-sm">
-                <div>
-                  <div class="text-xs text-slate-500">PJ</div>
-                  <div class="font-mono">{{ formNumber(a.away.matches_played) }}</div>
-                </div>
-                <div>
-                  <div class="text-xs text-slate-500">V-E-D</div>
-                  <div class="font-mono">{{ formNumber(a.away.wins) }}-{{ formNumber(a.away.draws) }}-{{ formNumber(a.away.losses) }}</div>
-                </div>
-                <div>
-                  <div class="text-xs text-slate-500">Pts</div>
-                  <div class="font-mono">{{ formNumber(a.away.points) }}</div>
-                </div>
-                <div>
-                  <div class="text-xs text-slate-500">GF/GC</div>
-                  <div class="font-mono">{{ formNumber(a.away.goals_for) }}/{{ formNumber(a.away.goals_against) }}</div>
-                </div>
-                <div>
-                  <div class="text-xs text-slate-500">GF/p</div>
-                  <div class="font-mono">{{ goalsForPerMatch(a.away.goals_for_per_match) }}</div>
-                </div>
-                <div>
-                  <div class="text-xs text-slate-500">GC/p</div>
-                  <div class="font-mono">{{ goalsForPerMatch(a.away.goals_against_per_match) }}</div>
-                </div>
-              </div>
-
-              @if (a.away_top_players.length > 0) {
-                <div class="mt-4">
-                  <div class="text-xs text-slate-500 uppercase tracking-wider mb-2">Top atacantes</div>
-                  <table class="w-full text-xs">
-                    <thead class="text-slate-500">
-                      <tr>
-                        <th class="text-left font-medium pb-1">Jugador</th>
-                        <th class="text-right font-medium pb-1">PJ</th>
-                        <th class="text-right font-medium pb-1">Gls</th>
-                        <th class="text-right font-medium pb-1">SoT</th>
-                        <th class="text-right font-medium pb-1">SoT/90</th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-800/60">
-                      @for (p of a.away_top_players; track p.name) {
-                        <tr>
-                          <td class="py-1 truncate max-w-[180px]">{{ p.name }}</td>
-                          <td class="text-right font-mono">{{ formNumber(p.matches_played) }}</td>
-                          <td class="text-right font-mono">{{ formNumber(p.goals) }}</td>
-                          <td class="text-right font-mono">{{ formNumber(p.shots_on_target) }}</td>
-                          <td class="text-right font-mono text-emerald-300">{{ fmtPerNine(p.shots_on_target_per_90) }}</td>
-                        </tr>
-                      }
-                    </tbody>
-                  </table>
-                </div>
-              }
-            </div>
-          </div>
-
-          <div class="border-t border-slate-800 p-6 space-y-6">
-            <div>
-              <div class="text-sm font-semibold mb-3">Resultado del partido (1X2)</div>
-              <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                  <thead class="text-slate-500 text-xs uppercase tracking-wider">
-                    <tr>
-                      <th class="text-left font-medium py-2">Selección</th>
-                      <th class="text-right font-medium py-2">Prob. modelo</th>
-                      <th class="text-right font-medium py-2">Cuota justa</th>
-                      <th class="text-right font-medium py-2">Mejor cuota</th>
-                      <th class="text-right font-medium py-2">Prob. implícita</th>
-                      <th class="text-right font-medium py-2">EV</th>
-                      <th class="text-left font-medium py-2 pl-4">Bookmaker</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-slate-800/60">
-                    @for (p of h2hPredictions(); track p.selection) {
-                      <tr [class.bg-emerald-500]="isValuePrediction(p)" class="hover:bg-slate-800/40">
-                        <td class="py-2 font-medium">
-                          {{ p.selection_label }}
-                          @if (isValuePrediction(p)) {
-                            <span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">VALUE</span>
-                          }
-                        </td>
-                        <td class="text-right font-mono">{{ fmtAbsPct(p.fair_probability) }}</td>
-                        <td class="text-right font-mono text-slate-400">{{ fmtOdds(p.fair_odds) }}</td>
-                        <td class="text-right font-mono">
-                          @if (p.best_odds != null) { {{ fmtOdds(p.best_odds) }} } @else { — }
-                        </td>
-                        <td class="text-right font-mono text-slate-400">
-                          @if (p.implied_probability != null) { {{ fmtAbsPct(p.implied_probability) }} } @else { — }
-                        </td>
-                        <td class="text-right font-mono font-semibold" [class]="p.expected_value != null ? evColorClass(p.expected_value) : 'text-slate-600'">
-                          @if (p.expected_value != null) {
-                            {{ p.expected_value > 0 ? '+' : '' }}{{ (p.expected_value * 100).toFixed(1) }}%
-                          } @else { — }
-                        </td>
-                        <td class="pl-4 text-xs text-slate-400">{{ p.bookmaker_key ?? '—' }}</td>
-                      </tr>
-                    }
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            @if (totalsPredictions().length > 0) {
-              <div>
-                <div class="text-sm font-semibold mb-3">Totales (Over / Under)</div>
-                <div class="overflow-x-auto">
-                  <table class="w-full text-sm">
-                    <thead class="text-slate-500 text-xs uppercase tracking-wider">
-                      <tr>
-                        <th class="text-left font-medium py-2">Selección</th>
-                        <th class="text-right font-medium py-2">Prob. modelo</th>
-                        <th class="text-right font-medium py-2">Cuota justa</th>
-                        <th class="text-right font-medium py-2">Mejor cuota</th>
-                        <th class="text-right font-medium py-2">Prob. implícita</th>
-                        <th class="text-right font-medium py-2">EV</th>
-                        <th class="text-left font-medium py-2 pl-4">Bookmaker</th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-800/60">
-                      @for (p of totalsPredictions(); track p.market + p.selection) {
-                        <tr class="hover:bg-slate-800/40">
-                          <td class="py-2 font-medium">
-                            {{ p.selection_label }}
-                            @if (isValuePrediction(p)) {
-                              <span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">VALUE</span>
-                            }
-                          </td>
-                          <td class="text-right font-mono">{{ fmtAbsPct(p.fair_probability) }}</td>
-                          <td class="text-right font-mono text-slate-400">{{ fmtOdds(p.fair_odds) }}</td>
-                          <td class="text-right font-mono">
-                            @if (p.best_odds != null) { {{ fmtOdds(p.best_odds) }} } @else { — }
-                          </td>
-                          <td class="text-right font-mono text-slate-400">
-                            @if (p.implied_probability != null) { {{ fmtAbsPct(p.implied_probability) }} } @else { — }
-                          </td>
-                          <td class="text-right font-mono font-semibold" [class]="p.expected_value != null ? evColorClass(p.expected_value) : 'text-slate-600'">
-                            @if (p.expected_value != null) {
-                              {{ p.expected_value > 0 ? '+' : '' }}{{ (p.expected_value * 100).toFixed(1) }}%
-                            } @else { — }
-                          </td>
-                          <td class="pl-4 text-xs text-slate-400">{{ p.bookmaker_key ?? '—' }}</td>
-                        </tr>
-                      }
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+    <!-- Pestañas -->
+    <div
+      role="tablist"
+      aria-label="Secciones del partido"
+      class="mt-8 flex gap-1.5 overflow-x-auto px-1 pb-2"
+      (keydown)="onTabKey($event)">
+      @for (t of tabs(); track t.id; let i = $index) {
+        <button
+          type="button"
+          role="tab"
+          [style.--tv-t]="420 + i * 40 + 'ms'"
+          [id]="'pestana-' + t.id"
+          [attr.aria-selected]="tab() === t.id"
+          [attr.aria-controls]="'panel-' + t.id"
+          [tabIndex]="tab() === t.id ? 0 : -1"
+          (click)="selectTab(t.id)"
+          class="pestana tv-placa shrink-0 px-5 py-2.5"
+          [class.pestana-on]="tab() === t.id">
+          <span class="rotulo text-base">
+            {{ t.label }}
+            @if (t.n) {
+              <span class="ml-0.5 opacity-60">{{ t.n }}</span>
             }
-
-            @if (bttsPredictions().length > 0) {
-              <div>
-                <div class="text-sm font-semibold mb-3">
-                  Ambos marcan (BTTS)
-                  <span class="text-xs text-slate-500 font-normal">— predicción del modelo, sin cuotas reales en este momento</span>
-                </div>
-                <div class="grid grid-cols-2 gap-3 text-sm">
-                  @for (p of bttsPredictions(); track p.selection) {
-                    <div class="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3"
-                         [class.ring-1]="isValuePrediction(p)"
-                         [class.ring-emerald-400]="isValuePrediction(p)">
-                      <div class="text-xs text-slate-500">{{ p.selection_label }}</div>
-                      <div class="text-2xl font-mono font-bold mt-1">{{ fmtAbsPct(p.fair_probability) }}</div>
-                      <div class="text-xs text-slate-500 mt-0.5">cuota justa {{ fmtOdds(p.fair_odds) }}</div>
-                      @if (p.best_odds != null) {
-                        <div class="mt-2 pt-2 border-t border-slate-800 text-xs">
-                          <div class="text-slate-400">{{ p.bookmaker_key }} · cuota {{ fmtOdds(p.best_odds) }}</div>
-                          @if (p.expected_value != null) {
-                            <div [class]="evColorClass(p.expected_value)" class="font-mono mt-0.5">
-                              EV {{ (p.expected_value * 100).toFixed(2) }}%
-                            </div>
-                          }
-                        </div>
-                      }
-                    </div>
-                  }
-                </div>
-              </div>
-            }
-
-            @if (doubleChancePredictions().length > 0) {
-              <div>
-                <div class="text-sm font-semibold mb-3">
-                  Doble oportunidad (1X · 12 · X2)
-                  <span class="text-xs text-slate-500 font-normal">— predicción del modelo, derivada del 1X2</span>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                  @for (p of doubleChancePredictions(); track p.selection) {
-                    <div class="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3"
-                         [class.ring-1]="isValuePrediction(p)"
-                         [class.ring-emerald-400]="isValuePrediction(p)">
-                      <div class="text-xs text-slate-500">{{ p.selection_label }}</div>
-                      <div class="text-2xl font-mono font-bold mt-1">{{ fmtAbsPct(p.fair_probability) }}</div>
-                      <div class="text-xs text-slate-500 mt-0.5">cuota justa {{ fmtOdds(p.fair_odds) }}</div>
-                      @if (p.best_odds != null) {
-                        <div class="mt-2 pt-2 border-t border-slate-800 text-xs">
-                          <div class="text-slate-400">{{ p.bookmaker_key }} · cuota {{ fmtOdds(p.best_odds) }}</div>
-                          @if (p.expected_value != null) {
-                            <div [class]="evColorClass(p.expected_value)" class="font-mono mt-0.5">
-                              EV {{ (p.expected_value * 100).toFixed(2) }}%
-                            </div>
-                          }
-                        </div>
-                      }
-                    </div>
-                  }
-                </div>
-              </div>
-            }
-          </div>
-        </div>
+          </span>
+        </button>
       }
-    }
+    </div>
 
-    @if (markets().length === 0) {
-      <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-12 text-center text-slate-400">
-        No hay cuotas almacenadas para este partido.
-      </div>
-    } @else {
-      @if (playerProps(); as pp) {
-        @if (pp.players.length > 0) {
-          <div class="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden mb-8">
-            <div class="px-6 py-4 border-b border-slate-800">
-              <h2 class="font-semibold">Props de jugadores (Winamax)</h2>
-              <div class="text-xs text-slate-500 mt-0.5">
-                Mercados de tiros, tiros a puerta, tarjetas y goleadores.
-              </div>
-            </div>
-            <div class="p-5 space-y-4 max-h-[540px] overflow-auto">
-              @for (pl of pp.players; track pl.player_id) {
-                <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-                  <div class="font-medium mb-2">{{ pl.player_name }}</div>
-                  <div class="space-y-1 text-sm">
-                    @for (entry of marketRows(pl.markets); track entry[0]) {
-                      <div class="flex flex-wrap items-center gap-2">
-                        <span class="text-slate-500 text-xs uppercase">{{ entry[0] }}</span>
-                        @for (o of entry[1]; track $index) {
-                          <span class="px-2 py-0.5 rounded-md border border-slate-700 bg-slate-900 font-mono text-xs">
-                            {{ o.outcome_name }} @ {{ fmtOdds(o.odds) }}
+    <div
+      role="tabpanel"
+      [id]="'panel-' + tab()"
+      [attr.aria-labelledby]="'pestana-' + tab()"
+      class="mt-6"
+      tabindex="0">
+      @switch (tab()) {
+        <!-- PREVIA: el resumen; cada bloque enlaza a su pestaña -->
+        @case ('previa') {
+          <div class="panel-entra md-previa grid gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+            <div>
+              <section class="previa-onces" tvEntra="bloque" [tvPaso]="70">
+                <h2 class="rotulo tv-sube text-2xl">Los onces</h2>
+                @if (p.home.lineup.kind === 'none' && p.away.lineup.kind === 'none') {
+                  <p class="mt-3 text-tv-muted">Aún no hay alineaciones de estos equipos.</p>
+                } @else {
+                  <div class="mt-3">
+                    <app-pitch
+                      [home]="p.home.lineup"
+                      [away]="p.away.lineup"
+                      [homePaint]="c.home"
+                      [awayPaint]="c.away"
+                      [compact]="true" />
+                  </div>
+                  <p class="mt-3 text-sm text-tv-muted">
+                    {{ p.home.lineup.kind === 'official' ? 'Alineaciones oficiales.' : p.home.lineup.kind === 'played' ? 'Onces que jugaron el partido.' : 'Onces probables: titulares del último partido de cada equipo.' }}
+                    <button
+                      type="button"
+                      (click)="selectTab('alineaciones')"
+                      class="text-tv-ink underline underline-offset-4">
+                      Ver nombres y bajas
+                    </button>
+                  </p>
+                }
+              </section>
+
+              <section class="previa-bajas mt-8" tvEntra="bloque" [tvPaso]="70">
+                <h3 class="font-display tv-sube text-sm font-bold uppercase tracking-wider text-tv-muted">
+                  Bajas y dudas
+                </h3>
+                <dl class="mt-2 space-y-2 text-sm">
+                  @for (t of [p.home, p.away]; track t.team_id) {
+                    <div class="grid gap-x-4 sm:grid-cols-[9rem_minmax(0,1fr)]">
+                      <dt class="truncate font-semibold">{{ t.name }}</dt>
+                      <dd>
+                        @for (g of absenceGroups(t); track g.label) {
+                          <span class="block">
+                            <span
+                              class="font-semibold"
+                              [class.text-tv-alert]="g.missing"
+                              [class.text-tv-doubt]="!g.missing"
+                              >{{ g.label }}:</span
+                            >
+                            {{ g.names }}
                           </span>
+                        } @empty {
+                          <span class="text-tv-muted">Ninguna conocida.</span>
                         }
-                      </div>
+                      </dd>
+                    </div>
+                  }
+                </dl>
+              </section>
+            </div>
+
+            <div>
+              <section class="previa-campo" tvEntra="bloque" [tvPaso]="70">
+                <h2 class="rotulo tv-sube text-2xl">En su campo esta temporada</h2>
+                <div class="mt-4">
+                  <app-stat-compare
+                    [rows]="previewRows()"
+                    [homeColor]="c.home.accent"
+                    [awayColor]="c.away.accent"
+                    [homeLabel]="sampleLabel(p.home, 'home', 'venue')"
+                    [awayLabel]="sampleLabel(p.away, 'away', 'venue')" />
+                </div>
+                <button
+                  type="button"
+                  (click)="selectTab('estadisticas')"
+                  class="mt-4 text-sm text-tv-ink underline underline-offset-4">
+                  Todas las medias, también por mitades
+                </button>
+              </section>
+
+              <section class="previa-forma mt-8" tvEntra="bloque" [tvPaso]="70">
+                <h3 class="font-display tv-sube text-sm font-bold uppercase tracking-wider text-tv-muted">
+                  Forma · últimos 5
+                </h3>
+                <div class="mt-2 space-y-2">
+                  @for (t of [p.home, p.away]; track t.team_id) {
+                    <div class="flex items-center gap-3">
+                      <span class="w-40 truncate text-sm font-semibold">{{ t.name }}</span>
+                      <span class="flex gap-1">
+                        @for (f of t.form; track f.match_id; let j = $index) {
+                          <span
+                            class="font-display tv-flap grid size-7 place-items-center text-sm font-bold"
+                            [style.animation-delay]="'calc(var(--tv-t) + ' + (120 + j * 35) + 'ms)'"
+                            [class]="f.result === 'W' ? 'bg-tv-ink text-tv-night' : f.result === 'D' ? 'bg-tv-raised text-tv-ink' : 'border border-tv-line text-tv-muted'"
+                            [attr.title]="(f.is_home ? 'vs ' : 'en ') + f.opponent + ' ' + f.goals_for + '–' + f.goals_against"
+                            [attr.aria-label]="resultName(f.result) + (f.is_home ? ' contra ' : ' en casa del ') + f.opponent + ', ' + f.goals_for + ' a ' + f.goals_against">
+                            {{ resultText(f.result) }}
+                          </span>
+                        } @empty {
+                          <span class="text-sm text-tv-muted">Sin partidos esta temporada</span>
+                        }
+                      </span>
+                    </div>
+                  }
+                </div>
+              </section>
+
+              @if (keyLines().length) {
+                <section class="previa-mercados mt-8" tvEntra="bloque" [tvPaso]="70">
+                  <h3 class="font-display tv-sube text-sm font-bold uppercase tracking-wider text-tv-muted">
+                    Mercados clave
+                  </h3>
+                  <div class="mt-2 grid gap-2 sm:grid-cols-2">
+                    @for (l of keyLines(); track keyOf(l); let j = $index) {
+                      <button
+                        #b
+                        type="button"
+                        (click)="pick(l, b)"
+                        [attr.aria-pressed]="picked(l)"
+                        [attr.title]="lineInfo(l)"
+                        [style.animation-delay]="'calc(var(--tv-t) + ' + (80 + j * 50) + 'ms)'"
+                        class="linea tv-barrido"
+                        [class.linea-on]="picked(l)"
+                        [class.con-valor]="valueMark(l)"
+                        [class.sin-modelo]="l.model_probability == null">
+                        <span class="min-w-0">
+                          <span class="block truncate text-sm font-semibold">{{ label(l) }}</span>
+                          <span class="block text-xs text-tv-muted">
+                            @if (l.model_probability != null) {
+                              Modelo {{ fmtProb(l.model_probability) }} ·
+                              @if (highOdds(l)) {
+                                solo informativa
+                              } @else {
+                                EV <b [class.ev-valor]="valueMark(l)">{{ fmtEv(l.model_ev) }}</b>
+                              }
+                            } @else {
+                              Sin modelo
+                            }
+                          </span>
+                        </span>
+                        <span class="rotulo text-2xl">{{ fmtCuota(l.offered_odds) }}</span>
+                      </button>
                     }
                   </div>
-                </div>
+                </section>
               }
             </div>
           </div>
         }
-      }
 
-      <div class="space-y-8">
-        @for (mk of markets(); track mk.key) {
-          <div class="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
-            <div class="px-6 py-4 border-b border-slate-800">
-              <h2 class="font-semibold">{{ mk.label }}</h2>
-              <div class="text-xs text-slate-500 mt-0.5">
-                {{ mk.bookies.length }} bookmakers · {{ mk.rows.length }} resultado{{ mk.rows.length === 1 ? '' : 's' }}
+        <!-- ALINEACIONES: el campo manda; debajo, el once en texto y las bajas con motivo -->
+        @case ('alineaciones') {
+          <div class="panel-entra md-alineaciones">
+            @if (p.home.lineup.kind === 'none' && p.away.lineup.kind === 'none') {
+              <p class="text-tv-muted">Aún no hay alineaciones de estos equipos.</p>
+            } @else {
+              <div class="alineaciones-campo mx-auto max-w-[1000px]">
+                <app-pitch
+                  class="block"
+                  [home]="p.home.lineup"
+                  [away]="p.away.lineup"
+                  [homePaint]="c.home"
+                  [awayPaint]="c.away" />
+                <p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-tv-muted">
+                  <span class="flex items-center gap-1.5">
+                    <span class="size-3 rounded-full border-2 border-tv-alert"></span> De baja para este partido
+                  </span>
+                  <span class="flex items-center gap-1.5">
+                    <span class="size-3 rounded-full border-2 border-dashed border-tv-doubt"></span> En duda
+                  </span>
+                </p>
               </div>
-            </div>
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead class="bg-slate-900 text-slate-400 text-xs uppercase tracking-wider">
-                  <tr>
-                    <th class="px-4 py-3 text-left font-medium sticky left-0 bg-slate-900 z-10">Resultado</th>
-                    @for (bookie of mk.bookies; track bookie) {
-                      <th class="px-4 py-3 text-right font-medium">{{ bookie }}</th>
-                    }
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-800">
-                  @for (row of mk.rows; track $index) {
-                    <tr class="hover:bg-slate-800/40 transition-colors">
-                      <td class="px-4 py-3 font-medium sticky left-0 bg-slate-900/95 z-10">
-                        {{ row.outcome }}
-                        @if (row.point) {
-                          <span class="text-slate-500">{{ row.point }}</span>
-                        }
-                      </td>
-                      @for (bookie of mk.bookies; track bookie) {
-                        <td class="px-4 py-3 text-right font-mono"
-                            [class.text-emerald-300]="isBest(row, bookie)"
-                            [class.font-semibold]="isBest(row, bookie)"
-                            [class.text-slate-600]="priceFor(row, bookie) === null">
-                          @if (priceFor(row, bookie); as p) {
-                            {{ fmtOdds(p) }}
-                          } @else {
-                            —
-                          }
-                        </td>
+            }
+            <div class="mt-8 grid gap-10 md:grid-cols-2">
+              @for (t of [p.home, p.away]; track t.team_id; let first = $first) {
+                <section
+                  class="alineaciones-equipo"
+                  tvEntra="equipo"
+                  [tvPaso]="90"
+                  [attr.aria-labelledby]="'once-' + t.team_id">
+                  <div class="tv-sube flex items-center gap-3">
+                    <app-team-crest
+                      [name]="t.name"
+                      [logo]="t.logo_url"
+                      [color]="first ? c.home.bg : c.away.bg"
+                      [size]="32" />
+                    <h2 [id]="'once-' + t.team_id" class="rotulo text-2xl">{{ t.name }}</h2>
+                  </div>
+                  <p class="mt-1 text-sm text-tv-muted">{{ lineupCaption(t) }}</p>
+                  @if (t.lineup.starters.length) {
+                    <dl class="mt-3 divide-y divide-tv-line border-y border-tv-line text-sm">
+                      @for (g of lineupLines(t); track g.pos; let j = $index) {
+                        <div
+                          class="tv-sube flex gap-3 py-2"
+                          [style.animation-delay]="'calc(var(--tv-t) + ' + (100 + j * 40) + 'ms)'">
+                          <dt class="font-display w-9 shrink-0 pt-px text-xs font-bold text-tv-muted">
+                            {{ positionName(g.pos) }}
+                          </dt>
+                          <dd class="min-w-0">
+                            <ul class="flex flex-wrap gap-x-4 gap-y-1.5">
+                              @for (pl of g.players; track $index) {
+                                <li class="flex min-w-0 items-center gap-1.5">
+                                  <app-player-photo
+                                    class="size-6 bg-tv-raised text-[9px] text-tv-muted"
+                                    [class.grayscale]="pl.status === 'missing'"
+                                    [name]="pl.name"
+                                    [src]="pl.photo_url" />
+                                  <span
+                                    class="font-semibold"
+                                    [class.line-through]="pl.status === 'missing'"
+                                    [class.text-tv-muted]="pl.status === 'missing'"
+                                    >{{ pl.name }}</span
+                                  >
+                                  @if (pl.status) {
+                                    <span
+                                      class="text-xs font-semibold"
+                                      [class.text-tv-alert]="pl.status === 'missing'"
+                                      [class.text-tv-doubt]="pl.status !== 'missing'">
+                                      ({{ pl.status === 'missing' ? 'baja' : 'duda' }})</span
+                                    >
+                                  }
+                                </li>
+                              }
+                            </ul>
+                          </dd>
+                        </div>
                       }
-                    </tr>
+                    </dl>
                   }
-                </tbody>
-              </table>
+                  <h3 class="font-display mt-6 text-sm font-bold uppercase tracking-wider text-tv-muted">
+                    Bajas y dudas
+                  </h3>
+                  @if (t.absences.length) {
+                    <ul class="mt-2 divide-y divide-tv-line">
+                      @for (a of t.absences; track a.name) {
+                        <li class="flex items-baseline gap-3 py-2 text-sm">
+                          <span
+                            class="w-11 shrink-0 text-xs font-bold uppercase"
+                            [class.text-tv-alert]="a.status === 'missing'"
+                            [class.text-tv-doubt]="a.status !== 'missing'">
+                            {{ a.status === 'missing' ? 'Baja' : 'Duda' }}
+                          </span>
+                          <span class="font-semibold">{{ a.name }}</span>
+                          @if (a.reason) {
+                            <span class="ml-auto text-right text-xs text-tv-muted">{{ a.reason }}</span>
+                          }
+                        </li>
+                      }
+                    </ul>
+                  } @else {
+                    <p class="mt-2 text-sm text-tv-muted">Ninguna conocida.</p>
+                  }
+                </section>
+              }
             </div>
           </div>
         }
-      </div>
-      <div class="text-xs text-slate-500 mt-4">
-        Las cuotas resaltadas en verde son las mejores disponibles para ese resultado.
-      </div>
-    }
+
+        <!-- ESTADÍSTICAS: una sola comparativa (con mitades colgando) y la forma reciente -->
+        @case ('estadisticas') {
+          <div class="panel-entra md-estadisticas">
+            <div class="stats-barra flex flex-wrap items-center gap-2" role="group" aria-label="Partidos que se cuentan">
+              <button
+                type="button"
+                (click)="statsScope.set('venue')"
+                [attr.aria-pressed]="statsScope() === 'venue'"
+                class="filtro filtro-sm"
+                [class.filtro-on]="statsScope() === 'venue'">
+                En su campo
+              </button>
+              <button
+                type="button"
+                (click)="statsScope.set('overall')"
+                [attr.aria-pressed]="statsScope() === 'overall'"
+                class="filtro filtro-sm"
+                [class.filtro-on]="statsScope() === 'overall'">
+                Toda la temporada
+              </button>
+              @if (statsScope() === 'overall') {
+                <span class="ml-1 text-sm text-tv-muted">Todas las competiciones</span>
+              }
+            </div>
+
+            <div class="mt-6 grid gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-16">
+              <section
+                class="stats-medias"
+                tvEntra="bloque"
+                [tvPaso]="90"
+                aria-labelledby="stats-medias-titulo">
+                <h2 id="stats-medias-titulo" class="rotulo tv-sube text-2xl">Medias por partido</h2>
+                <div class="mt-4">
+                  <app-stat-compare
+                    [rows]="statsRows()"
+                    [homeColor]="c.home.accent"
+                    [awayColor]="c.away.accent"
+                    [homeLabel]="sampleLabel(p.home, 'home')"
+                    [awayLabel]="sampleLabel(p.away, 'away')" />
+                </div>
+              </section>
+
+              <section
+                class="stats-ultimos"
+                tvEntra="bloque"
+                [tvPaso]="90"
+                aria-labelledby="stats-ultimos-titulo">
+                <h2 id="stats-ultimos-titulo" class="rotulo tv-sube text-2xl">Últimos partidos</h2>
+                @for (t of [p.home, p.away]; track t.team_id; let first = $first) {
+                  <h3 class="mt-4 flex items-center gap-2 font-semibold">
+                    <span
+                      class="size-2.5 shrink-0"
+                      [style.background]="first ? c.home.accent : c.away.accent"></span>
+                    {{ t.name }}
+                  </h3>
+                  <ul class="mt-2 divide-y divide-tv-line border-y border-tv-line">
+                    @for (f of t.form; track f.match_id; let j = $index) {
+                      <li class="flex items-center gap-3 py-2 text-sm">
+                        <span
+                          class="font-display tv-flap grid size-6 place-items-center text-xs font-bold"
+                          [style.animation-delay]="'calc(var(--tv-t) + ' + (120 + j * 35) + 'ms)'"
+                          [class]="f.result === 'W' ? 'bg-tv-ink text-tv-night' : f.result === 'D' ? 'bg-tv-raised text-tv-ink' : 'border border-tv-line text-tv-muted'">
+                          {{ resultText(f.result) }}
+                        </span>
+                        <span class="w-12 text-tv-muted">{{ shortDate(f.commence_time) }}</span>
+                        <span class="truncate">{{ f.is_home ? 'vs' : 'en' }} {{ f.opponent }}</span>
+                        <span class="font-display ml-auto font-bold">{{ f.goals_for }}–{{ f.goals_against }}</span>
+                      </li>
+                    } @empty {
+                      <li class="py-2 text-sm text-tv-muted">Sin partidos esta temporada.</li>
+                    }
+                  </ul>
+                }
+              </section>
+            </div>
+          </div>
+        }
+
+        <!-- CUOTAS: cada mercado largo enseña su resumen; "Ver las N líneas" lo despliega -->
+        @case ('cuotas') {
+          <div class="panel-entra md-cuotas">
+            @if (played()) {
+              <p class="text-tv-muted">El partido ya ha empezado: no hay cuotas abiertas que mostrar.</p>
+            } @else if (linesLoading()) {
+              <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
+                @for (i of [0, 1, 2, 3, 4, 5]; track i) {
+                  <div class="tv-carga h-14" [style.--i]="i"></div>
+                }
+              </div>
+            } @else if (linesError()) {
+              <div role="alert">
+                <p class="font-semibold">No se pudieron cargar las cuotas.</p>
+                <button
+                  type="button"
+                  (click)="load()"
+                  class="mt-2 text-tv-go underline underline-offset-4">
+                  Reintentar
+                </button>
+              </div>
+            } @else if (!lines().length) {
+              <p class="font-semibold">Winamax aún no ha publicado cuotas de este partido.</p>
+              <p class="mt-1 text-sm text-tv-muted">
+                Suelen aparecer unos días antes. Pulsa "Actualizar cuotas" en Partidos para comprobarlo.
+              </p>
+            } @else {
+              <div class="cuotas-barra flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+                <div
+                  class="cuotas-grupos -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0 lg:pb-0"
+                  role="group"
+                  aria-label="Tipo de mercado">
+                  <button
+                    type="button"
+                    (click)="group.set('todos')"
+                    [attr.aria-pressed]="group() === 'todos'"
+                    class="filtro filtro-sm"
+                    [class.filtro-on]="group() === 'todos'">
+                    Todos <span class="filtro-n">{{ lines().length }}</span>
+                  </button>
+                  @for (g of marketGroups; track g.id) {
+                    @if (groupCounts().get(g.id); as n) {
+                      <button
+                        type="button"
+                        (click)="group.set(g.id)"
+                        [attr.aria-pressed]="group() === g.id"
+                        class="filtro filtro-sm"
+                        [class.filtro-on]="group() === g.id">
+                        {{ g.label }} <span class="filtro-n">{{ n }}</span>
+                      </button>
+                    }
+                  }
+                </div>
+                <div class="cuotas-filtro flex shrink-0 gap-1.5" role="group" aria-label="Qué líneas ver">
+                  @for (f of [
+                    { id: 'todas', label: 'Todas', n: null },
+                    { id: 'modelo', label: 'Con modelo', n: null },
+                    { id: 'valor', label: 'Con valor', n: valueCount() }
+                  ]; track f.id) {
+                    <button
+                      type="button"
+                      (click)="lineFilter.set($any(f.id))"
+                      [attr.aria-pressed]="lineFilter() === f.id"
+                      class="filtro filtro-sm"
+                      [class.filtro-on]="lineFilter() === f.id">
+                      {{ f.label }}
+                      @if (f.n != null) {
+                        <span class="filtro-n">{{ f.n }}</span>
+                      }
+                    </button>
+                  }
+                </div>
+              </div>
+              <p class="cuotas-leyenda mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-tv-muted">
+                <span class="flex items-center gap-1.5"><span class="leyenda con-valor"></span> Con valor (EV positivo)</span>
+                <span class="flex items-center gap-1.5"><span class="leyenda sin-modelo"></span> Sin modelo</span>
+                <span>% = probabilidad del modelo · EV = cuota × P − 1</span>
+                @if (hasHighOdds()) {
+                  <span>Más de {{ fmtCuota(maxRecommendable) }}: solo informativa, nunca se marca como valor</span>
+                }
+              </p>
+
+              <div class="cuotas-mercados grid gap-x-10 xl:grid-cols-2">
+                @for (m of visibleMarkets(); track m.key) {
+                  <section
+                    class="mercado mt-8 min-w-0"
+                    tvEntra="mercado"
+                    [tvPaso]="50"
+                    [tvTope]="250"
+                    [class.mercado-abierto]="m.open"
+                    [attr.aria-labelledby]="'mercado-' + m.key">
+                    <div class="mercado-cabecera filete-entra flex items-baseline justify-between gap-3 pb-1.5">
+                      <h3
+                        [id]="'mercado-' + m.key"
+                        class="font-display tv-sube min-w-0 text-base font-bold uppercase tracking-wide">
+                        {{ m.label }}
+                      </h3>
+                      @if (m.foldable) {
+                        <button
+                          type="button"
+                          (click)="toggleMarket(m.key)"
+                          [attr.aria-expanded]="m.open"
+                          [attr.aria-controls]="'lineas-' + m.key"
+                          class="mercado-toggle relative flex shrink-0 items-center gap-1 text-xs font-semibold text-tv-muted transition-colors after:absolute after:-inset-x-2 after:-inset-y-3 hover:text-tv-ink">
+                          {{ m.open ? 'Ver menos' : 'Ver las ' + m.total + ' líneas' }}
+                          <app-icon
+                            name="chevron-right"
+                            [size]="14"
+                            class="transition-transform"
+                            [class.rotate-90]="!m.open"
+                            [class.-rotate-90]="m.open" />
+                        </button>
+                      }
+                    </div>
+                    <div [id]="'lineas-' + m.key" class="mercado-lineas">
+                      @if (m.ou) {
+                        <table class="mt-2 w-full text-sm">
+                          <thead>
+                            <tr class="text-left text-xs text-tv-muted">
+                              <th scope="col" class="w-14 py-1.5 font-semibold sm:w-24">Línea</th>
+                              <th scope="col" class="py-1.5 font-semibold">Más de</th>
+                              <th scope="col" class="py-1.5 pl-2 font-semibold">Menos de</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (r of m.ou; track r.point) {
+                              <tr>
+                                <th scope="row" class="font-display py-1 text-left text-lg font-bold">
+                                  {{ fmtLinea(r.point) }}
+                                </th>
+                                @for (l of [r.over, r.under]; track $index; let i = $index) {
+                                  <td class="py-1" [class.pl-2]="i === 1">
+                                    @if (l) {
+                                      <button
+                                        #b
+                                        type="button"
+                                        (click)="pick(l, b)"
+                                        [attr.aria-pressed]="picked(l)"
+                                        [attr.aria-label]="lineInfo(l)"
+                                        [attr.title]="lineInfo(l)"
+                                        class="linea min-h-11 py-1.5"
+                                        [class.linea-on]="picked(l)"
+                                        [class.con-valor]="valueMark(l)"
+                                        [class.sin-modelo]="l.model_probability == null">
+                                        <span class="min-w-0 text-xs leading-tight text-tv-muted">
+                                          @if (l.model_probability != null) {
+                                            {{ fmtProb(l.model_probability) }}
+                                            @if (hasValue(l)) {
+                                              · <b [class.ev-valor]="valueMark(l)">EV {{ fmtEv(l.model_ev) }}</b>
+                                            }
+                                          }
+                                        </span>
+                                        <span class="font-display text-lg font-bold">{{ fmtCuota(l.offered_odds) }}</span>
+                                      </button>
+                                    } @else {
+                                      <span class="block px-3 text-tv-muted">–</span>
+                                    }
+                                  </td>
+                                }
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      } @else {
+                        <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                          @for (l of m.lines; track keyOf(l)) {
+                            <button
+                              #b
+                              type="button"
+                              (click)="pick(l, b)"
+                              [attr.aria-pressed]="picked(l)"
+                              [attr.aria-label]="lineInfo(l)"
+                              [attr.title]="lineInfo(l)"
+                              class="linea"
+                              [class.linea-on]="picked(l)"
+                              [class.con-valor]="valueMark(l)"
+                              [class.sin-modelo]="l.model_probability == null">
+                              <span class="min-w-0">
+                                <span class="block text-sm font-semibold leading-snug">{{ label(l) }}</span>
+                                @if (l.model_probability != null) {
+                                  <span class="block text-xs text-tv-muted">
+                                    {{ fmtProb(l.model_probability) }}
+                                    @if (hasValue(l)) {
+                                      · <b [class.ev-valor]="valueMark(l)">EV {{ fmtEv(l.model_ev) }}</b>
+                                    }
+                                  </span>
+                                }
+                              </span>
+                              <span class="font-display shrink-0 text-xl font-bold">{{ fmtCuota(l.offered_odds) }}</span>
+                            </button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </section>
+                } @empty {
+                  <p class="mt-8 text-tv-muted xl:col-span-2">
+                    Ninguna línea de este tipo cumple el filtro.
+                    <button type="button" (click)="lineFilter.set('todas')" class="text-tv-ink underline underline-offset-4">
+                      Verlas todas
+                    </button>
+                  </p>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        <!-- JUGADORES: un once por equipo según el orden elegido; "Ver los N" despliega -->
+        @case ('jugadores') {
+          <div class="panel-entra md-jugadores" #jugadores>
+            <div class="jugadores-barra flex flex-wrap items-center gap-x-6 gap-y-2">
+              <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Ordenar jugadores">
+                <span class="mr-1 text-sm text-tv-muted">Ordenar por</span>
+                @for (s of [
+                  { id: 'minutes', label: 'Minutos' },
+                  { id: 'sot90', label: 'Tiros a puerta / 90′' },
+                  { id: 'goals', label: 'Goles' }
+                ]; track s.id) {
+                  <button
+                    type="button"
+                    (click)="sortPlayers($any(s.id), jugadores)"
+                    [attr.aria-pressed]="playerSort() === s.id"
+                    class="filtro filtro-sm"
+                    [class.filtro-on]="playerSort() === s.id">
+                    {{ s.label }}
+                  </button>
+                }
+              </div>
+              <p class="text-xs text-tv-muted lg:ml-auto">
+                Temporada en curso, todas las competiciones. Por 90′ solo con 90 minutos o más jugados.
+              </p>
+            </div>
+
+            @for (t of [p.home, p.away]; track t.team_id; let first = $first) {
+              @let sq = squad(t);
+              <section
+                class="jugadores-equipo mt-8"
+                tvEntra="equipo"
+                [tvPaso]="90"
+                [attr.aria-labelledby]="'jugadores-' + t.team_id">
+                <div class="tv-sube flex items-center gap-3">
+                  <app-team-crest
+                    [name]="t.name"
+                    [logo]="t.logo_url"
+                    [color]="first ? c.home.bg : c.away.bg"
+                    [size]="28" />
+                  <h2 [id]="'jugadores-' + t.team_id" class="rotulo min-w-0 truncate text-2xl">{{ t.name }}</h2>
+                  @if (sq.foldable) {
+                    <button
+                      type="button"
+                      (click)="toggleSquad(t.team_id)"
+                      [attr.aria-expanded]="sq.open"
+                      [attr.aria-controls]="'tabla-' + t.team_id"
+                      class="jugadores-toggle relative ml-auto flex shrink-0 items-center gap-1 text-xs font-semibold text-tv-muted transition-colors after:absolute after:-inset-x-2 after:-inset-y-3 hover:text-tv-ink">
+                      {{ sq.open ? 'Ver menos' : 'Ver los ' + sq.total }}
+                      <app-icon
+                        name="chevron-right"
+                        [size]="14"
+                        class="transition-transform"
+                        [class.rotate-90]="!sq.open"
+                        [class.-rotate-90]="sq.open" />
+                    </button>
+                  }
+                </div>
+                @if (t.players.length) {
+                  <div class="tabla-entra mt-3 overflow-x-auto" [id]="'tabla-' + t.team_id">
+                    <!-- Columnas fijas: las tablas de los dos equipos quedan alineadas. -->
+                    <table class="w-full min-w-[960px] table-fixed text-sm">
+                      <colgroup>
+                        <col class="w-[20%]" />
+                        <col class="w-[5%]" />
+                        <col class="w-[7%]" />
+                        <col class="w-[6%]" />
+                        <col class="w-[6%]" />
+                        <col class="w-[8%]" />
+                        <col class="w-[9%]" />
+                        <col class="w-[7%]" />
+                        <col class="w-[32%]" />
+                      </colgroup>
+                      <thead>
+                        <tr class="border-b border-tv-line text-left text-xs text-tv-muted">
+                          <th scope="col" class="py-2 pr-3 font-semibold">Jugador</th>
+                          <th scope="col" class="py-2 pr-3 font-semibold">Pos.</th>
+                          <th scope="col" class="py-2 pr-3 text-right font-semibold" title="Partidos jugados (titular)">PJ (tit.)</th>
+                          <th scope="col" class="py-2 pr-3 text-right font-semibold">Min.</th>
+                          <th scope="col" class="py-2 pr-3 text-right font-semibold">Goles</th>
+                          <th scope="col" class="py-2 pr-3 text-right font-semibold">Tiros / 90′</th>
+                          <th scope="col" class="py-2 pr-3 text-right font-semibold">A puerta / 90′</th>
+                          <th scope="col" class="py-2 pr-3 text-right font-semibold">Amarillas</th>
+                          <th scope="col" class="py-2 font-semibold">Cuotas</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-tv-line">
+                        @for (pl of sq.players; track pl.player_id) {
+                          <tr class="transition-colors hover:bg-tv-panel" [attr.data-flip]="pl.player_id">
+                            <th scope="row" class="py-2 pr-3 text-left font-semibold">
+                              <span class="flex min-w-0 items-center gap-2">
+                                <app-player-photo
+                                  class="size-7 bg-tv-raised text-[10px] text-tv-muted"
+                                  [name]="pl.name"
+                                  [src]="pl.photo_url" />
+                                <span class="truncate">{{ pl.name }}</span>
+                              </span>
+                            </th>
+                            <td class="font-display py-2 pr-3 text-xs font-bold text-tv-muted">{{ positionName(pl.position) }}</td>
+                            <td class="py-2 pr-3 text-right">{{ pl.apps }} ({{ pl.starts }})</td>
+                            <td class="py-2 pr-3 text-right">{{ pl.minutes }}</td>
+                            <td class="py-2 pr-3 text-right">{{ pl.goals }}</td>
+                            <td class="py-2 pr-3 text-right">{{ pl.shots_per90 == null ? '–' : fmtNum(pl.shots_per90, 2) }}</td>
+                            <td class="font-display py-2 pr-3 text-right text-base font-bold">
+                              {{ pl.shots_on_target_per90 == null ? '–' : fmtNum(pl.shots_on_target_per90, 2) }}
+                            </td>
+                            <td class="py-2 pr-3 text-right">{{ pl.yellow_cards }}</td>
+                            <td class="py-1.5">
+                              <div class="flex flex-wrap gap-1">
+                                @for (l of featuredProps(pl); track keyOf(l)) {
+                                  <button
+                                    #b
+                                    type="button"
+                                    (click)="pick(l, b)"
+                                    [attr.aria-pressed]="picked(l)"
+                                    [attr.aria-label]="lineInfo(l)"
+                                    [attr.title]="lineInfo(l)"
+                                    class="flex items-center gap-1.5 border px-2 py-1 text-xs transition-colors"
+                                    [class]="picked(l) ? 'border-tv-go bg-tv-go text-tv-night' : 'border-tv-line bg-tv-panel hover:border-tv-muted'">
+                                    <span [class.font-semibold]="isKeyProp(l)">{{ propShort(l) }}</span>
+                                    <b class="font-display text-sm">{{ fmtCuota(l.offered_odds) }}</b>
+                                  </button>
+                                }
+                              </div>
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                } @else {
+                  <p class="mt-2 text-sm text-tv-muted">Sin estadísticas de jugadores esta temporada.</p>
+                }
+              </section>
+            }
+          </div>
+        }
+      }
+    </div>
   }
 </section>

@@ -12,6 +12,7 @@ from backend.scrapers.flashscore import (
     parse_payload,
     parse_player_match_stats,
     parse_standings,
+    player_photo_path,
 )
 
 # --------------------------------------------------------------- Clasificación
@@ -72,10 +73,13 @@ class TestParseLeaguePage:
 
 # ------------------------------------------------------- Stats de jugadores
 
-def _player(pid: str, name: str, team: str, *, starter: bool, gk: bool = False) -> dict:
+def _player(
+    pid: str, name: str, team: str, *, starter: bool, gk: bool = False,
+    images: list[dict] | None = None,
+) -> dict:
     return {
         "inBaseLineup": starter,
-        "participant": {"id": pid, "name": name, "shortDisplayName": name},
+        "participant": {"id": pid, "name": name, "shortDisplayName": name, "images": images},
         "teamId": team,
         "position": {"isGoalkeeper": gk, "name": "Guardameta" if gk else "Extremo"},
     }
@@ -88,7 +92,13 @@ PLAYERS = {"data": {"findEventPMSById": {
     ],
     "players": [
         _player("EFo95m2P", "Gordon Anthony", "SKbpVP5K", starter=True),
-        _player("vuAlEqes", "García Joan", "SKbpVP5K", starter=True, gk=True),
+        # ``images`` tal cual en data/raw/flashscore_muestras/epmsse.json.
+        _player("vuAlEqes", "García Joan", "SKbpVP5K", starter=True, gk=True, images=[
+            {"__typename": "Image", "path": "zJsYDqgl-URqd4A5l.png", "variantType": 15,
+             "fallback": "MEN"},
+            {"__typename": "Image", "path": "hjt9R2Nm-URqd4A5l.png", "variantType": 24,
+             "fallback": "MEN"},
+        ]),
         _player("viMb6g9n", "Gabriel Jesus", "SKbpVP5K", starter=False),
         _player("noJuega1", "Suplente Sin Minutos", "dboeiWOt", starter=False),
     ],
@@ -148,3 +158,25 @@ class TestParsePlayerMatchStats:
 
     def test_payloads_vacios(self):
         assert parse_player_match_stats({}, {}) == []
+
+
+class TestFotoDeJugador:
+    def test_la_foto_sale_de_las_images_del_participante(self):
+        by = {p.player_name: p for p in parse_player_match_stats(PLAYERS, VALUES)}
+        assert by["García Joan"].photo_path == "zJsYDqgl-URqd4A5l.png"
+
+    def test_sin_images_no_hay_foto(self):
+        by = {p.player_name: p for p in parse_player_match_stats(PLAYERS, VALUES)}
+        assert by["Gordon Anthony"].photo_path is None
+
+    def test_prefiere_la_variante_15(self):
+        images = [{"path": "grande.png", "variantType": 24}, {"path": "peque.png", "variantType": 15}]
+        assert player_photo_path(images) == "peque.png"
+
+    def test_sin_15_usa_otra_variante(self):
+        assert player_photo_path([{"path": "otra.png", "variantType": 99}]) == "otra.png"
+
+    def test_rutas_vacias_o_con_barra_se_descartan(self):
+        assert player_photo_path([{"path": "", "variantType": 15}]) is None
+        assert player_photo_path([{"path": "../x.png", "variantType": 15}]) is None
+        assert player_photo_path(None) is None

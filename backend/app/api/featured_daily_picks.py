@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
+from backend.app.deps.rate_limit import limite_featured_picks
 from backend.app.schemas.responses import FeaturedDailyPickOut, FeaturedPicksMetricsOut
 from backend.models import FeaturedDailyPick
 from backend.services.featured_daily_picks import (
@@ -69,7 +70,7 @@ def get_metrics(db: Session = Depends(get_db)) -> FeaturedPicksMetricsOut:
     return FeaturedPicksMetricsOut(**data)
 
 
-@router.post("/refresh-grades")
+@router.post("/refresh-grades", dependencies=[Depends(limite_featured_picks)])
 def post_refresh_grades(db: Session = Depends(get_db)) -> dict[str, int]:
     """Recalifica todas las patas contra marcadores (típico tras pipeline diario)."""
 
@@ -77,7 +78,11 @@ def post_refresh_grades(db: Session = Depends(get_db)) -> dict[str, int]:
     return {"updated_rows": n}
 
 
-@router.post("/ensure-date", response_model=FeaturedDailyPickOut)
+@router.post(
+    "/ensure-date",
+    response_model=FeaturedDailyPickOut,
+    dependencies=[Depends(limite_featured_picks)],
+)
 def post_ensure_date(
     pick_date: date | None = Query(default=None, description="Día civil UTC; por defecto hoy."),
     db: Session = Depends(get_db),

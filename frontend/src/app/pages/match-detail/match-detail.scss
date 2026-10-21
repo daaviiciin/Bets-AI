@@ -1,0 +1,313 @@
+/*
+ * Movimiento firma (gramática "entrada en antena" de styles.scss): el marcador se pinta como
+ * un rótulo de TV. Cada club barre desde el centro hacia fuera con un filete de tinta en el
+ * canto, el centro se abre como una persiana y después suben nombres, hora y resultado.
+ * Las pestañas barren, la activa se rellena de tinta y cada panel entra con un barrido corto.
+ * Todo en ease-out exponencial; con "reducir movimiento" (styles.scss) es instantáneo.
+ */
+
+.marcador {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  transform: skewX(var(--skew));
+}
+
+.marcador > * {
+  min-width: 0;
+}
+
+.marcador-contenido {
+  transform: skewX(calc(var(--skew) * -1));
+}
+
+.marcador-local,
+.marcador-visitante {
+  position: relative;
+}
+
+.marcador-local {
+  animation: barre-local 620ms var(--ease-out-expo) backwards;
+}
+
+.marcador-visitante {
+  animation: barre-visitante 620ms var(--ease-out-expo) backwards;
+}
+
+/* Filete guía: cabalga el canto de cada barrido (el marcador ya está inclinado: corte recto). */
+.marcador-local::after,
+.marcador-visitante::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.marcador-local::after {
+  border-left: 3px solid var(--color-tv-ink);
+  animation:
+    guia-local 620ms var(--ease-out-expo) both,
+    guia-op 620ms linear both;
+}
+
+.marcador-visitante::after {
+  border-right: 3px solid var(--color-tv-ink);
+  animation:
+    guia-visitante 620ms var(--ease-out-expo) both,
+    guia-op 620ms linear both;
+}
+
+/* El centro se abre desde su línea media, como una persiana. */
+.marcador-centro {
+  animation: entra-centro 420ms var(--ease-out-expo) 160ms backwards;
+}
+
+.marcador-centro .tv-sube {
+  --tv-t: 300ms;
+}
+
+.marcador-centro .tv-sube + .tv-sube {
+  --tv-t: 360ms;
+}
+
+.marcador-local .tv-sube,
+.marcador-visitante .tv-sube {
+  --tv-t: 220ms;
+}
+
+.marcador-local app-team-crest.tv-sube,
+.marcador-visitante app-team-crest.tv-sube {
+  --tv-t: 280ms;
+}
+
+@keyframes barre-local {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes barre-visitante {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes guia-local {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes guia-visitante {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes guia-op {
+  from,
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes entra-centro {
+  from {
+    clip-path: inset(50% 0 50% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/*
+ * Pestañas: placas inclinadas. La activa se rellena de tinta barriendo (como el botón del
+ * boletín) y el texto cambia cuando la tinta ya lo cubre; la que deja de estarlo se vacía
+ * antes. Solo color y clip-path: nada se mueve al pulsar flechas.
+ */
+.pestana {
+  position: relative;
+  isolation: isolate;
+  color: var(--color-tv-muted);
+  background: var(--color-tv-panel);
+  transform: skewX(var(--skew));
+  transition: color 140ms ease;
+}
+
+.pestana::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--color-tv-ink);
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 140ms var(--ease-out-expo);
+}
+
+.pestana-on {
+  color: var(--color-tv-night);
+  transition-delay: 50ms;
+}
+
+.pestana-on::before {
+  clip-path: inset(0 0 0 0);
+  transition-duration: 200ms;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pestana:not(.pestana-on):hover {
+    color: var(--color-tv-ink);
+  }
+}
+
+.pestana > span {
+  display: inline-block;
+  transform: skewX(calc(var(--skew) * -1));
+}
+
+/* Cada panel entra como un rótulo: barrido corto con el canto inclinado. */
+.panel-entra {
+  --tv-sesgo: 28px;
+  animation: tv-barrido 300ms var(--ease-out-expo) backwards;
+}
+
+/* La cifra del 1X2 sube cuando su placa ya ha barrido (o al llegar la cuota, si llega tarde). */
+.cifra-1x2 {
+  animation-delay: calc(var(--tv-t) + 120ms);
+}
+
+/* La tabla de jugadores barre con su equipo. */
+.tabla-entra {
+  animation: tv-barrido 420ms var(--ease-out-expo) calc(var(--tv-t) + 80ms) backwards;
+}
+
+/* Cabecera de bloque o de mercado: el filete inferior se traza al entrar. */
+.filete-entra {
+  position: relative;
+}
+
+.filete-entra::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--color-tv-line);
+  transform-origin: left center;
+  animation: tv-trazo 700ms var(--ease-out-expo) var(--tv-t) backwards;
+}
+
+/* Las líneas de un mercado barren todas juntas con su mercado (nunca una a una). */
+.mercado-lineas {
+  --tv-sesgo: 16px;
+  animation: tv-barrido 420ms var(--ease-out-expo) calc(var(--tv-t) + 80ms) backwards;
+}
+
+/*
+ * Desplegar un mercado: solo las líneas nuevas se desenrollan hacia abajo (180 ms). Las que
+ * ya estaban no se mueven (@starting-style solo afecta a lo que se acaba de insertar).
+ */
+.mercado-abierto .linea,
+.mercado-abierto tbody th {
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    transform 0.15s var(--ease-out-expo),
+    clip-path 180ms var(--ease-out-expo);
+}
+
+@starting-style {
+  .mercado-abierto .linea,
+  .mercado-abierto tbody th {
+    clip-path: inset(0 0 100% 0);
+  }
+}
+
+/* Botón de cuota ancho de la pestaña Cuotas. */
+.linea {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 56px;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  background: var(--color-tv-panel);
+  border: 1px solid var(--color-tv-line);
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    transform 0.15s var(--ease-out-expo);
+}
+
+.linea:hover {
+  background: var(--color-tv-raised);
+  border-color: var(--color-tv-muted);
+}
+
+.linea:active {
+  transform: scale(0.98);
+}
+
+.linea-on,
+.linea-on:hover {
+  color: var(--color-tv-night);
+  background: var(--color-tv-go);
+  border-color: var(--color-tv-go);
+}
+
+.linea-on .text-tv-muted {
+  color: rgb(11 18 34 / 0.7);
+}
+
+/*
+ * Estado por forma, no solo por color (van después de .linea para ganarle):
+ * - sin modelo: borde discontinuo, apenas más claro que el filete normal (si fuera gris
+ *   claro, lo que el modelo no sabe juzgar destacaría más que lo que sí);
+ * - con valor (EV > 0): filete verde por dentro. Verde = "candidata al boletín"; el relleno
+ *   verde de .linea-on significa "ya está en el boletín".
+ */
+.linea.sin-modelo,
+.leyenda.sin-modelo {
+  border-style: dashed;
+  border-color: color-mix(in oklab, var(--color-tv-line), var(--color-tv-muted) 35%);
+}
+
+.linea.con-valor,
+.leyenda.con-valor {
+  box-shadow: inset 0 0 0 2px var(--color-tv-go);
+}
+
+.linea.linea-on.sin-modelo {
+  border-color: var(--color-tv-go);
+}
+
+.ev-valor {
+  font-weight: 700;
+  color: var(--color-tv-go);
+}
+
+.leyenda {
+  display: inline-block;
+  width: 22px;
+  height: 14px;
+  background: var(--color-tv-panel);
+  border: 1px solid var(--color-tv-line);
+}

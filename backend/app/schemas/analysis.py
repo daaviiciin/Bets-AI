@@ -11,10 +11,11 @@ class BetLegIn(BaseModel):
     """Una pata de una apuesta (manual o leída de Winamax)."""
 
     label: str = Field(..., min_length=1, max_length=256)
-    decimal_odds: Decimal = Field(..., gt=Decimal("1"))
+    decimal_odds: Decimal = Field(..., gt=Decimal("1"), le=Decimal("1000"))
     # Si se rellenan, el backend intenta enlazar con el modelo (fútbol o baloncesto).
     market: str | None = Field(
         None,
+        max_length=64,
         description=(
             "Ej.: h2h, totals, btts, double_chance, team_totals_home, "
             "team_totals_away. Opcional."
@@ -22,6 +23,7 @@ class BetLegIn(BaseModel):
     )
     selection: str | None = Field(
         None,
+        max_length=64,
         description=(
             "Para h2h: home, draw, away. Para totals: over, under. "
             "Para btts: yes, no. double_chance: home_or_draw, home_or_away, draw_or_away."

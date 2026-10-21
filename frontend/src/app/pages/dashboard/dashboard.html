@@ -1,155 +1,260 @@
-<div class="min-h-screen bg-gradient-to-b from-brand-bg-deep via-brand-bg-mid to-brand-bg-deep text-white pb-16">
-  <div class="border-b border-brand-cyan/10 bg-brand-bg-deep/75 backdrop-blur-md">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
-        <div class="space-y-3 max-w-2xl">
-          <p class="text-xs font-medium uppercase tracking-[0.2em] text-brand-cyan/85">Jornada</p>
-          <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight text-white">Partidos y cuotas</h1>
-          <p class="text-brand-muted text-sm leading-relaxed">
-            Selecciona un partido de las cinco grandes ligas o de las competiciones UEFA para consultar sus cuotas Winamax.
-          </p>
-        </div>
-        <div class="flex flex-col gap-2 shrink-0 lg:items-end">
-          <div class="flex flex-wrap gap-3">
-            <button type="button" (click)="refreshOdds()" [disabled]="busy()"
-                    class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-brand-cyan/12 border border-brand-cyan/35 text-brand-cyan hover:bg-brand-cyan/18 transition-all disabled:opacity-45">
-              @if (refreshingOdds()) {
-                <span class="size-4 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>
-                <span>Actualizando cuotas...</span>
-              } @else {
-                <span>Actualizar cuotas</span>
-              }
-            </button>
-            <button type="button" (click)="reloadJornada()" [disabled]="busy()"
-                    class="inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-medium bg-brand-bg-panel/80 border border-brand-blue/25 text-brand-muted hover:border-brand-cyan/30 hover:bg-brand-bg-panel transition-all disabled:opacity-45">
-              Recargar partidos
-            </button>
-          </div>
-          <p class="text-xs min-h-4" role="status"
-             [class.text-brand-muted]="oddsStatus()?.ok !== false"
-             [class.text-rose-300]="oddsStatus()?.ok === false">
-            @if (refreshingOdds()) {
-              Descargando cuotas de Winamax (próximos 5 días), puede tardar un minuto...
-            } @else if (oddsStatus(); as status) {
-              {{ status.text }}
-            }
-          </p>
-        </div>
-      </div>
-    </div>
+<!-- Portada decorativa a pantalla completa; al bajar sigue la página de Partidos tal cual. -->
+<app-portada [destino]="partidos" />
+
+<section
+  #partidos
+  class="mx-auto max-w-[1440px] scroll-mt-[101px] px-4 pb-16 pt-8 sm:px-8 md:scroll-mt-16"
+>
+  <!--
+    Cartela de la página (el foco de la entrada): el título barre con un filete guía en el
+    canto, aparecen las dos barras y el filete se traza hasta el botón de actualizar.
+  -->
+  <div class="flex flex-wrap items-end gap-x-5 gap-y-4">
+    <h1 class="rotulo tv-guia text-5xl leading-none sm:text-6xl">Partidos</h1>
+    <span class="mb-1.5 flex min-w-0 items-end gap-2 sm:mb-2 sm:flex-1" aria-hidden="true">
+      <span class="tv-barras"></span>
+      <span
+        class="tv-trazo hidden h-px min-w-8 flex-1 bg-tv-line sm:block"
+        style="--tv-t: 400ms"
+      ></span>
+    </span>
+    <button
+      type="button"
+      (click)="refreshOdds()"
+      [disabled]="refreshingOdds()"
+      style="--tv-t: 300ms"
+      class="tv-barrido ml-auto flex items-center gap-2 border border-tv-line bg-tv-panel px-4 py-2 transition-[border-color,scale] duration-150 hover:border-tv-muted active:scale-[0.97] disabled:opacity-60 sm:ml-0"
+    >
+      <app-icon name="refresh" [size]="16" [class.animate-spin]="refreshingOdds()" />
+      <span class="font-display text-[15px] font-bold uppercase tracking-wide">
+        {{ refreshingOdds() ? 'Actualizando cuotas…' : 'Actualizar cuotas' }}
+      </span>
+    </button>
+  </div>
+  <div class="mt-2 flex flex-wrap items-start justify-between gap-x-6 gap-y-1.5">
+    <p class="tv-sube text-tv-muted" style="--tv-t: 200ms">
+      Próximos 5 días ·
+      @if (loading()) {
+        cargando…
+      } @else {
+        <span [tvCifra]="matches().length" [tvFormato]="fmtEntero" [tvDesde]="0"></span>
+        partidos de las 5 grandes ligas y competiciones UEFA
+      }
+    </p>
+    <p
+      class="min-h-5 text-right text-sm"
+      [class.text-tv-muted]="oddsStatus()?.ok !== false"
+      [class.text-tv-alert]="oddsStatus()?.ok === false"
+      aria-live="polite"
+    >
+      @if (refreshingOdds()) {
+        Descargando cuotas de Winamax de los próximos 5 días (hasta un minuto)…
+      } @else if (oddsStatus(); as status) {
+        {{ status.text }}
+      }
+    </p>
   </div>
 
-  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 space-y-6">
-    @if (loading()) {
-      <div class="flex flex-col items-center justify-center py-28 gap-5 text-brand-muted">
-        <span class="size-11 border-[3px] border-brand-cyan/35 border-t-brand-cyan rounded-full animate-spin"></span>
-        <p class="text-sm">Cargando partidos...</p>
-      </div>
-    } @else if (error()) {
-      <div class="rounded-2xl border border-rose-500/35 bg-rose-950/20 px-8 py-7 text-center max-w-xl mx-auto">
-        <div class="text-rose-200 font-medium">No se pudieron cargar los datos</div>
-        <div class="text-sm text-rose-300/85 mt-2">{{ error() }}</div>
-      </div>
-    } @else {
-      <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,0.9fr)]">
-        <section class="rounded-2xl border border-slate-800/90 bg-slate-900/30 overflow-hidden">
-          <div class="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-white">Partidos de la jornada</h2>
-              <p class="text-xs text-slate-500 mt-0.5">{{ matches().length }} partidos en los próximos 7 días</p>
-            </div>
-          </div>
-          @if (matches().length === 0) {
-            <div class="px-6 py-14 text-center text-slate-400 text-sm">No hay partidos cargados. Actualiza la jornada desde las fuentes.</div>
-          } @else {
-            <div class="divide-y divide-slate-800/80 max-h-[min(72vh,760px)] overflow-auto">
-              @for (match of matches(); track match.id) {
-                <button type="button" (click)="selectMatch(match)"
-                        class="w-full text-left px-5 py-4 hover:bg-brand-cyan/[0.06] transition-colors"
-                        [class.bg-brand-cyan/10]="selectedMatch()?.id === match.id">
-                  <div class="flex items-start justify-between gap-4">
-                    <div class="min-w-0">
-                      <div class="text-xs text-brand-cyan/80 mb-1">{{ match.league.name }}</div>
-                      <div class="font-medium text-white truncate">{{ match.home_team.name }} - {{ match.away_team.name }}</div>
-                    </div>
-                    <div class="shrink-0 text-right text-xs text-slate-500">{{ fmtDateShort(match.commence_time) }}</div>
-                  </div>
-                  @if (match.status === 'finished') {
-                    <div class="text-xs text-slate-400 mt-2">Resultado: {{ match.home_score }} - {{ match.away_score }}</div>
-                  }
-                </button>
-              }
-            </div>
-          }
-        </section>
+  @if (!loading() && !error() && matches().length) {
+    <app-regla-jornada
+      class="mt-6 !hidden sm:!block"
+      [partidos]="byCompetition()"
+      [dias]="days()"
+      [dia]="day()"
+    />
 
-        <section class="rounded-2xl border border-brand-cyan/20 bg-slate-900/35 overflow-hidden self-start">
-          @if (!selectedMatch()) {
-            <div class="px-6 py-16 text-center text-slate-400 text-sm">Selecciona un partido para ver sus cuotas.</div>
-          } @else {
-            <div class="px-5 py-4 border-b border-slate-800/80">
-              <div class="text-xs text-brand-cyan/80">{{ selectedMatch()!.league.name }}</div>
-              <h2 class="text-lg font-semibold text-white mt-1">{{ selectedMatch()!.home_team.name }} - {{ selectedMatch()!.away_team.name }}</h2>
-              <p class="text-xs text-slate-500 mt-1">Cuotas Winamax · solo valores inferiores a 4.00</p>
-            </div>
-            <div class="px-5 py-4 border-b border-slate-800/80 flex flex-wrap items-end gap-3">
-              <label class="flex flex-col gap-1 text-xs text-slate-400">
-                <span class="text-slate-500">Mercado</span>
-                <select [value]="oddsMarketFilter()" (change)="oddsMarketFilter.set(($any($event.target).value || 'all').toString())"
-                        class="rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-2 text-sm text-white">
-                  <option value="all">Todos</option>
-                  <option value="h2h">Resultado</option>
-                  <option value="double_chance">Doble oportunidad</option>
-                  <option value="totals">Goles</option>
-                  <option value="btts">Ambos marcan</option>
-                </select>
-              </label>
-              <label class="flex flex-col gap-1 text-xs text-slate-400">
-                <span class="text-slate-500">Selección</span>
-                <select [value]="oddsOutcomeFilter()" (change)="oddsOutcomeFilter.set(($any($event.target).value || 'all').toString())"
-                        class="rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-2 text-sm text-white">
-                  <option value="all">Todas</option>
-                  <option value="home">Local</option>
-                  <option value="draw">Empate</option>
-                  <option value="away">Visitante</option>
-                  <option value="over">Más de</option>
-                  <option value="under">Menos de</option>
-                  <option value="yes">Sí</option>
-                  <option value="no">No</option>
-                </select>
-              </label>
-              <label class="flex flex-col gap-1 text-xs text-slate-400">
-                <span class="text-slate-500">Cuota mín.</span>
-                <input type="number" min="1" max="3.99" step="0.01" [value]="oddsMin()" (change)="setOddsMin($event)"
-                       class="w-20 rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-2 text-sm text-white tabular-nums" />
-              </label>
-              <label class="flex flex-col gap-1 text-xs text-slate-400">
-                <span class="text-slate-500">Cuota máx.</span>
-                <input type="number" min="1.01" max="4" step="0.01" [value]="oddsMax()" (change)="setOddsMax($event)"
-                       class="w-20 rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-2 text-sm text-white tabular-nums" />
-              </label>
-              <span class="text-xs text-slate-500 pb-2">{{ visibleMatchOdds().length }} cuotas</span>
-            </div>
-            @if (loadingMatchOdds()) {
-              <div class="px-6 py-14 text-center text-slate-400 text-sm">Cargando cuotas...</div>
-            } @else if (visibleMatchOdds().length === 0) {
-              <div class="px-6 py-14 text-center text-slate-400 text-sm">No hay cuotas que coincidan con estos filtros.</div>
-            } @else {
-              <div class="divide-y divide-slate-800/80 max-h-[min(62vh,640px)] overflow-auto">
-                @for (odd of visibleMatchOdds(); track odd.id) {
-                  <div class="px-5 py-3.5 flex items-center justify-between gap-4">
-                    <div class="min-w-0">
-                      <div class="text-xs text-slate-500">{{ marketLabel(odd.market_key) }}</div>
-                      <div class="text-sm text-white truncate">{{ oddsOutcome(odd) }}</div>
-                    </div>
-                    <div class="text-lg font-semibold text-brand-cyan tabular-nums">{{ fmtOdds(odd.price) }}</div>
-                  </div>
-                }
-              </div>
-            }
-          }
-        </section>
+    <div class="mt-6 flex flex-col gap-3">
+      <div class="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Día">
+        <button
+          type="button"
+          tvEntra="dia"
+          [tvRetardo]="firstLoad() ? 60 : 0"
+          [tvPaso]="30"
+          (click)="day.set('todos')"
+          [attr.aria-pressed]="day() === 'todos'"
+          class="filtro tv-barrido"
+          [class.filtro-on]="day() === 'todos'"
+        >
+          Todos los días
+        </button>
+        @for (d of days(); track d.key) {
+          <button
+            type="button"
+            tvEntra="dia"
+            [tvRetardo]="firstLoad() ? 60 : 0"
+            [tvPaso]="30"
+            (click)="setDay(d.key)"
+            [attr.aria-pressed]="day() === d.key"
+            class="filtro tv-barrido"
+            [class.filtro-on]="day() === d.key"
+          >
+            {{ d.label }} <span class="filtro-n">{{ d.n }}</span>
+          </button>
+        }
       </div>
+      <div class="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Competición">
+        <button
+          type="button"
+          tvEntra="competicion"
+          [tvRetardo]="firstLoad() ? 120 : 0"
+          [tvPaso]="25"
+          (click)="competition.set('todas')"
+          [attr.aria-pressed]="competition() === 'todas'"
+          class="filtro filtro-sm tv-barrido"
+          [class.filtro-on]="competition() === 'todas'"
+        >
+          Todas
+        </button>
+        @for (c of competitions(); track c.key) {
+          <button
+            type="button"
+            tvEntra="competicion"
+            [tvRetardo]="firstLoad() ? 120 : 0"
+            [tvPaso]="25"
+            (click)="setCompetition(c.key)"
+            [attr.aria-pressed]="competition() === c.key"
+            class="filtro filtro-sm tv-barrido"
+            [class.filtro-on]="competition() === c.key"
+          >
+            {{ c.name }} <span class="filtro-n">{{ c.n }}</span>
+          </button>
+        }
+      </div>
+    </div>
+  }
+
+  @if (loading()) {
+    <div class="mt-10 space-y-2" aria-hidden="true">
+      @for (i of [0, 1, 2, 3, 4, 5]; track i) {
+        <div class="tv-carga h-[72px]" [style.--i]="i"></div>
+      }
+    </div>
+  } @else if (error()) {
+    <div
+      tvEntra="aviso"
+      class="tv-barrido mt-10 border border-tv-line bg-tv-panel p-8 text-center"
+      role="alert"
+    >
+      <app-icon name="alert" [size]="28" class="mx-auto text-tv-alert" />
+      <p class="mt-3 font-semibold">No se pudieron cargar los partidos: {{ error() }}.</p>
+      <button type="button" (click)="load()" class="mt-4 text-tv-go underline underline-offset-4">
+        Reintentar
+      </button>
+    </div>
+  } @else if (!matches().length) {
+    <div tvEntra="aviso" class="tv-barrido mt-10 border border-tv-line bg-tv-panel p-8 text-center">
+      <p class="font-semibold">No hay partidos programados en los próximos 5 días.</p>
+      <p class="mt-1 text-sm text-tv-muted">El calendario se actualiza solo a las 09, 15 y 21 h.</p>
+    </div>
+  } @else if (!visibleCount()) {
+    <div tvEntra="aviso" class="tv-barrido mt-10 border border-tv-line bg-tv-panel p-8 text-center">
+      <p class="font-semibold">Ningún partido con estos filtros.</p>
+      <button
+        type="button"
+        (click)="resetFilters()"
+        class="mt-3 text-tv-go underline underline-offset-4"
+      >
+        Ver todos los partidos
+      </button>
+    </div>
+  } @else {
+    <!--
+      Lista: cada fila barre al entrar en pantalla y se escalona con las que entran a la vez
+      (más rápido tras la primera carga, al cambiar un filtro o al desplazarse).
+    -->
+    @for (d of groups(); track d.key) {
+      <section class="mt-10" [attr.aria-labelledby]="'dia-' + d.key">
+        <h2
+          [id]="'dia-' + d.key"
+          tvEntra="titulo"
+          [tvRetardo]="firstLoad() ? 100 : 0"
+          class="rotulo tv-dia pb-2 text-3xl"
+        >
+          <span class="tv-sube inline-block">{{ d.label }}</span>
+        </h2>
+        @for (c of d.competitions; track c.key) {
+          <h3
+            tvEntra="competicion-titulo"
+            [tvRetardo]="firstLoad() ? 130 : 0"
+            [tvPaso]="60"
+            class="tv-sube font-display mt-5 text-sm font-bold uppercase tracking-wider text-tv-muted"
+          >
+            {{ c.name }}
+          </h3>
+          <ul class="mt-2 divide-y divide-tv-line border-y border-tv-line">
+            @for (m of c.matches; track m.id) {
+              @let p = paint(m);
+              <li
+                tvEntra="fila"
+                [tvRetardo]="firstLoad() ? 150 : 0"
+                [tvPaso]="firstLoad() ? 30 : 22"
+                [tvTope]="firstLoad() ? 240 : 160"
+                class="fila tv-fila group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 transition-colors hover:bg-tv-panel sm:gap-3"
+              >
+                <a
+                  [routerLink]="['/partido', m.id]"
+                  class="grid min-w-0 grid-cols-[62px_1fr] items-center gap-2 py-3 pl-1 sm:grid-cols-[96px_1fr] sm:gap-4 sm:pl-2"
+                >
+                  <span class="mini-marcador">
+                    <span class="mini-club" [style.background]="p.home.accent"></span>
+                    <span class="mini-hora" [class.mini-hora-oscura]="darkPlate(p)">
+                      <span class="unskew">{{ fmtTime(m.commence_time) }}</span>
+                    </span>
+                    <span class="mini-club" [style.background]="p.away.accent"></span>
+                  </span>
+                  <span class="flex min-w-0 flex-col gap-1.5">
+                    @for (t of [m.home_team, m.away_team]; track t.id; let first = $first) {
+                      <span class="flex min-w-0 items-center gap-2.5">
+                        <app-team-crest
+                          [name]="t.name"
+                          [logo]="t.logo_url"
+                          [color]="first ? p.home.bg : p.away.bg"
+                          [size]="22"
+                        />
+                        <span class="truncate font-semibold">{{ t.name }}</span>
+                      </span>
+                    }
+                  </span>
+                </a>
+                <div class="flex items-center gap-1 pr-1 sm:gap-1.5 sm:pr-2">
+                  @for (s of sides; track s.side) {
+                    @let odds = price(m, s.side);
+                    <button
+                      #cuota
+                      type="button"
+                      (click)="pick(m, s.side, cuota)"
+                      [disabled]="!odds"
+                      [attr.aria-pressed]="slip.has(keyFor(m, s.side))"
+                      [attr.aria-label]="
+                        odds
+                          ? (s.side === 'draw' ? 'Empate' : 'Gana ' + teamName(m, s.side)) +
+                            ', cuota ' +
+                            fmtCuota(odds)
+                          : 'Sin cuota'
+                      "
+                      class="cuota"
+                      [class.cuota-on]="slip.has(keyFor(m, s.side))"
+                    >
+                      <span class="text-[11px] font-semibold text-current/60">{{ s.label }}</span>
+                      <span class="font-display text-base font-bold">{{
+                        odds ? fmtCuota(odds) : '–'
+                      }}</span>
+                    </button>
+                  }
+                  <a
+                    [routerLink]="['/partido', m.id]"
+                    tabindex="-1"
+                    aria-hidden="true"
+                    class="ml-1 hidden text-tv-muted transition-transform group-hover:translate-x-0.5 group-hover:text-tv-ink sm:block"
+                  >
+                    <app-icon name="chevron-right" [size]="20" />
+                  </a>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </section>
     }
-  </section>
-</div>
+  }
+</section>

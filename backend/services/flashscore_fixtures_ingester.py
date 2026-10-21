@@ -28,6 +28,7 @@ from backend.models.match import (
 from backend.scrapers import flashscore as fs
 from backend.services.odds_processor import LEAGUE_METADATA
 from backend.services.entity_resolver import TeamResolver
+from backend.services.team_crests import set_team_logo
 
 FLASHSCORE_MATCH_PREFIX = "flashscore:"
 
@@ -234,6 +235,8 @@ class FlashscoreFixturesIngester:
         if home is None or away is None:
             result.skipped_bad_data += 1
             return
+        set_team_logo(home, fm.raw.get("OA"))
+        set_team_logo(away, fm.raw.get("OB"))
 
         league = self._get_or_create_league(sport_key)
         assert fm.scheduled_at is not None

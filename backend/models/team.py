@@ -32,6 +32,11 @@ class Team(Base, TimestampMixin):
     flashscore_id: Mapped[str | None] = mapped_column(
         String(16), unique=True, nullable=True, index=True,
     )
+    # Escudo de Flashscore (``OA``/``OB`` del calendario) y sus dos colores dominantes
+    # (``#rrggbb``), calculados una vez a partir de la imagen (``services/team_crests.py``).
+    logo_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    primary_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    secondary_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
 
     home_matches: Mapped[list["Match"]] = relationship(
         back_populates="home_team",

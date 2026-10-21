@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     odds_api_base_url: str = Field(default="https://api.the-odds-api.com/v4")
 
     postgres_user: str = Field(default="betsai")
-    postgres_password: str = Field(default="changeme")
+    #: Sin valor por defecto a propósito (C-12): si falta y no hay DATABASE_URL, error claro.
+    postgres_password: str = Field(default="")
     postgres_db: str = Field(default="betsai")
     postgres_host: str = Field(default="localhost")
     postgres_port: int = Field(default=5432)
@@ -79,12 +80,38 @@ class Settings(BaseSettings):
     environment: str = Field(default="development")
     log_level: str = Field(default="INFO")
 
-    #: Firma para JWT de sesión MVP (sobrescribir en producción).
+    #: Secreto HS256 de los JWT de sesión. Sin valor por defecto (C-1): la API no arranca sin él
+    #: (ver ``comprobar_config_api``). Generar con
+    #: ``python -c "import secrets; print(secrets.token_urlsafe(48))"`` y ponerlo en .env.
     jwt_secret: str = Field(
-        default="betsai_dev_jwt_change_me",
-        description="Secreto H256 para firmar tokens de /auth/login.",
+        default="",
+        description="Secreto HS256 para firmar tokens de /auth/login (JWT_SECRET en .env).",
     )
-    jwt_access_ttl_days: int = Field(default=30, ge=1, le=365)
+    jwt_access_ttl_days: int = Field(default=7, ge=1, le=30)
+
+    # Seguridad HTTP de la API
+    #: Orígenes permitidos por CORS, separados por comas (C-10). El frontend usa el proxy de
+    #: Angular (mismo origen), así que esto solo afecta a llamadas directas a :8000.
+    cors_allowed_origins: str = Field(default="http://localhost:4200,http://127.0.0.1:4200")
+    #: Límites de peticiones (sintaxis de la librería ``limits``: "5/minute", "1 per 3 minutes").
+    rate_limit_enabled: bool = Field(default=True)
+    rate_limit_login: str = Field(default="5/minute", description="Intentos de login por IP.")
+    rate_limit_refresh: str = Field(
+        default="1 per 3 minutes",
+        description="POST /refresh* (y POST de featured-picks) por usuario.",
+    )
+    rate_limit_general: str = Field(default="120/minute", description="Resto de la API, por IP.")
+    #: Tamaño máximo del cuerpo de una petición (cabecera Content-Length), en bytes.
+    max_request_body_bytes: int = Field(default=1_048_576, ge=1024)
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
+
+    @property
+    def docs_enabled(self) -> bool:
+        """``/docs``, ``/redoc`` y ``/openapi.json`` solo en desarrollo (C-11)."""
+        return self.environment.strip().lower() == "development"
 
     @property
     def project_root(self) -> Path:
@@ -106,9 +133,38 @@ class Settings(BaseSettings):
     def resolved_database_url(self) -> str:
         if self.database_url:
             return self.database_url
+        if not self.postgres_password:
+            raise RuntimeError(
+                "Falta la contraseña de PostgreSQL: define POSTGRES_PASSWORD (o DATABASE_URL) "
+                "en el .env de la raíz del proyecto."
+            )
         return (
             f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+
+#: Longitud mínima del secreto JWT (``token_urlsafe(48)`` da 64 caracteres).
+JWT_SECRET_MIN_LENGTH = 32
+
+#: Valor por defecto que tuvo el código hasta 2026-10-19: público en el repo, nunca válido.
+_JWT_SECRET_ANTIGUO = "betsai_dev_jwt_change_me"
+
+
+def comprobar_config_api(settings: Settings) -> None:
+    """Falla al arrancar la API si la configuración de seguridad no es válida."""
+    _ = settings.resolved_database_url  # sin contraseña de PostgreSQL → RuntimeError claro
+    secreto = settings.jwt_secret.strip()
+    if not secreto:
+        raise RuntimeError(
+            "Falta JWT_SECRET en .env. Genera uno con "
+            '`python -c "import secrets; print(secrets.token_urlsafe(48))"` y añade '
+            "la línea JWT_SECRET=<valor> al .env de la raíz."
+        )
+    if len(secreto) < JWT_SECRET_MIN_LENGTH or secreto == _JWT_SECRET_ANTIGUO:
+        raise RuntimeError(
+            f"JWT_SECRET es demasiado corto o inseguro (mínimo {JWT_SECRET_MIN_LENGTH} "
+            "caracteres aleatorios). Genera uno con secrets.token_urlsafe(48)."
         )
 
 

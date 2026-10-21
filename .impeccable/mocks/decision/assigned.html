@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ficha del partido · Bets AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+<style>
+  :root { --tinta:#15120E; --pliego:#221D17; --filete:#3A332A; --papel:#ECE5D7; --gris:#9C9384; --rojo:#D52B1E; --marca:#F2C230; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { width:1440px; height:900px; overflow:hidden; background:var(--tinta); color:var(--papel); font:400 14px/1.35 'Archivo', sans-serif; font-variant-numeric:tabular-nums; }
+  .cond { font-stretch:62%; }
+  header.nav { height:52px; background:var(--rojo); display:flex; align-items:center; padding:0 32px; gap:36px; }
+  .logo { font:900 26px/1 'Archivo'; font-stretch:62%; letter-spacing:.5px; text-transform:uppercase; }
+  .nav a { color:#fff; text-decoration:none; font-weight:700; font-size:14px; text-transform:uppercase; font-stretch:80%; opacity:.82; }
+  .nav a.on { opacity:1; border-bottom:3px solid #fff; padding-bottom:4px; }
+  .nav .bol { margin-left:auto; background:var(--tinta); padding:8px 14px; font-weight:800; font-size:14px; text-transform:uppercase; font-stretch:80%; }
+  .bol b { color:var(--marca); }
+  .page { display:grid; grid-template-columns:1fr 300px; height:848px; }
+  main { padding:24px 32px 0; overflow:hidden; }
+  .kick { color:var(--rojo); font-weight:800; font-size:13px; text-transform:uppercase; letter-spacing:1.5px; font-stretch:80%; }
+  .kick span { color:var(--gris); }
+  h1 { font:900 92px/.86 'Archivo'; font-stretch:62%; text-transform:uppercase; margin:10px 0 14px; letter-spacing:-.5px; }
+  h1 em { font-style:normal; color:var(--gris); font-weight:400; }
+  .x12 { display:flex; gap:0; border-top:3px solid var(--papel); border-bottom:1px solid var(--filete); }
+  .x12 div { flex:1; padding:10px 0 10px; display:flex; align-items:baseline; justify-content:space-between; padding-right:28px; border-right:1px solid var(--filete); margin-right:20px; }
+  .x12 div:last-child { border:0; }
+  .x12 small { color:var(--gris); font-size:13px; text-transform:uppercase; font-weight:700; font-stretch:80%; }
+  .x12 strong { font:800 34px/1 'Archivo'; font-stretch:75%; }
+  .x12 .val strong { background:var(--marca); color:var(--tinta); padding:0 6px; }
+  nav.tabs { display:flex; gap:28px; margin:18px 0 18px; border-bottom:1px solid var(--filete); }
+  nav.tabs a { padding:0 0 10px; font-weight:800; text-transform:uppercase; font-stretch:80%; font-size:15px; color:var(--gris); }
+  nav.tabs a.on { color:var(--papel); border-bottom:3px solid var(--rojo); }
+  nav.tabs sup { font-size:11px; color:var(--gris); margin-left:3px; }
+  .cols { display:grid; grid-template-columns:420px 1fr; gap:32px; }
+  .sec { font:800 13px/1 'Archivo'; text-transform:uppercase; letter-spacing:1.5px; color:var(--rojo); font-stretch:80%; border-top:3px solid var(--papel); padding-top:8px; margin-bottom:10px; display:flex; justify-content:space-between; }
+  .sec i { font-style:normal; color:var(--gris); letter-spacing:0; }
+  .campo { position:relative; height:330px; border:1px solid var(--filete); background:repeating-linear-gradient(90deg, #1b1712 0 52px, #1e1a14 52px 104px); }
+  .campo:before { content:''; position:absolute; left:50%; top:0; bottom:0; border-left:1px solid #4a4237; }
+  .campo:after { content:''; position:absolute; left:50%; top:50%; width:80px; height:80px; margin:-40px; border:1px solid #4a4237; border-radius:50%; }
+  .j { position:absolute; text-align:center; width:84px; margin-left:-42px; font-size:12px; font-weight:700; font-stretch:80%; text-transform:uppercase; }
+  .j b { display:block; margin:0 auto 3px; width:26px; height:26px; line-height:26px; border-radius:50%; background:var(--papel); color:var(--tinta); font-size:13px; }
+  .j.v b { background:transparent; border:1.5px solid var(--papel); color:var(--papel); }
+  .j.d b { border-style:dashed; }
+  .bajas { margin-top:12px; font-size:13px; color:var(--gris); }
+  .bajas b { color:var(--papel); }
+  table { width:100%; border-collapse:collapse; }
+  td, th { padding:6px 0; border-bottom:1px solid var(--filete); font-size:14px; }
+  th { text-align:left; color:var(--gris); font-weight:700; text-transform:uppercase; font-size:12px; font-stretch:80%; }
+  td.n { text-align:right; font-weight:700; width:64px; }
+  td.n.l { text-align:left; }
+  td.c { text-align:center; color:var(--gris); text-transform:uppercase; font-size:12px; font-weight:700; font-stretch:80%; }
+  .bar { height:4px; background:var(--filete); position:relative; }
+  .bar span { position:absolute; top:0; bottom:0; background:var(--papel); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:20px; }
+  aside { background:var(--pliego); border-left:3px solid var(--rojo); padding:20px 22px; }
+  aside h3 { font:900 34px/1 'Archivo'; font-stretch:62%; text-transform:uppercase; }
+  .leg { border-bottom:1px solid var(--filete); padding:12px 0; }
+  .leg small { display:block; color:var(--gris); font-size:12px; text-transform:uppercase; font-weight:700; font-stretch:80%; }
+  .leg div { display:flex; justify-content:space-between; font-weight:700; margin-top:3px; }
+  .leg.s { border-bottom:1px dashed var(--gris); }
+  .tot { display:flex; justify-content:space-between; align-items:baseline; margin:16px 0; }
+  .tot strong { font:900 46px/1 'Archivo'; font-stretch:62%; color:var(--marca); }
+  .btn { display:block; background:var(--rojo); color:#fff; text-align:center; padding:12px; font-weight:800; text-transform:uppercase; font-stretch:80%; }
+</style>
+</head>
+<body>
+<header class="nav">
+  <span class="logo">Bets AI</span>
+  <a class="on">Partidos</a><a>Mis apuestas</a><a>Estadísticas</a><a>Transparencia</a>
+  <span class="bol">Boletín · 2 · <b>4,62</b></span>
+</header>
+<div class="page">
+<main>
+  <p class="kick">LaLiga · Jornada 9 <span>· Viernes 16 oct · 21:00 · Abanca Riazor</span></p>
+  <h1>Deportivo <em>–</em> Levante</h1>
+  <div class="x12">
+    <div><small>1 · Deportivo</small><strong>2,05</strong></div>
+    <div class="val"><small>X · Empate · EV +6 %</small><strong>3,40</strong></div>
+    <div><small>2 · Levante</small><strong>3,75</strong></div>
+  </div>
+  <nav class="tabs"><a>Previa</a><a class="on">Alineaciones</a><a>Estadísticas</a><a>Cuotas<sup>412</sup></a><a>Jugadores<sup>28</sup></a></nav>
+  <div class="cols">
+    <section>
+      <p class="sec">Once probable <i>Oficial ~20:00</i></p>
+      <div class="campo">
+        <div class="j" style="left:6%;top:44%"><b>1</b>Parera</div>
+        <div class="j" style="left:17%;top:12%"><b>2</b>Ximo</div>
+        <div class="j" style="left:17%;top:36%"><b>4</b>Barcia</div>
+        <div class="j" style="left:17%;top:60%"><b>5</b>Loureiro</div>
+        <div class="j" style="left:17%;top:84%"><b>3</b>Obrador</div>
+        <div class="j" style="left:30%;top:28%"><b>8</b>Villares</div>
+        <div class="j d" style="left:30%;top:66%"><b>6</b>Gragera</div>
+        <div class="j" style="left:40%;top:10%"><b>11</b>Mella</div>
+        <div class="j" style="left:40%;top:46%"><b>10</b>Soriano</div>
+        <div class="j" style="left:40%;top:82%"><b>7</b>Yeremay</div>
+        <div class="j" style="left:46%;top:46%"><b>9</b>Zakaria</div>
+        <div class="j v" style="left:56%;top:46%"><b>9</b>Brugué</div>
+        <div class="j v" style="left:65%;top:20%"><b>7</b>Carlos Á.</div>
+        <div class="j v" style="left:65%;top:72%"><b>10</b>Pablo M.</div>
+        <div class="j v" style="left:75%;top:46%"><b>8</b>Rey</div>
+        <div class="j v" style="left:84%;top:12%"><b>2</b>Toljan</div>
+        <div class="j v" style="left:84%;top:84%"><b>3</b>Manu S.</div>
+        <div class="j v" style="left:94%;top:46%"><b>1</b>Ryan</div>
+      </div>
+      <p class="bajas"><b>Bajas:</b> Mario Soriano (duda, línea discontinua) · <b>Levante:</b> Brugué en duda</p>
+    </section>
+    <section>
+      <p class="sec">Medias de la temporada <i>Deportivo en casa · Levante fuera</i></p>
+      <table>
+        <tr><td class="n l">1,6</td><td class="c">Goles</td><td class="n">1,1</td></tr>
+        <tr><td class="n l">1,48</td><td class="c">xG</td><td class="n">1,02</td></tr>
+        <tr><td class="n l">5,2</td><td class="c">Tiros a puerta</td><td class="n">3,9</td></tr>
+        <tr><td class="n l">6,1</td><td class="c">Córners</td><td class="n">4,4</td></tr>
+        <tr><td class="n l">2,3</td><td class="c">Tarjetas</td><td class="n">2,8</td></tr>
+      </table>
+      <div class="grid2">
+        <div><p class="sec">Por mitades <i>Goles</i></p>
+          <table><tr><th></th><th>1ª</th><th>2ª</th></tr><tr><td>Deportivo</td><td class="n">0,6</td><td class="n">1,0</td></tr><tr><td>Levante</td><td class="n">0,4</td><td class="n">0,7</td></tr></table></div>
+        <div><p class="sec">Forma <i>Últimos 5</i></p>
+          <table><tr><td>Deportivo</td><td class="n">G G E P G</td></tr><tr><td>Levante</td><td class="n">P E G P E</td></tr></table></div>
+      </div>
+    </section>
+  </div>
+</main>
+<aside>
+  <h3>Tu boletín</h3>
+  <div class="leg"><small>Deportivo – Levante · Resultado</small><div><span>Empate</span><span>3,40</span></div></div>
+  <div class="leg s"><small>Betis – Sevilla · Jugador · cuota del refresh anterior</small><div><span>Antony, 1+ tiros a puerta</span><span>1,36</span></div></div>
+  <div class="tot"><span>Cuota total</span><strong>4,62</strong></div>
+  <span class="btn">Guardar combinada</span>
+</aside>
+</div>
+</body>
+</html>

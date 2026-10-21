@@ -1,0 +1,85 @@
+/* Filete inferior de la barra: se traza de izquierda a derecha al arrancar la app. */
+.tv-cabecera::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--color-tv-line);
+  transform-origin: left center;
+  pointer-events: none;
+  animation: tv-trazo 900ms var(--ease-out-expo) backwards;
+}
+
+/* Enlace activo de la barra: un filete blanco pegado al borde inferior, como la pestaña
+   seleccionada de un grafismo de TV. Es un elemento real (no ::after) para que la cortinilla
+   entre páginas lo haga viajar de un enlace al siguiente (view-transition-name en styles.scss). */
+.nav-link {
+  position: relative;
+}
+
+.nav-link.nav-activo {
+  color: var(--color-tv-ink);
+}
+
+.nav-filete {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--color-tv-ink);
+  opacity: 0;
+  transform-origin: left center;
+  animation: tv-trazo 520ms var(--ease-out-expo) calc(var(--tv-t) + 220ms) backwards;
+}
+
+.nav-activo .nav-filete {
+  opacity: 1;
+}
+
+/*
+ * Botón del boletín: con selecciones, el verde entra barriendo (la inclinación del botón pone
+ * el canto) y el texto pasa a azul noche cuando el verde ya lo cubre. Al vaciarse, el verde se
+ * retira más deprisa de lo que entró.
+ */
+.boton-boletin {
+  position: relative;
+  isolation: isolate;
+  color: var(--color-tv-ink);
+  background: var(--color-tv-panel);
+  transition:
+    color 160ms ease 60ms,
+    background-color 150ms ease,
+    scale 150ms var(--ease-out-expo);
+}
+
+.boton-boletin::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--color-tv-go);
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 240ms var(--ease-out-expo);
+}
+
+.boton-boletin:active {
+  scale: 0.97;
+}
+
+.boton-boletin-on {
+  color: var(--color-tv-night);
+}
+
+.boton-boletin-on::before {
+  clip-path: inset(0 0 0 0);
+  transition-duration: 420ms;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .boton-boletin:not(.boton-boletin-on):hover {
+    background: var(--color-tv-raised);
+  }
+}

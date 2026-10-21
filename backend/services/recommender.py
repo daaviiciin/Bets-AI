@@ -135,6 +135,10 @@ class Recommender:
     def _passes_profile_filters(
         self, bet: ValueBet, profile: UserProfile, *, strict: bool,
     ) -> bool:
+        # El detector ya no emite cuotas > MAX_RECOMMENDABLE_ODDS; se repite aquí porque el
+        # ``odds_max`` de algunos perfiles (5, 20) es más alto que ese tope.
+        if not vc.is_recommendable_odds(bet.offered_odds):
+            return False
         if not (profile.odds_min <= bet.offered_odds <= profile.odds_max):
             return False
         if bet.fair_probability < profile.min_real_probability:

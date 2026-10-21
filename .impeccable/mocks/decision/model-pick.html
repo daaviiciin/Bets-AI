@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Grafismo de retransmisión · Bets AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:ital,wght@0,500;0,700;0,800;1,800&display=swap" rel="stylesheet">
+<style>
+  :root { --noche:#0B1222; --panel:#17233F; --linea:#26365C; --blanco:#F3F5F9; --gris:#8F9BB5; --verde:#2FD18A; --rojo:#E6463C; --depor:#1C5BD6; --levante:#B8123A; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { width:1440px; height:900px; overflow:hidden; background:var(--noche); color:var(--blanco); font:500 14px/1.35 'Barlow Semi Condensed', sans-serif; font-variant-numeric:tabular-nums; }
+  header { height:56px; display:flex; align-items:center; gap:30px; padding:0 32px; border-bottom:1px solid var(--linea); }
+  .logo { font:800 italic 24px/1 'Barlow Semi Condensed'; text-transform:uppercase; }
+  header a { color:var(--gris); font-weight:700; text-transform:uppercase; font-size:14px; }
+  header a.on { color:var(--blanco); }
+  header .bol { margin-left:auto; background:var(--verde); color:var(--noche); padding:8px 14px; font-weight:800; text-transform:uppercase; }
+  .page { display:grid; grid-template-columns:1fr 300px; height:844px; }
+  main { padding:24px 32px; }
+  .bug { display:grid; grid-template-columns:1fr 200px 1fr; height:96px; transform:skewX(-8deg); }
+  .bug > div { display:flex; align-items:center; padding:0 28px; transform:skewX(8deg); }
+  .t1 { background:linear-gradient(90deg, var(--depor), #10306f); justify-content:flex-end; }
+  .t2 { background:linear-gradient(270deg, var(--levante), #5e0a1f); }
+  .t1, .t2 { font:800 italic 40px/1 'Barlow Semi Condensed'; text-transform:uppercase; }
+  .mid { background:var(--blanco); color:var(--noche); flex-direction:column; justify-content:center; }
+  .mid small { font-weight:700; text-transform:uppercase; font-size:13px; }
+  .mid strong { font:800 34px/1 'Barlow Semi Condensed'; }
+  .odds { display:flex; gap:12px; margin:18px 0; }
+  .odds div { flex:1; background:var(--panel); padding:12px 16px; display:flex; justify-content:space-between; align-items:center; border-left:4px solid var(--linea); }
+  .odds .v { border-left-color:var(--verde); }
+  .odds strong { font:800 28px/1 'Barlow Semi Condensed'; }
+  .tabs { display:flex; gap:6px; margin-bottom:18px; }
+  .tabs a { padding:8px 18px; background:var(--panel); font-weight:800; text-transform:uppercase; font-size:14px; color:var(--gris); transform:skewX(-8deg); }
+  .tabs a.on { background:var(--blanco); color:var(--noche); }
+  .cols { display:grid; grid-template-columns:520px 1fr; gap:28px; }
+  .pitch { height:420px; perspective:700px; }
+  .plane { height:100%; background:repeating-linear-gradient(0deg, #14532d 0 42px, #166534 42px 84px); transform:rotateX(38deg); border:2px solid rgba(255,255,255,.4); position:relative; }
+  .p { position:absolute; width:22px; height:22px; border-radius:50%; background:var(--depor); border:2px solid #fff; margin:-11px; }
+  .p.l { background:var(--levante); }
+  h4 { font:800 italic 16px/1 'Barlow Semi Condensed'; text-transform:uppercase; margin-bottom:12px; color:var(--gris); }
+  .stat { margin-bottom:16px; }
+  .stat .row { display:flex; justify-content:space-between; font-weight:700; font-size:16px; margin-bottom:5px; }
+  .stat .row span:nth-child(2) { color:var(--gris); text-transform:uppercase; font-size:13px; }
+  .bars { display:flex; gap:4px; height:10px; }
+  .bars i { display:block; height:100%; }
+  aside { background:var(--panel); padding:22px; border-left:1px solid var(--linea); }
+  aside h3 { font:800 italic 26px/1 'Barlow Semi Condensed'; text-transform:uppercase; margin-bottom:12px; }
+  .leg { padding:12px 0; border-bottom:1px solid var(--linea); }
+  .leg small { color:var(--gris); display:block; }
+  .leg div { display:flex; justify-content:space-between; font-weight:700; font-size:16px; }
+  .tot { margin:16px 0; display:flex; justify-content:space-between; align-items:baseline; }
+  .tot strong { font:800 40px/1 'Barlow Semi Condensed'; color:var(--verde); }
+  .btn { display:block; text-align:center; background:var(--verde); color:var(--noche); padding:12px; font-weight:800; text-transform:uppercase; }
+</style>
+</head>
+<body>
+<header><span class="logo">Bets AI</span><a class="on">Partidos</a><a>Mis apuestas</a><a>Estadísticas</a><a>Transparencia</a><span class="bol">Boletín · 2 · 4,62</span></header>
+<div class="page">
+<main>
+  <div class="bug"><div class="t1">Deportivo</div><div class="mid"><small>LaLiga · J9 · Vie 21:00</small><strong>VS</strong></div><div class="t2">Levante</div></div>
+  <div class="odds"><div><span>1 Deportivo</span><strong>2,05</strong></div><div class="v"><span>X Empate · EV +6 %</span><strong>3,40</strong></div><div><span>2 Levante</span><strong>3,75</strong></div></div>
+  <nav class="tabs"><a>Previa</a><a class="on">Alineaciones</a><a>Estadísticas</a><a>Cuotas 412</a><a>Jugadores</a></nav>
+  <div class="cols">
+    <div class="pitch"><div class="plane">
+      <i class="p" style="left:50%;top:94%"></i><i class="p" style="left:15%;top:80%"></i><i class="p" style="left:38%;top:82%"></i><i class="p" style="left:62%;top:82%"></i><i class="p" style="left:85%;top:80%"></i><i class="p" style="left:35%;top:68%"></i><i class="p" style="left:65%;top:68%"></i><i class="p" style="left:15%;top:58%"></i><i class="p" style="left:50%;top:60%"></i><i class="p" style="left:85%;top:58%"></i><i class="p" style="left:50%;top:52%"></i>
+      <i class="p l" style="left:50%;top:6%"></i><i class="p l" style="left:15%;top:20%"></i><i class="p l" style="left:38%;top:18%"></i><i class="p l" style="left:62%;top:18%"></i><i class="p l" style="left:85%;top:20%"></i><i class="p l" style="left:30%;top:32%"></i><i class="p l" style="left:50%;top:34%"></i><i class="p l" style="left:70%;top:32%"></i><i class="p l" style="left:25%;top:44%"></i><i class="p l" style="left:75%;top:44%"></i><i class="p l" style="left:50%;top:46%"></i>
+    </div></div>
+    <section>
+      <h4>Medias de temporada</h4>
+      <div class="stat"><div class="row"><span>1,6</span><span>Goles</span><span>1,1</span></div><div class="bars"><i style="flex:1.6;background:var(--depor)"></i><i style="flex:1.1;background:var(--levante)"></i></div></div>
+      <div class="stat"><div class="row"><span>1,48</span><span>xG</span><span>1,02</span></div><div class="bars"><i style="flex:1.48;background:var(--depor)"></i><i style="flex:1.02;background:var(--levante)"></i></div></div>
+      <div class="stat"><div class="row"><span>5,2</span><span>Tiros a puerta</span><span>3,9</span></div><div class="bars"><i style="flex:5.2;background:var(--depor)"></i><i style="flex:3.9;background:var(--levante)"></i></div></div>
+      <div class="stat"><div class="row"><span>6,1</span><span>Córners</span><span>4,4</span></div><div class="bars"><i style="flex:6.1;background:var(--depor)"></i><i style="flex:4.4;background:var(--levante)"></i></div></div>
+      <div class="stat"><div class="row"><span>2,3</span><span>Tarjetas</span><span>2,8</span></div><div class="bars"><i style="flex:2.3;background:var(--depor)"></i><i style="flex:2.8;background:var(--levante)"></i></div></div>
+    </section>
+  </div>
+</main>
+<aside><h3>Tu boletín</h3>
+  <div class="leg"><small>Deportivo – Levante · Resultado</small><div><span>Empate</span><span>3,40</span></div></div>
+  <div class="leg"><small>Betis – Sevilla · Jugador</small><div><span>Antony, 1+ tiros a puerta</span><span>1,36</span></div></div>
+  <div class="tot"><span>Cuota total</span><strong>4,62</strong></div><span class="btn">Guardar combinada</span>
+</aside>
+</div>
+</body>
+</html>

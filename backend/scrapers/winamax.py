@@ -104,7 +104,15 @@ MARKET_TYPES: dict[int, str] = {
     3814: "match_first_half_corners_totals",
     3210: "match_first_half_cards_totals",
     # ---- PLAYER PROPS ----
-    # "logros" = grid alternativo con líneas 1+/2+/3+ múltiples por jugador.
+    # Pestaña "Estad. jugadores" (vistos en Winamax.es el 2026-10-19): un mercado por
+    # escalón ("Realiza 2 o más remates a puerta", ``specialBetValue="count=2"``) y un
+    # outcome por jugador (``label`` = nombre, ``code`` = ``sr:player:<id>``).
+    6858: "player_shots_alt",              # Realiza N o más remates
+    6864: "player_sot_alt",                # Realiza N o más remates a puerta
+    6921: "player_saves_alt",              # Realiza N o más paradas (porteros)
+    6933: "player_card_yes_no",            # El jugador recibe una o más tarjetas
+    # Ids de mayo 2026 (ver LEGACY_MARKET_TYPE_IDS). "logros" = grid alternativo con
+    # líneas 1+/2+/3+ múltiples por jugador.
     2747: "player_shots_alt",              # Tiros del jugador (alternativas)
     3311: "player_sot_alt",                # Tiros a puerta del jugador (alt)
     3304: "player_passes_alt",             # Pases del jugador (alt)
@@ -127,10 +135,21 @@ MARKET_TYPES: dict[int, str] = {
 # por jugador). Útil para filtrar rápido sin recorrer todo el catálogo.
 PLAYER_PROP_MARKETS: frozenset[str] = frozenset({
     "player_shots", "player_sot", "player_shots_alt", "player_sot_alt",
+    "player_saves_alt",
     "player_passes_alt", "player_tackles_alt", "player_assists_alt",
     "player_card_yes_no",
     "player_anytime_scorer", "player_to_score_2plus",
     "player_first_scorer", "player_last_scorer", "player_scorer_and_team_wins",
+})
+
+
+# Ids antiguos que comparten clave con los actuales (6858/6864/6933). Winamax ya no los
+# publica (muestra del 2026-10-19); se mantienen por si vuelven a aparecer.
+LEGACY_MARKET_TYPE_IDS: frozenset[int] = frozenset({2747, 3311, 5711})
+
+# Mercados de jugador publicados como escalones "N o más" (``count=N``).
+COUNT_LADDER_MARKETS: frozenset[str] = frozenset({
+    "player_shots_alt", "player_sot_alt", "player_saves_alt",
 })
 
 
@@ -514,6 +533,10 @@ _RE_SBV_VARIANT = re.compile(
 _RE_CODE_ALT = re.compile(
     r"pre:playerprops:(?P<match>\d+):(?P<pid>\d+):(?P<line>\d+)"
 )
+# Escalones "Realiza N o más …": specialBetValue="count=N", outcome.code="sr:player:<id>".
+_RE_SBV_COUNT = re.compile(r"(?:^|\|)count=(?P<count>\d+)")
+_RE_SBV_GOALS = re.compile(r"(?:^|\|)goals=(?P<goals>\d+)")
+_RE_CODE_PLAYER = re.compile(r"^sr:player:(?P<pid>\d+)$")
 # outcome.label para single line:  "Antoine Griezmann más de 1,5"
 _RE_LABEL_OVER_UNDER = re.compile(
     r"^(?P<name>.+?)\s+(?P<side>m[áa]s|menos)\s+de\s+(?P<line>[\d,\.]+)\s*$",
@@ -551,6 +574,15 @@ def parse_player_props(bets: Iterable[WinamaxBet]) -> list[WinamaxPlayerProp]:
         # Línea del bet entero (single-line) si está en el sbv.
         m_total = _RE_SBV_TOTAL.search(sbv)
         bet_line = _parse_es_decimal(m_total.group("total")) if m_total else None
+        # 3876 publica "Marca 2 / 3 / 4 goles o más" (goals=N) con el mismo betType: solo el
+        # de 2 es ``player_to_score_2plus``; los demás se descartan.
+        if bet.market_key == "player_to_score_2plus":
+            m_goals = _RE_SBV_GOALS.search(sbv)
+            if m_goals and m_goals.group("goals") != "2":
+                continue
+        # Escalón "N o más" (tiros, tiros a puerta, paradas): count=N.
+        m_count = _RE_SBV_COUNT.search(sbv)
+        bet_count = int(m_count.group("count")) if m_count else None
 
         for oc in bet.outcomes:
             label = oc.label.strip()
@@ -578,7 +610,26 @@ def parse_player_props(bets: Iterable[WinamaxBet]) -> list[WinamaxPlayerProp]:
                 ))
                 continue
 
-            # Caso 2: alt grid "Bukayo Saka 2+"  con code "pre:playerprops:...:N"
+            # Caso 2a: escalón "Realiza N o más …" → un outcome por jugador, "N+" = más de
+            # N - 0,5. El id de Sportradar viene en el code del outcome.
+            if bet_count is not None and bet.market_key in COUNT_LADDER_MARKETS:
+                if not label:
+                    continue
+                m_pid = _RE_CODE_PLAYER.match(code)
+                out.append(WinamaxPlayerProp(
+                    bet_id=bet.bet_id,
+                    market_key=bet.market_key,
+                    player_name=label,
+                    player_external_id=m_pid.group("pid") if m_pid else bet_player_pid,
+                    line=bet_count - 0.5,
+                    side="over",
+                    odds=oc.odds,
+                    outcome_id=oc.outcome_id,
+                    raw_label=label,
+                ))
+                continue
+
+            # Caso 2b: alt grid "Bukayo Saka 2+"  con code "pre:playerprops:...:N"
             m_code = _RE_CODE_ALT.match(code)
             m_label = _RE_LABEL_ALT.match(label)
             if m_code or m_label:
@@ -630,6 +681,8 @@ def parse_player_props(bets: Iterable[WinamaxBet]) -> list[WinamaxPlayerProp]:
 
 __all__ = [
     "BASE_URL",
+    "COUNT_LADDER_MARKETS",
+    "LEGACY_MARKET_TYPE_IDS",
     "MARKET_TYPES",
     "PLAYER_PROP_MARKETS",
     "SPORT_BASKETBALL",

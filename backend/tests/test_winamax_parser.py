@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 import pytest
 
 from backend.scrapers.winamax import (
+    LEGACY_MARKET_TYPE_IDS,
     MARKET_TYPES,
     PLAYER_PROP_MARKETS,
     WinamaxPlayerProp,
@@ -345,12 +346,131 @@ class TestMarketTypesTable:
         assert all(isinstance(k, int) for k in MARKET_TYPES.keys())
 
     def test_market_types_values_unique(self) -> None:
-        # Aceptamos algún colision si está documentado, pero por defecto
-        # cada betType debe tener una clave canónica única.
-        values = list(MARKET_TYPES.values())
+        # Colisiones solo las documentadas (ids antiguos de Winamax); el resto, una clave
+        # canónica por betType.
+        values = [v for k, v in MARKET_TYPES.items() if k not in LEGACY_MARKET_TYPE_IDS]
         assert len(values) == len(set(values))
 
     def test_player_prop_subset_consistent(self) -> None:
         # Todas las claves de PLAYER_PROP_MARKETS deben estar en MARKET_TYPES
         all_keys = set(MARKET_TYPES.values())
         assert PLAYER_PROP_MARKETS.issubset(all_keys)
+
+
+# ---------------------------------------------------------------------------
+# Pestaña "Estad. jugadores" (formato de Winamax.es el 2026-10-19)
+# ---------------------------------------------------------------------------
+
+# Recorte real de data/raw/winamax_muestras/match_72221330_state.json (Tottenham - Coventry):
+# un mercado por escalón ("count=N") y un outcome por jugador con su id de Sportradar.
+STATS_JUGADORES_STATE: dict = {
+    "bets": {
+        "717981157": {
+            "betId": 717981157, "matchId": 72221330, "betType": 6864,
+            "betTitle": "Realiza 1 o más remates a puerta", "specialBetValue": "count=1",
+            "outcomes": [2225674155, 2225674175],
+        },
+        "717981189": {
+            "betId": 717981189, "matchId": 72221330, "betType": 6864,
+            "betTitle": "Realiza 2 o más remates a puerta", "specialBetValue": "count=2",
+            "outcomes": [2225675862],
+        },
+        "717981158": {
+            "betId": 717981158, "matchId": 72221330, "betType": 6921,
+            "betTitle": "Realiza 1 o más paradas", "specialBetValue": "count=1",
+            "outcomes": [2225674187, 2225674186],
+        },
+        "717981152": {
+            "betId": 717981152, "matchId": 72221330, "betType": 6921,
+            "betTitle": "Realiza 3 o más paradas", "specialBetValue": "count=3",
+            "outcomes": [2225673905],
+        },
+        "717981185": {
+            "betId": 717981185, "matchId": 72221330, "betType": 6858,
+            "betTitle": "Realiza 1 o más remates", "specialBetValue": "count=1",
+            "outcomes": [2225675577],
+        },
+        "717981166": {
+            "betId": 717981166, "matchId": 72221330, "betType": 6933,
+            "betTitle": "El jugador recibe una o más tarjetas",
+            "outcomes": [2225674516],
+        },
+    },
+    "outcomes": {
+        "2225674155": {"label": "Dominic Solanke", "code": "sr:player:361420", "team": 1},
+        "2225674175": {"label": "Omar Marmoush", "code": "sr:player:1107697", "team": 1},
+        "2225675862": {"label": "Dominic Solanke", "code": "sr:player:361420", "team": 1},
+        "2225674187": {"label": "Carl Rushworth", "code": "sr:player:2186020", "team": 2},
+        "2225674186": {"label": "Martin Dubravka", "code": "sr:player:42209", "team": 1},
+        "2225673905": {"label": "Carl Rushworth", "code": "sr:player:2186020", "team": 2},
+        "2225675577": {"label": "Dominic Solanke", "code": "sr:player:361420", "team": 1},
+        "2225674516": {"label": "Frank Onyeka", "code": "sr:player:959744", "team": 2},
+    },
+    "odds": {
+        "2225674155": 1.37, "2225674175": 1.43, "2225675862": 2.6,
+        "2225674187": 1.01, "2225674186": 1.06, "2225673905": 1.33,
+        "2225675577": 1.02, "2225674516": 3.75,
+    },
+}
+
+
+class TestEstadisticasDeJugador:
+    def _props(self) -> list[WinamaxPlayerProp]:
+        return parse_player_props(parse_match_bets(STATS_JUGADORES_STATE, "72221330"))
+
+    def test_ids_de_mercado_actuales_mapeados(self) -> None:
+        assert MARKET_TYPES[6864] == "player_sot_alt"
+        assert MARKET_TYPES[6858] == "player_shots_alt"
+        assert MARKET_TYPES[6921] == "player_saves_alt"
+        assert MARKET_TYPES[6933] == "player_card_yes_no"
+        assert "player_saves_alt" in PLAYER_PROP_MARKETS
+
+    def test_1_o_mas_tiros_a_puerta_es_mas_de_0_5(self) -> None:
+        solanke = next(
+            p for p in self._props()
+            if p.market_key == "player_sot_alt" and p.player_name == "Dominic Solanke"
+            and p.line == 0.5
+        )
+        assert solanke.side == "over"
+        assert solanke.odds == pytest.approx(1.37)
+        assert solanke.player_external_id == "361420"
+
+    def test_2_o_mas_tiros_a_puerta_es_mas_de_1_5(self) -> None:
+        lineas = sorted(
+            p.line for p in self._props()
+            if p.market_key == "player_sot_alt" and p.player_name == "Dominic Solanke"
+        )
+        assert lineas == [0.5, 1.5]
+
+    def test_paradas_del_portero_por_escalon(self) -> None:
+        rushworth = sorted(
+            (p.line, p.odds) for p in self._props()
+            if p.market_key == "player_saves_alt" and p.player_name == "Carl Rushworth"
+        )
+        assert rushworth == [(0.5, pytest.approx(1.01)), (2.5, pytest.approx(1.33))]
+
+    def test_tiros_totales_y_tarjeta(self) -> None:
+        props = self._props()
+        assert any(p.market_key == "player_shots_alt" and p.line == 0.5 for p in props)
+        tarjeta = next(p for p in props if p.market_key == "player_card_yes_no")
+        assert tarjeta.player_name == "Frank Onyeka"
+        assert tarjeta.side == "yes"
+
+    def test_cuenta_todos_los_outcomes(self) -> None:
+        assert len(self._props()) == 8
+
+    def test_marca_2_o_mas_ignora_los_de_3_y_4_goles(self) -> None:
+        state = {
+            "bets": {
+                str(i): {
+                    "betId": i, "matchId": 1, "betType": 3876,
+                    "betTitle": f"Marca {n} goles o más", "specialBetValue": f"goals={n}",
+                    "outcomes": [i * 10],
+                }
+                for i, n in ((1, 2), (2, 3), (3, 4))
+            },
+            "outcomes": {str(i * 10): {"label": "Dominic Solanke"} for i in (1, 2, 3)},
+            "odds": {"10": 7.5, "20": 32, "30": 110},
+        }
+        props = parse_player_props(parse_match_bets(state, "1"))
+        assert [(p.market_key, p.odds) for p in props] == [("player_to_score_2plus", 7.5)]

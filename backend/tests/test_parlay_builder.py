@@ -122,6 +122,24 @@ class TestPreFilter:
         )
         assert out == []  # bet_a descartada → no hay 2 legs
 
+    def test_nunca_mete_una_pata_de_mas_de_4_aunque_la_estrategia_lo_permita(self) -> None:
+        # Como ``from_profile`` con un perfil de odds_max=20: el rango de la estrategia no basta.
+        amplia = ParlayStrategy(
+            name="amplia", min_legs=2, max_legs=2,
+            leg_odds_max=Decimal("20"), leg_min_fair_prob=Decimal("0"),
+            combined_odds_min=Decimal("1"), combined_odds_max=Decimal("999"),
+        )
+        bets = [
+            _bet(match_id=1, league="soccer_epl", market_key="h2h",
+                 offered_odds="1.80", fair_probability="0.60"),
+            _bet(match_id=2, league="soccer_spain_la_liga", market_key="totals",
+                 outcome_name="Over", offered_odds="6.00", fair_probability="0.20"),
+            _bet(match_id=3, league="soccer_germany_bundesliga", market_key="match_btts",
+                 outcome_name="Yes", offered_odds="4.00", fair_probability="0.30"),
+        ]
+        out = ParlayBuilder().build(bets, amplia)
+        assert [sorted(leg.match_id for leg in c.legs) for c in out] == [[1, 3]]
+
 
 # ---------------------------------------------------------------------------
 # Combinaciones, diversificación, correlación

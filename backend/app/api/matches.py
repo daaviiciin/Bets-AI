@@ -13,7 +13,9 @@ from backend.app.schemas.responses import (
     MarketPredictionOut,
     MatchAnalysisOut,
     MatchOut,
+    MatchPreviewOut,
     MatchStatsOut,
+    Odds1x2Out,
     OddsOut,
     TeamSnapshotOut,
     TopPlayerStatOut,
@@ -24,6 +26,9 @@ from backend.services.match_analysis_service import (
     MatchAnalysis,
     MatchAnalysisService,
 )
+from backend.services.match_listing import latest_1x2_by_match
+from backend.services.match_preview import MatchPreviewService
+from backend.services.winamax_odds_ingester import MAX_STORED_ODDS
 
 router = APIRouter(prefix="/matches", tags=["matches"])
 
@@ -52,13 +57,15 @@ def list_matches(
         description="target = cinco grandes ligas + Champions, Europa y Conference League.",
     ),
     limit: int = Query(100, ge=1, le=500),
+    with_odds: bool = Query(False, description="Añade el último 1X2 de Winamax de cada partido."),
     db: Session = Depends(get_db),
-) -> list[Match]:
+) -> list[MatchOut]:
     """Lista partidos en una ventana temporal, opcionalmente filtrados por liga.
 
     * ``days_ahead``: horizonte futuro (próximos partidos).
     * ``days_back``: incluye también partidos pasados de los últimos N días
       (útiles para mostrar resultados recientes con ``status='finished'``).
+    * ``with_odds``: portada del dashboard, con el 1X2 en cada fila.
     """
     now = datetime.now(timezone.utc)
     since = now - timedelta(days=days_back)
@@ -81,7 +88,15 @@ def list_matches(
     elif scope == "target":
         stmt = stmt.join(Match.league).where(League.sport_key.in_(TARGET_JORNADA_LEAGUES))
 
-    return list(db.scalars(stmt).all())
+    matches = list(db.scalars(stmt).all())
+    out = [MatchOut.model_validate(m) for m in matches]
+    if with_odds:
+        odds = latest_1x2_by_match(db, matches)
+        for item in out:
+            picked = odds.get(item.id)
+            if picked is not None:
+                item.odds_1x2 = Odds1x2Out.model_validate(picked)
+    return out
 
 
 @router.get("/{match_id}", response_model=MatchOut)
@@ -101,6 +116,19 @@ def get_match(match_id: int, db: Session = Depends(get_db)) -> Match:
     return match
 
 
+@router.get("/{match_id}/preview", response_model=MatchPreviewOut)
+def get_match_preview(match_id: int, db: Session = Depends(get_db)) -> MatchPreviewOut:
+    """Todo lo de la página de partido: escudos, medias, mitades, forma, bajas, once y jugadores.
+
+    Si el partido empieza en menos de ~75 min, pide la alineación oficial a Flashscore
+    (una vez; se guarda). Si no, el once es el probable (titulares del último partido).
+    """
+    preview = MatchPreviewService(db).build(match_id)
+    if preview is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Partido {match_id} no encontrado")
+    return MatchPreviewOut.model_validate(preview)
+
+
 @router.get("/{match_id}/odds", response_model=list[OddsOut])
 def get_match_odds(
     match_id: int,
@@ -117,7 +145,7 @@ def get_match_odds(
         select(Odds)
         .where(Odds.match_id == match_id)
         .where(Odds.price > 1)
-        .where(Odds.price < 4)
+        .where(Odds.price <= MAX_STORED_ODDS)
         .options(joinedload(Odds.bookmaker), joinedload(Odds.market))
     )
     rows = db.scalars(stmt).all()

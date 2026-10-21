@@ -14,6 +14,7 @@ import {
   Match,
   MatchAnalysis,
   MatchPlayerProps,
+  MatchPreview,
   MatchStats,
   OddsRefreshSummary,
   OfficialPipelineSummary,
@@ -26,10 +27,9 @@ import {
   UserParlayMetrics,
   SavedParlay,
   SavedParlayLegPersist,
+  ResultadoManual,
   UserProfile,
   ValueBet,
-  StatisticsOverview,
-  TeamDetailStatistics,
 } from './models';
 
 /** Cliente HTTP centralizado para todos los endpoints de la API Bets AI. */
@@ -44,25 +44,14 @@ export class ApiService {
     );
   }
 
-  getStatisticsOverview(opts?: { sportKey?: string; limit?: number }): Observable<StatisticsOverview> {
-    let params = new HttpParams();
-    if (opts?.sportKey) params = params.set('sport_key', opts.sportKey);
-    if (opts?.limit != null) params = params.set('limit', String(opts.limit));
-    return this.http.get<StatisticsOverview>(`${this.base}/statistics/overview`, { params });
-  }
-
-  getTeamStatistics(teamId: number, recent = 8): Observable<TeamDetailStatistics> {
-    return this.http.get<TeamDetailStatistics>(`${this.base}/statistics/teams/${teamId}`, {
-      params: new HttpParams().set('recent', String(recent)),
-    });
-  }
-
   listMatches(opts?: {
     league?: string;
     scope?: 'target';
     daysAhead?: number;
     daysBack?: number;
     limit?: number;
+    /** Añade el último 1X2 de Winamax de cada partido (portada). */
+    withOdds?: boolean;
   }): Observable<Match[]> {
     let params = new HttpParams();
     if (opts?.league) params = params.set('league', opts.league);
@@ -70,11 +59,17 @@ export class ApiService {
     if (opts?.daysAhead != null) params = params.set('days_ahead', String(opts.daysAhead));
     if (opts?.daysBack != null) params = params.set('days_back', String(opts.daysBack));
     if (opts?.limit != null) params = params.set('limit', String(opts.limit));
+    if (opts?.withOdds) params = params.set('with_odds', 'true');
     return this.http.get<Match[]>(`${this.base}/matches`, { params });
   }
 
   getMatch(id: number): Observable<Match> {
     return this.http.get<Match>(`${this.base}/matches/${id}`);
+  }
+
+  /** Todo lo de la página de partido: escudos, medias, mitades, forma, bajas, once y jugadores. */
+  getMatchPreview(id: number): Observable<MatchPreview> {
+    return this.http.get<MatchPreview>(`${this.base}/matches/${id}/preview`);
   }
 
   getMatchOdds(id: number, opts?: { market?: string; bookmaker?: string }): Observable<Odds[]> {
@@ -107,6 +102,8 @@ export class ApiService {
     bookmaker?: string;
     /** ``sport_key`` de la competición (``soccer_epl``, …). */
     sportKey?: string;
+    /** Solo las líneas de este partido (página de partido). */
+    matchId?: number;
   }): Observable<GradedOddsLine[]> {
     let params = new HttpParams();
     if (opts?.horizonHours != null) {
@@ -115,6 +112,7 @@ export class ApiService {
     if (opts?.maxLines != null) params = params.set('max_lines', String(opts.maxLines));
     if (opts?.bookmaker) params = params.set('bookmaker_key', opts.bookmaker);
     if (opts?.sportKey) params = params.set('sport_key', opts.sportKey);
+    if (opts?.matchId != null) params = params.set('match_id', String(opts.matchId));
     return this.http.get<GradedOddsLine[]>(`${this.base}/dashboard/graded-odds`, { params });
   }
 
@@ -241,8 +239,17 @@ export class ApiService {
   saveMyParlay(payload: {
     title?: string | null;
     legs: SavedParlayLegPersist[];
+    stake?: string | null;
   }): Observable<SavedParlay> {
     return this.http.post<SavedParlay>(`${this.base}/me/parlays`, payload);
+  }
+
+  /** Solo cambia lo enviado; `manual_result: null` vuelve a la liquidación automática. */
+  updateMyParlay(
+    id: number,
+    changes: { stake?: string | null; manual_result?: ResultadoManual | null },
+  ): Observable<SavedParlay> {
+    return this.http.patch<SavedParlay>(`${this.base}/me/parlays/${id}`, changes);
   }
 
   deleteMyParlay(id: number): Observable<void> {

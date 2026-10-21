@@ -7,14 +7,37 @@ from decimal import Decimal
 import pytest
 
 from backend.services.value_calculator import (
+    MAX_RECOMMENDABLE_ODDS,
     bookmaker_margin,
     expected_value,
     fair_probabilities,
     implied_probability,
+    is_recommendable_odds,
     kelly_fraction,
     parlay_odds_and_probability,
     recommended_stake,
 )
+
+
+class TestCuotaRecomendable:
+    def test_el_tope_es_4(self):
+        assert MAX_RECOMMENDABLE_ODDS == Decimal("4.00")
+
+    @pytest.mark.parametrize("cuota", ["1.01", "1.85", "3.99", "4", "4.00"])
+    def test_hasta_4_incluido_es_recomendable(self, cuota: str):
+        assert is_recommendable_odds(Decimal(cuota))
+
+    @pytest.mark.parametrize("cuota", ["4.01", "5.50", "10.00", "15"])
+    def test_por_encima_de_4_es_solo_informativa(self, cuota: str):
+        assert not is_recommendable_odds(Decimal(cuota))
+
+    @pytest.mark.parametrize("cuota", [None, "1", "0.5", "NaN", "Infinity"])
+    def test_cuota_invalida_no_es_recomendable(self, cuota: str | None):
+        assert not is_recommendable_odds(Decimal(cuota) if cuota is not None else None)
+
+    def test_acepta_float_y_str(self):
+        assert is_recommendable_odds(2.5)
+        assert not is_recommendable_odds("4.5")
 
 
 class TestImpliedProbability:

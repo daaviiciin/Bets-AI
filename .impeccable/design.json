@@ -1,0 +1,398 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-17T17:30:00+02:00",
+  "title": "Design System: Bets AI",
+  "extensions": {
+    "colorMeta": {
+      "noche": {
+        "role": "neutral",
+        "displayName": "Azul noche",
+        "canonical": "#0b1222",
+        "tonalRamp": [
+          "#05080f",
+          "#0b1222",
+          "#15203a",
+          "#26365c",
+          "#4a5d85",
+          "#8f9bb5",
+          "#c9d0de",
+          "#f3f5f9"
+        ]
+      },
+      "noche-profunda": {
+        "role": "neutral",
+        "displayName": "Noche profunda",
+        "canonical": "#0e1729",
+        "tonalRamp": [
+          "#060a12",
+          "#0e1729",
+          "#18243f",
+          "#2a3a5e",
+          "#4e6187",
+          "#8f9bb5",
+          "#c9d0de",
+          "#f3f5f9"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "canonical": "#15203a",
+        "tonalRamp": [
+          "#0b1222",
+          "#15203a",
+          "#1c2a4b",
+          "#26365c",
+          "#4a5d85",
+          "#8f9bb5",
+          "#c9d0de",
+          "#f3f5f9"
+        ]
+      },
+      "panel-elevado": {
+        "role": "neutral",
+        "displayName": "Panel elevado",
+        "canonical": "#1c2a4b",
+        "tonalRamp": [
+          "#0b1222",
+          "#15203a",
+          "#1c2a4b",
+          "#26365c",
+          "#4a5d85",
+          "#8f9bb5",
+          "#c9d0de",
+          "#f3f5f9"
+        ]
+      },
+      "filete": {
+        "role": "neutral",
+        "displayName": "Filete",
+        "canonical": "#26365c",
+        "tonalRamp": [
+          "#0b1222",
+          "#15203a",
+          "#1c2a4b",
+          "#26365c",
+          "#4a5d85",
+          "#8f9bb5",
+          "#c9d0de",
+          "#f3f5f9"
+        ]
+      },
+      "tinta": {
+        "role": "neutral",
+        "displayName": "Tinta",
+        "canonical": "#f3f5f9",
+        "tonalRamp": [
+          "#1c2a4b",
+          "#3a4a6c",
+          "#5d6d8f",
+          "#8f9bb5",
+          "#b3bccd",
+          "#d3d9e4",
+          "#e6eaf1",
+          "#f3f5f9"
+        ]
+      },
+      "gris-grafismo": {
+        "role": "neutral",
+        "displayName": "Gris grafismo",
+        "canonical": "#8f9bb5",
+        "tonalRamp": [
+          "#26365c",
+          "#3a4a6c",
+          "#5d6d8f",
+          "#7a87a3",
+          "#8f9bb5",
+          "#aab4c9",
+          "#c9d0de",
+          "#e6eaf1"
+        ]
+      },
+      "verde-boletin": {
+        "role": "primary",
+        "displayName": "Verde boletín",
+        "canonical": "#2fd18a",
+        "tonalRamp": [
+          "#063d26",
+          "#0b5c3a",
+          "#12804f",
+          "#1aa566",
+          "#2fd18a",
+          "#62dea6",
+          "#9aeac4",
+          "#d2f6e5"
+        ]
+      },
+      "rojo-baja": {
+        "role": "tertiary",
+        "displayName": "Rojo baja",
+        "canonical": "#e6463c",
+        "tonalRamp": [
+          "#470f0b",
+          "#6e1712",
+          "#99211a",
+          "#c42d24",
+          "#e6463c",
+          "#ed7770",
+          "#f4a8a3",
+          "#fbd9d7"
+        ]
+      },
+      "ambar-duda": {
+        "role": "tertiary",
+        "displayName": "Ámbar duda",
+        "canonical": "#f2b53a",
+        "tonalRamp": [
+          "#4a3305",
+          "#704d08",
+          "#9a6b0d",
+          "#c98d16",
+          "#f2b53a",
+          "#f5c86b",
+          "#f9dc9f",
+          "#fcefd2"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Rótulo grande",
+        "purpose": "Título de página y nombres de club en el marcador; cursiva, mayúsculas."
+      },
+      "headline": {
+        "displayName": "Cabecera de día",
+        "purpose": "Días de la portada; cursiva, mayúsculas."
+      },
+      "title": {
+        "displayName": "Rótulo",
+        "purpose": "Pestañas, botón del boletín y cabeceras de sección; cursiva, mayúsculas."
+      },
+      "body": {
+        "displayName": "Texto",
+        "purpose": "Equipos, selecciones y texto de apoyo."
+      },
+      "label": {
+        "displayName": "Etiqueta",
+        "purpose": "Filtros, navegación y competiciones; mayúsculas."
+      },
+      "cifra": {
+        "displayName": "Cifra",
+        "purpose": "Cuotas con cifras tabulares, formateadas con fmtCuota."
+      }
+    },
+    "shadows": [
+      {
+        "name": "cajon",
+        "value": "-24px 0 48px -24px rgb(0 0 0 / 0.6)",
+        "purpose": "Solo el cajón lateral del boletín."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out-expo",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Easing de todos los barridos, entradas y estados."
+      },
+      {
+        "name": "skew",
+        "value": "skewX(-8deg)",
+        "purpose": "Inclinación de rótulo: marcador, mini marcador, pestañas y botón del boletín."
+      },
+      {
+        "name": "barrido",
+        "value": "clip-path polygon con canto a −8° · 440–460ms ease-out-expo",
+        "purpose": "Las placas rectas entran barriendo de izquierda a derecha (tv-barrido; tv-placa si ya están inclinadas)."
+      },
+      {
+        "name": "sube",
+        "value": "translateY(100%) + clip-path desde abajo · 340–480ms ease-out-expo",
+        "purpose": "Los textos y cifras asoman desde su línea base (tv-sube)."
+      },
+      {
+        "name": "trazo",
+        "value": "scaleX(0) → 1 · 700–900ms ease-out-expo; SVG stroke-dashoffset con pathLength=1",
+        "purpose": "Los filetes y las líneas del campo se trazan (tv-trazo, tv-dibuja)."
+      },
+      {
+        "name": "cifra",
+        "value": "requestAnimationFrame, easeOutExpo · 450–600ms",
+        "purpose": "Las cifras cuentan desde 0 al aparecer y del valor viejo al nuevo al cambiar (tvCifra)."
+      },
+      {
+        "name": "filete-guia",
+        "value": "línea de tinta de 3px que cabalga el canto del barrido · 620ms",
+        "purpose": "Solo el foco de cada página: título de Partidos y clubes del marcador."
+      },
+      {
+        "name": "barrido-club",
+        "value": "clip-path 0.62s ease-out-expo desde el centro + persiana del centro 0.42s",
+        "purpose": "Cada club del marcador se pinta desde el centro hacia su lado; el centro se abre desde su línea media."
+      },
+      {
+        "name": "barrido-panel",
+        "value": "clip-path diagonal 0.3s ease-out-expo",
+        "purpose": "El panel de cada pestaña entra con un barrido corto; la pestaña activa se rellena de tinta en 200ms."
+      },
+      {
+        "name": "cortinilla",
+        "value": "View Transitions · clip-path diagonal a todo el alto 460ms",
+        "purpose": "Cambio de página: barre a la derecha al entrar y a la izquierda al volver; la barra no se mueve y su filete activo viaja."
+      },
+      {
+        "name": "escalonado",
+        "value": "30–90ms por pieza del mismo grupo y tanda, tope 160–400ms",
+        "purpose": "tvEntra: lo que entra a la vez se escalona; lo de abajo entra al verse, una vez. Nunca un retardo por línea en listas largas."
+      },
+      {
+        "name": "flap",
+        "value": "perspective(240px) rotateX(-90deg) → 0 · 380ms",
+        "purpose": "Placas de forma V/E/D, como las paletas de un marcador."
+      },
+      {
+        "name": "ficha",
+        "value": "scale(0.55) + opacity 0 → 1 · 360ms",
+        "purpose": "Fichas del campo, de cada portería hacia el centro."
+      },
+      {
+        "name": "flip",
+        "value": "translateY(Δ) → 0 · 220ms (Web Animations)",
+        "purpose": "Al ordenar la tabla de jugadores, cada fila se desliza a su nuevo puesto."
+      },
+      {
+        "name": "escaneo",
+        "value": "filete de tinta de 1px, lineal 540ms",
+        "purpose": "Cabezal que recorre la regla de la jornada y levanta las marcas de saque a su paso."
+      },
+      {
+        "name": "carga",
+        "value": "banda tonal inclinada (panel elevado al 70 %), lineal 1.6s en bucle",
+        "purpose": "Esqueletos de carga; sin brillo."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Cuota",
+      "kind": "button",
+      "refersTo": "cuota",
+      "description": "Cuota 1X2 de una fila de partido; al pulsarla va al boletín.",
+      "html": "<div style=\"display:flex;gap:6px\"><button class=\"ds-cuota\"><span class=\"ds-cuota-k\">1</span><span class=\"ds-cuota-v\">2,80</span></button><button class=\"ds-cuota\"><span class=\"ds-cuota-k\">X</span><span class=\"ds-cuota-v\">3,60</span></button><button class=\"ds-cuota ds-cuota-on\"><span class=\"ds-cuota-k\">2</span><span class=\"ds-cuota-v\">2,30</span></button></div>",
+      "css": ".ds-cuota { display:flex; flex-direction:column; align-items:center; justify-content:center; width:64px; height:46px; color:var(--color-tv-ink,#f3f5f9); background:var(--color-tv-panel,#15203a); border:1px solid var(--color-tv-line,#26365c); border-radius:0; font-variant-numeric:tabular-nums; transition:background-color .15s, border-color .15s, transform .15s cubic-bezier(0.16,1,0.3,1); cursor:pointer; } .ds-cuota:hover { background:var(--color-tv-raised,#1c2a4b); border-color:var(--color-tv-muted,#8f9bb5); } .ds-cuota:active { transform:scale(0.95); } .ds-cuota:focus-visible { outline:2px solid #f3f5f9; outline-offset:2px; } .ds-cuota-k { font-size:11px; font-weight:600; opacity:.6; } .ds-cuota-v { font-family:'Barlow Semi Condensed',sans-serif; font-size:16px; font-weight:700; } .ds-cuota-on, .ds-cuota-on:hover { color:#0b1222; background:#2fd18a; border-color:#2fd18a; }"
+    },
+    {
+      "name": "Línea de mercado",
+      "kind": "button",
+      "refersTo": "linea",
+      "description": "Línea ancha de la pestaña Cuotas: con valor (filete verde), sin modelo (discontinuo). Celda compacta: P(modelo) siempre que exista y EV solo si la línea tiene valor. Por encima de 4,00 la cuota es solo informativa: nunca se marca como valor.",
+      "html": "<div style=\"display:grid;gap:8px;width:320px\"><button class=\"ds-linea ds-linea-valor\"><span><b>Everton o empate</b><small>Modelo 86 % · EV <em>+38 %</em></small></span><strong>1,60</strong></button><button class=\"ds-linea ds-linea-sin\"><span><b>Chelsea y más de 1,5 goles</b></span><strong>2,80</strong></button></div>",
+      "css": ".ds-linea { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:56px; padding:8px 12px; text-align:left; color:#f3f5f9; background:#15203a; border:1px solid #26365c; border-radius:0; cursor:pointer; transition:background-color .15s, border-color .15s; } .ds-linea:hover { background:#1c2a4b; border-color:#8f9bb5; } .ds-linea:focus-visible { outline:2px solid #f3f5f9; outline-offset:2px; } .ds-linea b { display:block; font-size:14px; font-weight:600; } .ds-linea small { display:block; font-size:12px; color:#8f9bb5; } .ds-linea em { font-style:normal; font-weight:700; color:#2fd18a; } .ds-linea strong { font-family:'Barlow Semi Condensed',sans-serif; font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; } .ds-linea-valor { box-shadow:inset 0 0 0 2px #2fd18a; } .ds-linea-sin { border-style:dashed; border-color:color-mix(in oklab, #26365c, #8f9bb5 35%); }"
+    },
+    {
+      "name": "Filtro",
+      "kind": "chip",
+      "refersTo": "filtro",
+      "description": "Conmutador de día, competición o grupo de mercado.",
+      "html": "<div style=\"display:flex;gap:8px\"><button class=\"ds-filtro ds-filtro-on\">Hoy <span>21</span></button><button class=\"ds-filtro\">Mañana <span>19</span></button></div>",
+      "css": ".ds-filtro { display:inline-flex; align-items:center; gap:8px; padding:8px 16px; font-family:'Barlow Semi Condensed',sans-serif; font-size:15px; font-weight:700; letter-spacing:.02em; text-transform:uppercase; color:#8f9bb5; background:#15203a; border:0; border-radius:0; cursor:pointer; transition:background-color .2s, color .2s; } .ds-filtro:hover { color:#f3f5f9; } .ds-filtro:focus-visible { outline:2px solid #f3f5f9; outline-offset:2px; } .ds-filtro span { font-weight:600; opacity:.6; } .ds-filtro-on, .ds-filtro-on:hover { color:#0b1222; background:#f3f5f9; }"
+    },
+    {
+      "name": "Pestañas",
+      "kind": "nav",
+      "refersTo": "pestana",
+      "description": "Pestañas inclinadas de la página de partido. La activa se rellena de tinta barriendo (200 ms); el panel entra con un barrido diagonal de 0,3 s.",
+      "html": "<div class=\"ds-pestanas\"><button class=\"ds-pestana ds-pestana-on\"><span>Previa</span></button><button class=\"ds-pestana\"><span>Alineaciones</span></button><button class=\"ds-pestana\"><span>Cuotas <i>128</i></span></button></div>",
+      "css": ".ds-pestanas { display:flex; gap:4px; } .ds-pestana { transform:skewX(-8deg); padding:10px 20px; color:#8f9bb5; background:#15203a; border:0; border-radius:0; cursor:pointer; transition:color .2s, background-color .2s; } .ds-pestana:hover { color:#f3f5f9; } .ds-pestana:focus-visible { outline:2px solid #f3f5f9; outline-offset:2px; } .ds-pestana > span { display:inline-block; transform:skewX(8deg); font-family:'Barlow Semi Condensed',sans-serif; font-style:italic; font-weight:800; font-size:16px; text-transform:uppercase; } .ds-pestana i { font-style:inherit; opacity:.6; } .ds-pestana-on, .ds-pestana-on:hover { color:#0b1222; background:#f3f5f9; }"
+    },
+    {
+      "name": "Botón del boletín",
+      "kind": "button",
+      "refersTo": "boton-boletin-con-selecciones",
+      "description": "Botón inclinado de la barra; verde cuando hay selecciones.",
+      "html": "<button class=\"ds-boletin\"><span><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\"><path d=\"M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4z\"/></svg><b>Boletín</b><em>2 · 2,16</em></span></button>",
+      "css": ".ds-boletin { transform:skewX(-8deg); padding:8px 14px; color:#0b1222; background:#2fd18a; border:0; border-radius:0; cursor:pointer; } .ds-boletin:focus-visible { outline:2px solid #f3f5f9; outline-offset:2px; } .ds-boletin > span { display:flex; align-items:center; gap:8px; transform:skewX(8deg); } .ds-boletin b { font-family:'Barlow Semi Condensed',sans-serif; font-style:italic; font-weight:800; font-size:16px; text-transform:uppercase; } .ds-boletin em { font-style:normal; font-family:'Barlow Semi Condensed',sans-serif; font-weight:700; font-variant-numeric:tabular-nums; }"
+    },
+    {
+      "name": "Mini marcador",
+      "kind": "custom",
+      "refersTo": "mini-marcador",
+      "description": "Marcador del partido en pequeño en cada fila de la portada: franjas de club y placa de hora.",
+      "html": "<div style=\"display:flex;gap:16px\"><span class=\"ds-mini\"><i style=\"background:#007fc8\"></i><b>14:00</b><i style=\"background:#cb3524\"></i></span><span class=\"ds-mini\"><i style=\"background:#ffffff\"></i><b class=\"ds-mini-oscura\">21:00</b><i style=\"background:#e4261e\"></i></span></div>",
+      "css": ".ds-mini { display:inline-flex; align-items:stretch; height:30px; transform:skewX(-8deg); } .ds-mini i { width:18px; } .ds-mini b { display:grid; place-items:center; padding:0 8px; font-family:'Barlow Semi Condensed',sans-serif; font-size:15px; font-weight:700; color:#0b1222; background:#f3f5f9; } .ds-mini-oscura { color:#f3f5f9 !important; background:#1c2a4b !important; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Grafismo de retransmisión",
+    "overview": "Cada partido se cuenta como lo cuenta la tele: un marcador inclinado a todo el ancho pintado con los colores de los dos clubes, rótulos en cursiva condensada que entran con un barrido y una noche azul de fondo que no compite con nada. El color no es de la marca: lo ponen los clubes de cada partido (primario y secundario sacados del escudo). La interfaz solo aporta tres colores propios con significado fijo: verde para el boletín, rojo para bajas y errores, ámbar para dudas.\n\nEs una herramienta de análisis para usar con calma en el ordenador, densa pero legible: filas de partido con tres cuotas, pestañas de previa, alineaciones, estadísticas, cuotas y jugadores, y un boletín lateral persistente. La personalidad está en los detalles de retransmisión (inclinación, barridos, cifras tabulares), no en decoración. Rechaza explícitamente la lista gris de Flashscore y el panel oscuro con un acento neón.",
+    "keyCharacteristics": [
+      "Fondo azul noche plano; profundidad por capas tonales, no por sombras.",
+      "Los dos clubes ponen el color de cada pantalla de partido.",
+      "Rótulos en Barlow Semi Condensed cursiva 800 y mayúsculas; texto en Barlow; cifras tabulares.",
+      "Inclinación de rótulo (−8°) reservada a marcador, pestañas y botón del boletín.",
+      "Esquinas rectas en todo salvo escudos y marcas de jugador (círculos).",
+      "Movimiento \"entrada en antena\": las placas barren con el canto a −8°, los textos suben desde su línea base, los filetes se trazan y las cifras cuentan; la cuota vuela al boletín y las páginas cambian con una cortinilla. Todo instantáneo con \"reducir movimiento\"."
+    ],
+    "rules": [
+      {
+        "name": "The Los Clubes Pintan Rule",
+        "body": "La interfaz no tiene color de marca saturado: en una pantalla de partido el color lo ponen los dos clubes, y en el resto manda la noche azul.",
+        "section": "colors"
+      },
+      {
+        "name": "The Verde Significa Boletín Rule",
+        "body": "El verde solo dice \"está en el boletín\" (relleno) o \"es candidata\" (filete interior). Si algo es verde y no es una de las dos cosas, sobra.",
+        "section": "colors"
+      },
+      {
+        "name": "The Placa Que No Se Funde Rule",
+        "body": "Si un club viste claro (luminancia > 0,45), la placa central del marcador y del mini marcador pasa a panel-elevado; si no, es tinta. Tres piezas siempre se leen como tres.",
+        "section": "colors"
+      },
+      {
+        "name": "The Rótulo Rule",
+        "body": "Cursiva + mayúsculas + 800 solo para rótulos (títulos, pestañas, marcador, botón del boletín). El texto que se lee de corrido va en Barlow recta.",
+        "section": "typography"
+      },
+      {
+        "name": "The Sin Brillos Rule",
+        "body": "Nada brilla: ni halos de color, ni degradados metálicos. El degradado del panel de club oscurece un tercio un color oscuro, pero solo un 6 % uno claro, para que el blanco no se vuelva gris. Lo \"futurista\" del movimiento es precisión, no luz: el filete guía y el cabezal de escaneo son líneas de tinta sólidas, de 1–3 px y de un solo paso, y la banda de carga es tonal; ninguno tiene desenfoque ni halo.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Inclinación Escasa Rule",
+        "body": "Solo se inclina lo que en una retransmisión sería un rótulo. Botones de cuota, filas y tarjetas van rectos.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do usar los tokens `tv-*` de `styles.scss` en código nuevo y pintar con `matchPaint()` todo lo que lleve color de club.",
+      "Do formatear cuotas, porcentajes y fechas solo con `core/format.ts` y cifras tabulares.",
+      "Do dar a cada animación su versión con \"reducir movimiento\" (estado final visible sin esperar retardos).",
+      "Do señalar el estado también por forma (filete interior, borde discontinuo, aro), no solo por color.",
+      "Do hacer entrar lo nuevo con la gramática de antena (barre, sube, se traza, cuenta) y reservar el filete guía al foco de cada página."
+    ],
+    "donts": [
+      "Don't añadir un color de acento propio (cian, neón, morado): el color lo ponen los clubes.",
+      "Don't usar el verde para algo que no sea el boletín o una candidata del modelo.",
+      "Don't redondear esquinas de cuotas, tarjetas o pestañas.",
+      "Don't inclinar filas, tarjetas ni botones de cuota.",
+      "Don't usar brillos, halos o sombras luminosas.",
+      "Don't construir pantallas nuevas con la paleta antigua `brand-*` / `slate-*`.",
+      "Don't usar el \"aparece subiendo y desvaneciéndose\" genérico, ni escalonar línea a línea listas largas, ni hacer esperar al usuario: ninguna vista tarda más de ~0,9 s en estar entera."
+    ]
+  }
+}

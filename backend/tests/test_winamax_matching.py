@@ -1,15 +1,19 @@
 """Tests del emparejado Winamax ↔ BD por hora de inicio + parecido de nombres (sin BD ni red).
 
 Parejas reales de la jornada europea del 2026-10-15: Winamax escribe en español. También el
-protocolo del socket y el catálogo por ligas (``tournament:<id>``), con respuestas simuladas.
+protocolo del socket y el catálogo por ligas (``tournament:<id>``), con respuestas simuladas,
+y el tope de guardado de cuotas (``MAX_STORED_ODDS``).
 """
 
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from backend.scrapers.winamax import (
     SocketRouteCollector,
@@ -19,6 +23,7 @@ from backend.scrapers.winamax import (
 )
 from backend.services.team_name_matching import team_side_score
 from backend.services.winamax_odds_ingester import (
+    MAX_STORED_ODDS,
     WinamaxOddsIngester,
     merge_winamax_matches,
     needs_odds_refresh,
@@ -250,6 +255,34 @@ class TestCatalogoPorLigas:
         with caplog.at_level(logging.WARNING):
             ing._socket_catalog({"soccer_uefa_champs_league"})
         assert "soccer_uefa_champs_league" in caplog.text
+
+
+class TestTopeDeGuardado:
+    """Se guardan cuotas hasta 10,00 (antes se tiraban las de 4,00 o más y el 1X2 salía cojo)."""
+
+    def test_el_tope_es_10(self) -> None:
+        assert MAX_STORED_ODDS == Decimal("10.00")
+
+    @pytest.mark.parametrize("cuota", ["1.01", "3.99", "4.00", "4.01", "5.50", "9.99", "10.00"])
+    def test_se_guarda_hasta_10_incluido(self, cuota: str) -> None:
+        assert WinamaxOddsIngester._is_storable_price(Decimal(cuota))
+
+    @pytest.mark.parametrize("cuota", ["0.50", "1.00", "10.01", "15", "101"])
+    def test_no_se_guarda_fuera_del_rango(self, cuota: str) -> None:
+        assert not WinamaxOddsIngester._is_storable_price(Decimal(cuota))
+
+    def test_la_purga_solo_borra_por_encima_de_10(self) -> None:
+        session = MagicMock()
+        session.execute.return_value.rowcount = 2
+        borradas = WinamaxOddsIngester(session=session)._purge_non_storable_winamax_odds()
+        assert borradas == 2
+        sentencia = session.execute.call_args.args[0]
+        sql = str(sentencia.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True},
+        ))
+        # Complemento exacto de _is_storable_price: 10,00 se queda, 4–10 ya no se borran.
+        assert "odds.price > 10.00" in sql
+        assert ">=" not in sql
 
 
 class TestNeedsOddsRefresh:

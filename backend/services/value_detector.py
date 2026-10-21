@@ -33,6 +33,11 @@ Modos
 Mercados ignorados
 ------------------
 * ``h2h_lay`` (Betfair Exchange).
+
+Tope de cuota
+-------------
+Nunca se emite una apuesta con cuota > ``value_calculator.MAX_RECOMMENDABLE_ODDS`` (4,00).
+Esas cuotas sí entran en el cálculo del margen del mercado, pero no son candidatas.
 """
 
 from __future__ import annotations
@@ -1098,6 +1103,10 @@ class ValueDetector:
             if not self.official_pipeline and bm.id == sharp_bookmaker.id:
                 continue
             for outcome_name, odds_row in outcomes.items():
+                # Antes que nada: una cuota > MAX_RECOMMENDABLE_ODDS nunca es candidata.
+                # (Sí cuenta arriba para quitar el margen: el mercado necesita todas sus cuotas.)
+                if not vc.is_recommendable_odds(odds_row.price):
+                    continue
                 fair_prob = fair_probs.get(outcome_name)
                 if fair_prob is None:
                     continue

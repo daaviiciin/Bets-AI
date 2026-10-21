@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -76,6 +77,22 @@ def _construir_url(settings: Settings, sport_key: str) -> str:
     return f"{settings.odds_api_base_url}/sports/{sport_key}/odds"
 
 
+_API_KEY_EN_URL = re.compile(r"(apiKey=)[^&\s'\"]+", re.IGNORECASE)
+
+
+def ocultar_api_key(texto: str, api_key: str = "") -> str:
+    """Enmascara la clave de The Odds API en un texto (URL, excepción, cuerpo HTTP).
+
+    ``requests`` incluye la URL con la query (``?apiKey=...``) en el mensaje de
+    muchas excepciones; ese texto acaba en el log y en ``errors`` de la respuesta
+    de ``POST /refresh``.
+    """
+    limpio = _API_KEY_EN_URL.sub(r"\g<1>***", texto)
+    if api_key:
+        limpio = limpio.replace(api_key, "***")
+    return limpio
+
+
 def _construir_params(
     api_key: str,
     regions: str = DEFAULT_REGIONS,
@@ -122,27 +139,29 @@ def fetch_liga(
     try:
         response = requests.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
     except requests.RequestException as exc:
-        log.error("Error de red para %s: %s", liga, exc)
+        detalle = ocultar_api_key(str(exc), settings.odds_api_key)
+        log.error("Error de red para %s: %s", liga, detalle)
         return FetchResult(
             liga=liga, sport_key=sport_key, n_eventos=0, n_bookmakers=0,
             file_path=None, requests_remaining=None, requests_used=None,
-            error=f"network_error: {exc}",
+            error=f"network_error: {detalle}",
         )
 
     remaining = response.headers.get("x-requests-remaining")
     used = response.headers.get("x-requests-used")
 
     if response.status_code != 200:
+        cuerpo = ocultar_api_key(response.text[:200], settings.odds_api_key)
         log.error(
             "API respondió %s para %s: %s",
-            response.status_code, liga, response.text[:200],
+            response.status_code, liga, cuerpo,
         )
         return FetchResult(
             liga=liga, sport_key=sport_key, n_eventos=0, n_bookmakers=0,
             file_path=None,
             requests_remaining=int(remaining) if remaining else None,
             requests_used=int(used) if used else None,
-            error=f"http_{response.status_code}: {response.text[:200]}",
+            error=f"http_{response.status_code}: {cuerpo}",
         )
 
     eventos = response.json()

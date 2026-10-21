@@ -60,6 +60,7 @@ from backend.services.match_results_updater import UpdateSummary
 from backend.services.player_match_stats_ingester import PlayerStatsIngestResult
 from backend.services.player_season_rollup import rollup_player_season_stats
 from backend.services.season_history_ingester import SeasonHistoryIngester
+from backend.services.team_crests import TeamCrestColorizer
 
 
 @dataclass
@@ -101,6 +102,7 @@ class DailyRefreshOrchestrator:
         player_stats_ingester: FlashscorePlayerStatsIngester | None = None,
         absences_ingester: MatchAbsencesIngester | None = None,
         history_ingester: SeasonHistoryIngester | None = None,
+        crest_colorizer: TeamCrestColorizer | None = None,
     ) -> None:
         self.session = session
         self.log = log or logging.getLogger(__name__)
@@ -120,6 +122,7 @@ class DailyRefreshOrchestrator:
             absences_ingester or MatchAbsencesIngester(session, log=self.log)
         )
         self._history_ingester = history_ingester or SeasonHistoryIngester(session, log=self.log)
+        self._crest_colorizer = crest_colorizer or TeamCrestColorizer(session, log=self.log)
 
     def run(
         self,
@@ -174,6 +177,11 @@ class DailyRefreshOrchestrator:
             )
         except Exception as exc:  # noqa: BLE001
             self._fail(summary, "flashscore_fixtures_ingester", exc)
+        # El calendario guarda los escudos; aquí se colorean los equipos nuevos (1 imagen c/u).
+        try:
+            self._crest_colorizer.run(limit=200)
+        except Exception as exc:  # noqa: BLE001
+            self._fail(summary, "team_crest_colorizer", exc)
 
         self._step("paso 2/6: resultados Flashscore")
         try:

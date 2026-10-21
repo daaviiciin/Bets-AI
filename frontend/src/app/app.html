@@ -1,69 +1,100 @@
-<div class="min-h-screen flex flex-col">
-  <header
-    class="border-b border-brand-cyan/15 bg-brand-bg-deep/85 backdrop-blur-md sticky top-0 z-10 shadow-[0_0_40px_-12px_rgb(0_229_255_/_18%)]">
-    <div class="max-w-7xl mx-auto px-6 py-3.5">
-      <div class="flex flex-col sm:flex-row sm:items-center gap-6 w-full justify-between">
-        <a routerLink="/dashboard" class="flex items-center gap-3 group outline-none focus-visible:ring-2 focus-visible:ring-brand-cyan/50 rounded-lg">
-          <img
-            src="/brand/logo-bets-ai.png"
-            alt="BETS Ai"
-            width="148"
-            height="52"
-            class="h-11 sm:h-12 w-auto object-contain object-left drop-shadow-[0_0_16px_rgb(0_229_255_/_35%)] group-hover:drop-shadow-[0_0_22px_rgb(0_229_255_/_45%)] transition-[filter]" />
-          <span class="sr-only">BETS Ai · Intelligent market analysis</span>
-        </a>
-        <div class="flex flex-wrap items-center gap-4 sm:gap-6 shrink-0">
-          <nav class="flex gap-6 text-sm font-medium" aria-label="Principal">
-            <a
-              routerLink="/transparencia"
-              routerLinkActive="text-brand-cyan font-semibold"
-              class="text-brand-muted hover:text-white transition-colors">
-              Transparencia
-            </a>
-            <a
-              routerLink="/dashboard"
-              routerLinkActive="text-brand-cyan font-semibold"
-              [routerLinkActiveOptions]="{ exact: false }"
-              class="text-brand-muted hover:text-white transition-colors">
-              Dashboard
-            </a>
-            <a
-              routerLink="/estadisticas"
-              routerLinkActive="text-brand-cyan font-semibold"
-              class="text-brand-muted hover:text-white transition-colors">
-              Estadísticas
-            </a>
-            <a
-              routerLink="/mis-apuestas"
-              routerLinkActive="text-brand-cyan font-semibold"
-              class="text-brand-muted hover:text-white transition-colors">
-              Mis apuestas
-            </a>
-            @if (!auth.isLoggedIn()) {
-              <a routerLink="/" class="text-brand-muted hover:text-white transition-colors">Entrar</a>
+<div class="flex min-h-screen flex-col">
+  <!--
+    Barra superior. Al arrancar la app se monta como un grafismo: el filete inferior se
+    traza, "Bets" sube, la placa "AI" barre, los enlaces suben uno tras otro y el botón del
+    boletín barre desde la derecha. Solo una vez: la barra no se vuelve a crear.
+  -->
+  <header class="tv-cabecera sticky top-0 z-30 bg-tv-night/95 backdrop-blur-sm">
+    <div class="mx-auto flex h-16 max-w-[1440px] items-center gap-8 px-4 sm:px-8">
+      <a
+        routerLink="/dashboard"
+        class="rotulo flex items-center gap-1.5 text-2xl leading-none"
+        aria-label="Bets AI · Partidos">
+        <span class="tv-sube inline-block">Bets</span>
+        <span
+          class="tv-placa skew inline-block bg-tv-ink px-1.5 py-0.5 text-tv-night"
+          style="--tv-t: 120ms">
+          <span class="unskew inline-block">AI</span>
+        </span>
+      </a>
+
+      <nav class="hidden h-full items-stretch gap-6 md:flex" aria-label="Principal">
+        @for (item of nav; track item.path; let i = $index) {
+          <a
+            [routerLink]="item.path"
+            routerLinkActive="nav-activo"
+            [style.--tv-t]="180 + i * 45 + 'ms'"
+            class="nav-link font-display flex items-center text-[15px] font-semibold uppercase tracking-wide text-tv-muted transition-colors hover:text-tv-ink">
+            <span class="tv-sube inline-block">{{ item.label }}</span>
+            <span class="nav-filete" aria-hidden="true"></span>
+          </a>
+        }
+      </nav>
+
+      <div class="ml-auto flex items-center gap-4">
+        @if (auth.user(); as user) {
+          <span class="tv-sube hidden text-sm text-tv-muted lg:inline-block" style="--tv-t: 300ms">
+            {{ user.username }}
+          </span>
+          <button
+            type="button"
+            (click)="logout()"
+            style="--tv-t: 300ms"
+            class="tv-sube text-sm text-tv-muted underline-offset-4 transition-colors hover:text-tv-ink hover:underline">
+            Salir
+          </button>
+        } @else {
+          <a
+            routerLink="/login"
+            style="--tv-t: 300ms"
+            class="tv-sube inline-block text-sm text-tv-muted transition-colors hover:text-tv-ink">
+            Entrar
+          </a>
+        }
+        <button
+          id="boletin-boton"
+          type="button"
+          (click)="slip.open.set(!slip.open())"
+          [attr.aria-expanded]="slip.open()"
+          style="--tv-t: 220ms"
+          class="boton-boletin tv-placa-inv skew flex items-center gap-2 px-3.5 py-2"
+          [class.boton-boletin-on]="slip.count()">
+          <span class="unskew flex items-center gap-2">
+            <app-icon name="ticket" [size]="18" />
+            <span class="rotulo text-base">Boletín</span>
+            @if (slip.count()) {
+              <span class="font-display text-base font-bold">
+                {{ slip.count() }} ·
+                <span [tvCifra]="slip.totalOdds()" [tvFormato]="fmtCuota" [tvDuracion]="450"></span>
+              </span>
             }
-          </nav>
-          @if (auth.user()) {
-            <div class="flex items-center gap-3 text-xs text-brand-muted">
-              <span class="text-white font-medium">{{ auth.user()!.username }}</span>
-              <button
-                type="button"
-                (click)="logout()"
-                class="rounded-lg border border-brand-blue/35 px-3 py-1.5 text-brand-muted hover:border-brand-cyan/45 hover:text-white transition-colors">
-                Salir
-              </button>
-            </div>
-          }
-        </div>
+          </span>
+        </button>
       </div>
     </div>
+    <nav
+      class="flex gap-5 overflow-x-auto border-t border-tv-line px-4 py-2 md:hidden"
+      aria-label="Principal (móvil)">
+      @for (item of nav; track item.path; let i = $index) {
+        <a
+          [routerLink]="item.path"
+          routerLinkActive="text-tv-ink"
+          [style.--tv-t]="180 + i * 45 + 'ms'"
+          class="font-display shrink-0 text-sm font-semibold uppercase text-tv-muted">
+          <span class="tv-sube inline-block">{{ item.label }}</span>
+        </a>
+      }
+    </nav>
   </header>
 
   <main class="flex-1">
     <router-outlet />
   </main>
 
-  <footer class="border-t border-brand-cyan/10 py-6 text-center text-xs text-brand-muted">
-    BETS Ai · MVP {{ year }} · Intelligent market analysis · No es asesoramiento financiero
+  <footer class="border-t border-tv-line px-4 py-6 text-center text-xs text-tv-muted">
+    Bets AI · Proyecto educativo {{ year }} · Analiza, no es una recomendación de apuesta
   </footer>
 </div>
+
+<app-betslip-panel />
+<app-slip-flight />

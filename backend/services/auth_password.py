@@ -16,6 +16,20 @@ def hash_password(plain: str, *, salt: str | None = None) -> str:
     return f"{s}:{dk.hex()}"
 
 
+#: Hash de una contraseña aleatoria que nadie conoce. Se verifica contra él cuando el usuario
+#: no existe, para que el login tarde lo mismo y no delate qué usuarios hay (C-5).
+_HASH_FICTICIO = hash_password(secrets.token_urlsafe(16))
+
+#: Longitud mínima al fijar una contraseña nueva (``backend.tools.set_password``).
+LONGITUD_MINIMA_PASSWORD = 10
+
+
+def verificar_password_ficticia(plain: str) -> bool:
+    """Gasta el mismo tiempo que ``verify_password`` y devuelve siempre ``False``."""
+    verify_password(plain, _HASH_FICTICIO)
+    return False
+
+
 def verify_password(plain: str, stored: str) -> bool:
     if ":" not in stored:
         return False

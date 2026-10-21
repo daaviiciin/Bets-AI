@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,78 +18,14 @@ class LeagueOut(BaseModel):
     country: str | None = None
 
 
-class CompetitionStatsOut(BaseModel):
-    sport_key: str
-    name: str
-    teams_count: int
-    players_count: int
-    matches_with_stats: int
-
-
-class TeamStatisticsOut(BaseModel):
-    team_id: int
-    name: str
-    logo_url: str | None = None
-    matches_played: int | None = None
-    wins: int | None = None
-    draws: int | None = None
-    losses: int | None = None
-    goals_for: int | None = None
-    goals_against: int | None = None
-    points: int | None = None
-    xg_for: Decimal | None = None
-    xg_against: Decimal | None = None
-
-
-class PlayerStatisticsOut(BaseModel):
-    player_id: int
-    name: str
-    image_url: str | None = None
-    team_name: str | None = None
-    goals: int | None = None
-    assists: int | None = None
-    shots: int | None = None
-    shots_on_target: int | None = None
-    xg: Decimal | None = None
-    matches_played: int | None = None
-
-
-class StatisticsOverviewOut(BaseModel):
-    selected_sport_key: str | None = None
-    competitions: list[CompetitionStatsOut]
-    teams: list[TeamStatisticsOut]
-    players: list[PlayerStatisticsOut]
-
-
-class TeamRecentMatchOut(BaseModel):
-    match_id: int
-    opponent: str
-    is_home: bool
-    commence_time: datetime
-    team_score: int | None = None
-    opponent_score: int | None = None
-    result: str = "pending"
-    shots_on_target: int | None = None
-    corners: int | None = None
-    yellow_cards: int | None = None
-
-
-class TeamDetailStatisticsOut(BaseModel):
-    team: TeamStatisticsOut
-    competition_name: str | None = None
-    home_win_pct: float | None = None
-    away_win_pct: float | None = None
-    recent_form: list[str] = Field(default_factory=list)
-    recent_matches: list[TeamRecentMatchOut] = Field(default_factory=list)
-    totals: dict[str, int | float | None] = Field(default_factory=dict)
-    players: list[PlayerStatisticsOut] = Field(default_factory=list)
-
-
 class TeamOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
+    logo_url: str | None = None
+    primary_color: str | None = None
+    secondary_color: str | None = None
 
 
 class BookmakerOut(BaseModel):
@@ -99,6 +35,16 @@ class BookmakerOut(BaseModel):
     key: str
     title: str
     region: str | None = None
+
+
+class Odds1x2Out(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    home: Decimal | None = None
+    draw: Decimal | None = None
+    away: Decimal | None = None
+    home_name: str | None = Field(None, description="Selección del local tal como la escribe Winamax.")
+    away_name: str | None = Field(None, description="Selección del visitante tal como la escribe Winamax.")
 
 
 class MatchOut(BaseModel):
@@ -114,6 +60,8 @@ class MatchOut(BaseModel):
     home_score: int | None = None
     away_score: int | None = None
     played_at: datetime | None = None
+    # Solo con ``GET /matches?with_odds=true``: último 1X2 de Winamax (``None`` si no hay).
+    odds_1x2: Odds1x2Out | None = None
 
 
 class TeamStatsSideOut(BaseModel):
@@ -249,6 +197,9 @@ class GradedOddsLineOut(BaseModel):
     confidence: str = "unknown"
     model_probability: Decimal | None = None
     model_ev: Decimal | None = None
+    # Cuota <= MAX_RECOMMENDABLE_ODDS (4,00). Si es False la línea es solo informativa:
+    # nunca se marca como valor aunque tenga EV positivo.
+    recommendable: bool = False
     lambda_home: Decimal | None = None
     lambda_away: Decimal | None = None
     implied_probability: Decimal | None = None
@@ -270,21 +221,35 @@ class ParlayLegPersistIn(BaseModel):
     """Pata snapshot al construir combinada guardada desde el cliente."""
 
     match_id: int
-    home_team: str
-    away_team: str
-    league: str = ""
+    home_team: str = Field(max_length=160)
+    away_team: str = Field(max_length=160)
+    league: str = Field(default="", max_length=160)
     commence_time: datetime | None = None
-    market_key: str
-    outcome_name: str
-    outcome_point: str | None = None
-    player_name: str | None = None
-    offered_odds: Decimal
+    market_key: str = Field(max_length=64)
+    outcome_name: str = Field(max_length=160)
+    outcome_point: str | None = Field(default=None, max_length=32)
+    player_name: str | None = Field(default=None, max_length=160)
+    # Límites anti-abuso: el producto se guarda en Numeric(14, 4).
+    offered_odds: Decimal = Field(gt=Decimal("1"), le=Decimal("1000"))
     model_probability: Decimal | None = None
+
+
+#: Máximo de patas por combinada guardada (el JSON va entero a ``legs_snapshot``).
+MAX_SAVED_PARLAY_LEGS = 30
 
 
 class SavedParlayCreateIn(BaseModel):
     title: str | None = Field(default=None, max_length=160)
-    legs: list[ParlayLegPersistIn] = Field(min_length=1)
+    legs: list[ParlayLegPersistIn] = Field(min_length=1, max_length=MAX_SAVED_PARLAY_LEGS)
+    #: Importe apostado en euros (opcional: se puede guardar solo para seguirla).
+    stake: Decimal | None = Field(default=None, gt=0, le=100000, decimal_places=2)
+
+
+class SavedParlayUpdateIn(BaseModel):
+    """Solo cambia los campos enviados; ``manual_result: null`` vuelve a la liquidación automática."""
+
+    stake: Decimal | None = Field(default=None, gt=0, le=100000, decimal_places=2)
+    manual_result: Literal["hit", "miss", "void"] | None = None
 
 
 class SavedParlayOut(BaseModel):
@@ -298,6 +263,10 @@ class SavedParlayOut(BaseModel):
     legs_snapshot: list[Any]
     grading_snapshot: dict[str, Any] | None = None
     overall_result: str
+    manual_result: str | None = None
+    stake: Decimal | None = None
+    #: Beneficio neto si ya está liquidada y tiene importe (``beneficio_apuesta``); si no, null.
+    profit: Decimal | None = None
     last_graded_at: datetime | None = None
     created_at: datetime
 
@@ -331,7 +300,12 @@ class UserParlayMetricsOut(BaseModel):
     needs_review: int
     hits: int
     misses: int
+    voids: int = 0
     rate_pct: float | None = None
+    #: Suma de importes de las ganadas y perdidas (las nulas devuelven el dinero).
+    staked: Decimal = Decimal("0")
+    profit: Decimal = Decimal("0")
+    roi_pct: Decimal | None = None
 
 
 class UserProfileOut(BaseModel):
@@ -665,3 +639,117 @@ class CalibrationReportOut(BaseModel):
     reliability_home_win: list[ReliabilityBinOut] = Field(default_factory=list)
     reliability_over_25: list[ReliabilityBinOut] = Field(default_factory=list)
     grid_search: list[GridSearchPointOut] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Previa de partido (``GET /matches/{id}/preview``): página de partido
+# ---------------------------------------------------------------------------
+
+
+class TeamAveragesOut(BaseModel):
+    """Medias por partido de la temporada (``None`` si no hay datos de ese campo)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    matches: int = 0
+    goals_for: float | None = None
+    goals_against: float | None = None
+    xg: float | None = None
+    shots: float | None = None
+    shots_on_target: float | None = None
+    corners: float | None = None
+    yellow_cards: float | None = None
+    goals_1h: float | None = None
+    goals_2h: float | None = None
+    corners_1h: float | None = None
+    corners_2h: float | None = None
+    cards_1h: float | None = None
+    cards_2h: float | None = None
+
+
+class FormMatchOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    match_id: int
+    commence_time: datetime
+    opponent: str
+    is_home: bool
+    goals_for: int
+    goals_against: int
+    result: str = Field(..., description="W / D / L")
+
+
+class AbsenceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    status: str = Field(..., description="missing (baja) / doubtful (duda)")
+    reason: str | None = None
+
+
+class LineupPlayerOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    position: str | None = Field(None, description="G / D / M / F")
+    status: str | None = Field(None, description="missing / doubtful (solo en el probable)")
+    photo_url: str | None = Field(None, description="Foto del jugador (CDN de Flashscore)")
+
+
+class TeamLineupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    kind: str = Field(..., description="official / played / probable / none")
+    starters: list[LineupPlayerOut] = Field(default_factory=list)
+    based_on: str | None = None
+
+
+class KeyPlayerOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    player_id: int
+    name: str
+    position: str | None = None
+    apps: int
+    starts: int
+    minutes: int
+    goals: int
+    shots: int
+    shots_on_target: int
+    yellow_cards: int
+    shots_on_target_per90: float | None = None
+    shots_per90: float | None = None
+    photo_url: str | None = Field(None, description="Foto del jugador (CDN de Flashscore)")
+
+
+class TeamPreviewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    team_id: int
+    name: str
+    logo_url: str | None = None
+    primary_color: str | None = None
+    secondary_color: str | None = None
+    overall: TeamAveragesOut
+    venue: TeamAveragesOut
+    form: list[FormMatchOut] = Field(default_factory=list)
+    absences: list[AbsenceOut] = Field(default_factory=list)
+    lineup: TeamLineupOut
+    players: list[KeyPlayerOut] = Field(default_factory=list)
+
+
+class MatchPreviewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    match_id: int
+    league_name: str
+    league_sport_key: str
+    commence_time: datetime
+    status: str
+    home_score: int | None = None
+    away_score: int | None = None
+    odds_updated_at: datetime | None = Field(
+        None, description="Última vez que se leyeron cuotas de este partido.",
+    )
+    home: TeamPreviewOut
+    away: TeamPreviewOut

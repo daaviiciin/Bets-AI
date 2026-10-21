@@ -1,188 +1,166 @@
-<div class="min-h-screen bg-gradient-to-b from-brand-bg-deep via-brand-bg-mid to-brand-bg-deep text-white pb-16">
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
-    <div class="space-y-4">
-      <p class="text-xs font-medium uppercase tracking-[0.2em] text-brand-cyan/85">Transparencia</p>
-      <h1 class="text-3xl font-semibold text-white tracking-tight">Datos contra tipsters</h1>
-      <div class="text-brand-muted text-sm max-w-2xl leading-relaxed space-y-3">
-        <p>
-          La app no «vende humo»: propone <strong class="text-white font-medium">hasta 3 líneas al día</strong>
-          entre las value bets con <strong class="text-white font-medium">confianza alta</strong> (modelo + mercado), cuota ofrecida <strong class="text-white font-medium">≤ 2.00</strong> y partidos distintos.
-          Tú decides con tu criterio si juegas alguna; aquí ves <strong class="text-white font-medium">resultado real vs marcador</strong>
-          con la misma corrección automática que el resto del producto.
-        </p>
-        <p>
-          Comparamos dos vías: <strong class="text-brand-cyan font-medium">picks del modelo (singles)</strong> frente a
-          <strong class="text-brand-cyan font-medium">tus combinadas guardadas</strong> (si has iniciado sesión) — mismo backend, distinta decisión.
-        </p>
+<section class="mx-auto max-w-[1440px] px-4 pb-16 pt-8 sm:px-8">
+  <!-- Cartela: el título barre con su filete guía y el filete se traza hasta "Comprobar". -->
+  <div class="flex flex-wrap items-end gap-x-5 gap-y-4">
+    <h1 class="rotulo tv-guia text-5xl leading-none sm:text-6xl">Transparencia</h1>
+    <span class="mb-1.5 flex min-w-0 items-end gap-2 sm:mb-2 sm:flex-1" aria-hidden="true">
+      <span class="tv-barras"></span>
+      <span class="tv-trazo hidden h-px min-w-8 flex-1 bg-tv-line sm:block" style="--tv-t: 400ms"></span>
+    </span>
+    <button
+      type="button"
+      (click)="checkAll()"
+      [disabled]="checking()"
+      style="--tv-t: 300ms"
+      class="tv-barrido ml-auto flex items-center gap-2 border border-tv-line bg-tv-panel px-4 py-2 transition-[border-color,scale] duration-150 hover:border-tv-muted active:scale-[0.97] disabled:opacity-60 sm:ml-0">
+      <app-icon name="refresh" [size]="16" [class.animate-spin]="checking()" />
+      <span class="font-display text-[15px] font-bold uppercase tracking-wide">
+        {{ checking() ? 'Comprobando…' : 'Comprobar resultados' }}
+      </span>
+    </button>
+  </div>
+  <p class="tv-sube mt-2 max-w-[70ch] text-tv-muted" style="--tv-t: 200ms">
+    Los picks que elige el modelo cada día, congelados antes de los partidos y liquidados después
+    con el marcador. Ningún fallo se borra: con este historial se mide el modelo.
+  </p>
+
+  @if (error()) {
+    <p class="mt-4 border-l-2 border-tv-alert bg-tv-panel px-4 py-3 text-sm" role="alert">
+      {{ error() }}
+    </p>
+  }
+
+  @if (metrics(); as m) {
+    <dl class="mt-8 grid grid-cols-2 gap-px border border-tv-line bg-tv-line lg:grid-cols-4">
+      <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 120ms">
+        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Acierto del modelo</dt>
+        <dd class="rotulo mt-1 text-4xl tabular-nums" [tvCifra]="m.rate_pct" [tvFormato]="fmtPct" [tvDesde]="0"></dd>
+        <dd class="mt-1 text-xs text-tv-muted">{{ m.hits }} de {{ m.hits + m.misses }} picks liquidados</dd>
       </div>
-      <div class="flex flex-wrap gap-3 pt-2">
-        <button
-          type="button"
-          (click)="refreshFeaturedGrades()"
-          [disabled]="busy()"
-          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium
-                 bg-brand-cyan/12 border border-brand-cyan/35 text-brand-cyan hover:bg-brand-cyan/18
-                 transition-all disabled:opacity-45">
-          @if (busy()) {
-            <span class="size-4 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin"></span>
-            <span>Actualizando…</span>
-          } @else {
-            <span>Recalcular resultados picks</span>
-          }
-        </button>
-        <button
-          type="button"
-          (click)="reload()"
-          [disabled]="busy()"
-          class="text-sm font-medium px-4 py-2.5 rounded-xl border border-brand-blue/30 text-brand-muted hover:border-brand-cyan/35 hover:text-white transition-colors disabled:opacity-40">
-          Recargar
-        </button>
-        <a
-          routerLink="/dashboard"
-          class="text-sm font-medium px-4 py-2.5 rounded-xl border border-brand-blue/30 text-brand-muted hover:border-brand-cyan/35 hover:text-white transition-colors">
-          Ir al dashboard
-        </a>
+      <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 160ms">
+        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Aciertos · fallos</dt>
+        <dd class="rotulo mt-1 text-4xl tabular-nums">{{ m.hits }} · {{ m.misses }}</dd>
+        <dd class="mt-1 text-xs text-tv-muted">{{ m.needs_review }} a revisar</dd>
       </div>
-      @if (error()) {
-        <div class="rounded-xl border border-rose-500/35 bg-rose-950/25 px-4 py-3 text-sm text-rose-200">
-          {{ error() }}
-        </div>
+      <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 200ms">
+        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">En juego</dt>
+        <dd class="rotulo mt-1 text-4xl tabular-nums" [tvCifra]="m.pending" [tvFormato]="fmtEntero" [tvDesde]="0"></dd>
+        <dd class="mt-1 text-xs text-tv-muted">Picks sin marcador todavía</dd>
+      </div>
+      <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 240ms">
+        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Días con picks</dt>
+        <dd class="rotulo mt-1 text-4xl tabular-nums" [tvCifra]="m.total_pick_days" [tvFormato]="fmtEntero" [tvDesde]="0"></dd>
+        <dd class="mt-1 text-xs text-tv-muted">{{ m.total_legs }} picks en total</dd>
+      </div>
+    </dl>
+  }
+
+  @if (racha().length) {
+    <div class="mt-6">
+      <p class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">
+        Últimos {{ racha().length }} liquidados
+        <span class="font-normal normal-case tracking-normal">· relleno = acierto, contorno = fallo</span>
+      </p>
+      <div class="racha mt-2" role="img" [attr.aria-label]="'Últimos picks: ' + metrics()?.hits + ' aciertos en total'">
+        @for (l of racha(); track $index) {
+          <span class="tv-ficha" [attr.data-estado]="l.result" [style.--tv-t]="200 + $index * 15 + 'ms'"></span>
+        }
+      </div>
+    </div>
+  }
+
+  @if (loading() && !today()) {
+    <div class="mt-10 space-y-3" aria-busy="true" aria-label="Cargando los picks">
+      @for (i of [0, 1, 2]; track i) {
+        <div class="tv-carga h-16" [style.--i]="i"></div>
       }
     </div>
-
-    @if (busy() && !featuredMetrics()) {
-      <div class="flex flex-col items-center py-20 text-brand-muted gap-3">
-        <span class="size-10 border-2 border-brand-cyan/30 border-t-brand-cyan rounded-full animate-spin"></span>
-        <p class="text-sm">Cargando métricas…</p>
-      </div>
-    } @else if (featuredMetrics() && today()) {
-
-      <section class="space-y-4">
-        <h2 class="text-lg font-semibold text-white">Dos fuentes de métricas</h2>
-        <div class="grid md:grid-cols-2 gap-4">
-          <div class="rounded-2xl border border-brand-cyan/25 bg-brand-bg-panel/35 px-5 py-4 space-y-3">
-            <div class="text-xs font-semibold uppercase tracking-wider text-brand-cyan/90">Picks del modelo</div>
-            <p class="text-xs text-brand-muted leading-relaxed">
-              Singles elegidas por el sistema (confianza alta, cuota ≤ 2.00, hasta 3, partidos distintos). El % es sobre patas ya cerradas (acierto / fallo).
-            </p>
-            <div class="grid grid-cols-2 gap-2 text-sm">
-              <div class="text-brand-muted">Patas históricas</div>
-              <div class="text-white font-semibold tabular-nums text-right">{{ featuredMetrics()!.total_legs }}</div>
-              <div class="text-brand-muted">Aciertos / fallos</div>
-              <div class="text-white font-semibold tabular-nums text-right">
-                {{ featuredMetrics()!.hits }} / {{ featuredMetrics()!.misses }}
-              </div>
-              <div class="text-brand-muted">Pendientes · revisar</div>
-              <div class="text-amber-200/90 tabular-nums text-right text-sm">
-                {{ featuredMetrics()!.pending }} · {{ featuredMetrics()!.needs_review }}
-              </div>
-              <div class="text-brand-muted">% acierto (cerradas)</div>
-              <div class="text-brand-cyan font-semibold tabular-nums text-right">
-                {{ featuredMetrics()!.rate_pct != null ? featuredMetrics()!.rate_pct + '%' : '—' }}
-              </div>
-            </div>
-          </div>
-
-          <div class="rounded-2xl border border-brand-blue/25 bg-brand-bg-panel/35 px-5 py-4 space-y-3">
-            <div class="text-xs font-semibold uppercase tracking-wider text-white/90">Tus combinadas</div>
-            @if (isLoggedIn() && myParlays()) {
-              <p class="text-xs text-brand-muted leading-relaxed">
-                Resumen de lo que guardaste en «Mis apuestas» (cada fila es una combinada completa).
-              </p>
-              <div class="grid grid-cols-2 gap-2 text-sm">
-                <div class="text-brand-muted">Combinadas</div>
-                <div class="text-white font-semibold tabular-nums text-right">{{ myParlays()!.total }}</div>
-                <div class="text-brand-muted">Ganadas / perdidas</div>
-                <div class="text-white font-semibold tabular-nums text-right">
-                  {{ myParlays()!.hits }} / {{ myParlays()!.misses }}
-                </div>
-                <div class="text-brand-muted">Pend. · a revisar</div>
-                <div class="text-amber-200/90 tabular-nums text-right text-sm">
-                  {{ myParlays()!.pending }} · {{ myParlays()!.needs_review }}
-                </div>
-                <div class="text-brand-muted">% acierto (cerradas)</div>
-                <div class="text-brand-cyan font-semibold tabular-nums text-right">
-                  {{ myParlays()!.rate_pct != null ? myParlays()!.rate_pct + '%' : '—' }}
-                </div>
-              </div>
-              <a routerLink="/mis-apuestas" class="inline-block text-xs text-brand-cyan hover:underline">Ir a mis apuestas →</a>
-            } @else {
-              <p class="text-sm text-brand-muted">
-                Inicia sesión para ver el resumen de tus combinadas y comparar con los picks del modelo.
-              </p>
-              <a routerLink="/" class="inline-block text-sm text-brand-cyan hover:underline">Entrar</a>
-            }
-          </div>
-        </div>
-      </section>
-
-      <section class="space-y-4">
-        <h2 class="text-lg font-semibold text-white">Hoy (UTC) · hasta 3 picks</h2>
-        <p class="text-xs text-brand-muted">Fecha fila: {{ today()!.pick_date }} · generada {{ fmtDateShort(today()!.created_at) }}</p>
-        @if (today()!.legs.length === 0) {
-          <div class="rounded-2xl border border-brand-blue/20 bg-brand-bg-panel/30 px-6 py-8 text-center text-brand-muted text-sm">
-            Hoy no hay al menos una value bet con confianza <strong class="text-white">alta</strong>, cuota ≤ 2.00 y acuerdo modelo+mercado.
-            Revisa el dashboard o espera a que se publiquen más cuotas.
-          </div>
-        } @else {
-          <ul class="space-y-3">
-            @for (lg of today()!.legs; track lg.match_id + lg.market_key + lg.outcome_name + (lg.outcome_point ?? '')) {
-              <li class="rounded-xl border border-brand-cyan/15 bg-brand-bg-panel/35 px-5 py-4 flex flex-wrap justify-between gap-3">
-                <div class="min-w-0">
-                  <div class="font-medium text-white">{{ lg.home_team }} – {{ lg.away_team }}</div>
-                  <div class="text-xs text-brand-muted mt-0.5">{{ legLabel(lg) }}</div>
-                  @if (lg.ev_market) {
-                    <div class="text-[11px] text-brand-muted/80 mt-1">
-                      EV mercado {{ fmtAbsPct(lg.ev_market, 1) }}
-                      @if (lg.model_ev) {
-                        · EV modelo {{ fmtAbsPct(lg.model_ev, 1) }}
-                      }
-                    </div>
-                  }
-                  @if (lg.score_text) {
-                    <div class="text-xs text-brand-muted/90 mt-1">{{ lg.score_text }}</div>
-                  }
-                </div>
-                <div class="text-right text-xs shrink-0 space-y-1">
-                  <div class="text-brand-muted tabular-nums">cuota {{ fmtOdds(lg.offered_odds) }}</div>
-                  <div class="font-medium" [class]="legResultClass(lg.result)">{{ legStatusText(lg) }}</div>
-                </div>
-              </li>
-            }
-          </ul>
-        }
-      </section>
-
-      <section class="space-y-4">
-        <h2 class="text-lg font-semibold text-white">Historial reciente</h2>
-        <p class="text-xs text-brand-muted">Últimas filas generadas en servidor (no todos los días tienen datos si nadie abrió / no hubo picks).</p>
-        <div class="space-y-6">
-          @for (row of history(); track row.pick_date) {
-            <div class="rounded-2xl border border-brand-blue/15 bg-brand-bg-panel/25 px-5 py-4 space-y-3">
-              <div class="flex flex-wrap justify-between gap-2 text-sm">
-                <span class="font-medium text-white">{{ row.pick_date }}</span>
-                @if (row.last_graded_at) {
-                  <span class="text-xs text-brand-muted">Último cálculo {{ fmtDateShort(row.last_graded_at) }}</span>
-                }
-              </div>
-              @if (row.legs.length === 0) {
-                <p class="text-xs text-brand-muted">Sin picks ese día.</p>
-              } @else {
-                <ul class="space-y-2">
-                  @for (lg of row.legs; track lg.match_id + '-' + lg.market_key + '-' + lg.outcome_name + '-' + $index) {
-                    <li class="flex flex-wrap justify-between gap-2 text-sm border-t border-brand-blue/10 pt-2 first:border-t-0 first:pt-0">
-                      <span class="text-white/95">{{ lg.home_team }} – {{ lg.away_team }} · {{ legLabel(lg) }}</span>
-                      <span class="shrink-0 font-medium tabular-nums" [class]="legResultClass(lg.result)">
-                        {{ legStatusText(lg) }}
-                      </span>
-                    </li>
-                  }
-                </ul>
+  } @else {
+    <div class="mt-10 grid gap-10 xl:grid-cols-[1fr_22rem]">
+      <div>
+        <!-- Picks de hoy. -->
+        <h2 class="rotulo tv-dia pb-2 text-3xl">Picks de hoy</h2>
+        @if (today(); as t) {
+          @if (t.legs.length) {
+            <ul class="mt-3 space-y-2">
+              @for (lg of t.legs; track $index) {
+                <ng-container [ngTemplateOutlet]="pick" [ngTemplateOutletContext]="{ $implicit: lg }" />
               }
-            </div>
+            </ul>
+          } @else {
+            <p class="mt-4 text-tv-muted">
+              Hoy el modelo no ve ningún pick que cumpla sus reglas. Mejor no apostar que forzarlo.
+            </p>
           }
-        </div>
-      </section>
-    }
-  </div>
-</div>
+        }
+
+        <!-- Histórico, un bloque por día. -->
+        <h2 class="rotulo tv-dia mt-12 pb-2 text-3xl">Histórico</h2>
+        @if (!history().length) {
+          <p class="mt-4 text-tv-muted">Todavía no hay días anteriores con picks.</p>
+        }
+        @for (row of history(); track row.pick_date) {
+          <section tvEntra="dia" class="mt-6" [attr.aria-label]="dayName(row)">
+            <div class="flex items-baseline justify-between gap-4">
+              <h3 class="font-display text-lg font-bold uppercase tracking-wide">{{ dayName(row) }}</h3>
+              <span class="text-sm tabular-nums text-tv-muted">{{ dayScore(row) }}</span>
+            </div>
+            <ul class="mt-2 space-y-2">
+              @for (lg of row.legs; track $index) {
+                <ng-container [ngTemplateOutlet]="pick" [ngTemplateOutletContext]="{ $implicit: lg }" />
+              }
+            </ul>
+          </section>
+        }
+      </div>
+
+      <!-- Cómo elige hoy el modelo (cambiará en la fase 3). -->
+      <aside class="h-fit border border-tv-line bg-tv-panel p-5 xl:sticky xl:top-24">
+        <h2 class="font-display text-base font-bold uppercase tracking-wide">Cómo elige el modelo</h2>
+        <ul class="mt-3 space-y-2 text-sm text-tv-muted">
+          <li>Hasta <span class="text-tv-ink">3 picks al día</span>, de partidos distintos.</li>
+          <li>Solo líneas con <span class="text-tv-ink">valor esperado positivo</span> y confianza alta del modelo Poisson.</li>
+          <li>Cuota de <span class="text-tv-ink">2,00 como máximo</span>: prima acertar sobre el pelotazo.</li>
+          <li>Se congelan al generarse: la cuota y la probabilidad son las de ese momento.</li>
+        </ul>
+        <p class="mt-4 border-t border-tv-line pt-3 text-xs text-tv-muted">
+          Estas reglas son provisionales: el modelo de predicción nuevo (fase 3) traerá las suyas, y
+          el historial seguirá midiéndose igual.
+        </p>
+      </aside>
+    </div>
+  }
+</section>
+
+<ng-template #pick let-lg>
+  <li class="grid grid-cols-[1.25rem_1fr_auto] items-center gap-x-3 border border-tv-line bg-tv-panel px-4 py-3">
+    <span class="marca" [attr.data-estado]="lg.result ?? 'pending'" [attr.aria-label]="estado(lg.result)">
+      @switch (lg.result) {
+        @case ('hit') { <app-icon name="check" [size]="16" /> }
+        @case ('miss') { <app-icon name="x" [size]="16" /> }
+        @case ('needs_review') { <app-icon name="alert" [size]="16" /> }
+        @default { <app-icon name="clock" [size]="16" /> }
+      }
+    </span>
+    <div class="min-w-0">
+      <p class="truncate">
+        <a [routerLink]="['/partido', lg.match_id]" class="underline-offset-4 hover:underline">
+          {{ lg.home_team }} – {{ lg.away_team }}
+        </a>
+        @if (lg.commence_time) {
+          <span class="text-sm text-tv-muted"> · {{ fmtTime(lg.commence_time) }}</span>
+        }
+      </p>
+      <p class="truncate text-sm text-tv-muted">
+        {{ legLabel(lg) }}
+        @if (lg.score_text) { · {{ lg.score_text }} }
+      </p>
+    </div>
+    <div class="text-right">
+      <p class="font-display text-xl font-bold tabular-nums">{{ fmtCuota(lg.offered_odds) }}</p>
+      <p class="text-xs tabular-nums text-tv-muted">
+        P {{ fmtProb(lg.model_probability) }}
+        @if (lg.model_ev) { · EV {{ fmtEv(lg.model_ev) }} }
+      </p>
+    </div>
+  </li>
+</ng-template>

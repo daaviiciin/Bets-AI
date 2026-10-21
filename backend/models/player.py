@@ -39,6 +39,9 @@ class Player(Base, TimestampMixin):
     flashscore_id: Mapped[str | None] = mapped_column(
         String(16), unique=True, nullable=True, index=True,
     )
+    # Foto en el CDN de imágenes de Flashscore: solo el fichero ("zJsYDqgl-URqd4A5l.png");
+    # la URL se monta en ``services/player_photos.py``. Llega con las stats por partido.
+    photo_path: Mapped[str | None] = mapped_column(String(64), nullable=True)
     nationality: Mapped[str | None] = mapped_column(String(8), nullable=True)
     position: Mapped[str | None] = mapped_column(String(16), nullable=True)
     team_id: Mapped[int | None] = mapped_column(

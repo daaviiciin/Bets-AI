@@ -5,10 +5,12 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-betsai}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      # Sin valor por defecto: si falta en .env, docker compose se niega a arrancar.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
       POSTGRES_DB: ${POSTGRES_DB:-betsai}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Solo en este equipo (127.0.0.1): no accesible desde la wifi/red local.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

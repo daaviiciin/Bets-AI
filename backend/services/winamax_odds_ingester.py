@@ -68,7 +68,10 @@ NEAR_KICKOFF_WINDOW = timedelta(hours=2)
 WINAMAX_BOOKMAKER_KEY = "winamax_es"
 WINAMAX_BOOKMAKER_TITLE = "Winamax (ES)"
 WINAMAX_PLAYER_SOURCE = "winamax-sr"  # Sportradar IDs vienen vía Winamax
-MAX_STORED_ODDS = Decimal("4")
+# Tope de guardado (= ``DISPLAY_ODDS_CAP`` del frontend): se guarda 1 < cuota <= 10,00.
+# Que una cuota se guarde no la hace recomendable: eso lo decide
+# ``value_calculator.MAX_RECOMMENDABLE_ODDS`` (4,00).
+MAX_STORED_ODDS = Decimal("10.00")
 
 # Claves ``League.sport_key`` alineadas con Flashscore fixtures + Sofascore.
 # Orden = reparto de cupos en ingesta (prioriza Premier / Serie A / Bundesliga antes que La Liga).
@@ -126,6 +129,7 @@ _MARKET_FRIENDLY_NAME: dict[str, str] = {
     "player_sot": "Tiros a puerta del jugador (over/under)",
     "player_shots_alt": "Tiros del jugador (líneas alt 1+/2+/3+)",
     "player_sot_alt": "Tiros a puerta del jugador (líneas alt)",
+    "player_saves_alt": "Paradas del portero (líneas N o más)",
     "player_passes_alt": "Pases del jugador (líneas alt)",
     "player_tackles_alt": "Tackles del jugador (líneas alt)",
     "player_assists_alt": "Asistencias del jugador (líneas alt)",
@@ -318,7 +322,7 @@ class WinamaxOddsIngester:
         result.odds_pruned = self._purge_non_storable_winamax_odds()
         if result.odds_pruned:
             self.log.info(
-                "Winamax: %d cuotas antiguas >= %.2f eliminadas.",
+                "Winamax: %d cuotas antiguas > %.2f eliminadas.",
                 result.odds_pruned,
                 MAX_STORED_ODDS,
             )
@@ -380,7 +384,9 @@ class WinamaxOddsIngester:
                     continue
                 matches = wm.parse_football_matches(state)
                 catalogs.append(matches)
-                last = max((m.kickoff for m in matches), default=None)
+                # El "partido" del campeón de liga va fechado a final de temporada: fuera del log.
+                soon = datetime.now(timezone.utc) + timedelta(days=60)
+                last = max((m.kickoff for m in matches if m.kickoff < soon), default=None)
                 coverage[key] = f"{len(matches)} hasta {last:%d/%m}" if last else "0"
             self.log.info("Winamax por liga (Socket.IO): %s", coverage)
             if "0" in coverage.values():
@@ -517,22 +523,26 @@ class WinamaxOddsIngester:
         return carried
 
     def _purge_non_storable_winamax_odds(self) -> int:
-        """Elimina del histórico activo las cuotas que ya no cumplen el límite."""
+        """Elimina las cuotas Winamax por encima del tope de guardado (``> MAX_STORED_ODDS``).
+
+        Es el complemento exacto del límite superior de ``_is_storable_price``: una cuota de
+        10,00 se guarda y no se purga.
+        """
         snapshot_ids = select(Snapshot.id).where(
             Snapshot.source == WINAMAX_BOOKMAKER_KEY,
         )
         deleted = self.session.execute(
             delete(Odds).where(
                 Odds.snapshot_id.in_(snapshot_ids),
-                Odds.price >= MAX_STORED_ODDS,
+                Odds.price > MAX_STORED_ODDS,
             ),
         )
         return int(deleted.rowcount or 0)
 
     @staticmethod
     def _is_storable_price(price: Decimal) -> bool:
-        """Conserva solo cuotas válidas y estrictamente inferiores a 4.00."""
-        return price > Decimal("1") and price < MAX_STORED_ODDS
+        """Conserva solo cuotas válidas: 1 < cuota <= ``MAX_STORED_ODDS`` (10,00)."""
+        return Decimal("1") < price <= MAX_STORED_ODDS
 
     # ------------------------------------------------------------- Internos
 

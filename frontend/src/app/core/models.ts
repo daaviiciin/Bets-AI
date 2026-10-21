@@ -16,6 +16,20 @@ export interface League {
 export interface Team {
   id: number;
   name: string;
+  /** Escudo de Flashscore y sus colores (``#rrggbb``); ``null`` si aún no se han calculado. */
+  logo_url?: string | null;
+  primary_color?: string | null;
+  secondary_color?: string | null;
+}
+
+/** Último 1X2 de Winamax de un partido (``GET /matches?with_odds=true``). */
+export interface Odds1x2 {
+  home: string | null;
+  draw: string | null;
+  away: string | null;
+  /** Nombre de la selección en Winamax ("Atl. Madrid"): el ``outcome_name`` de la cuota. */
+  home_name: string | null;
+  away_name: string | null;
 }
 
 export interface Bookmaker {
@@ -38,73 +52,111 @@ export interface Match {
   home_score: number | null;
   away_score: number | null;
   played_at: string | null;
+  odds_1x2?: Odds1x2 | null;
 }
 
-export interface CompetitionStats {
-  sport_key: string;
-  name: string;
-  teams_count: number;
-  players_count: number;
-  matches_with_stats: number;
-}
+// ---------------------------------------------------------------------------
+// Previa de partido (``GET /matches/{id}/preview``)
+// ---------------------------------------------------------------------------
 
-export interface TeamStatistics {
-  team_id: number;
-  name: string;
-  logo_url: string | null;
-  matches_played: number | null;
-  wins: number | null;
-  draws: number | null;
-  losses: number | null;
+/** Medias por partido de la temporada (``null`` si ese dato no existe). */
+export interface TeamAverages {
+  matches: number;
   goals_for: number | null;
   goals_against: number | null;
-  points: number | null;
-  xg_for: string | null;
-  xg_against: string | null;
-}
-
-export interface PlayerStatistics {
-  player_id: number;
-  name: string;
-  image_url: string | null;
-  team_name: string | null;
-  goals: number | null;
-  assists: number | null;
+  xg: number | null;
   shots: number | null;
-  shots_on_target: number | null;
-  xg: string | null;
-  matches_played: number | null;
-}
-
-export interface StatisticsOverview {
-  selected_sport_key: string | null;
-  competitions: CompetitionStats[];
-  teams: TeamStatistics[];
-  players: PlayerStatistics[];
-}
-
-export interface TeamRecentMatch {
-  match_id: number;
-  opponent: string;
-  is_home: boolean;
-  commence_time: string;
-  team_score: number | null;
-  opponent_score: number | null;
-  result: string;
   shots_on_target: number | null;
   corners: number | null;
   yellow_cards: number | null;
+  goals_1h: number | null;
+  goals_2h: number | null;
+  corners_1h: number | null;
+  corners_2h: number | null;
+  cards_1h: number | null;
+  cards_2h: number | null;
 }
 
-export interface TeamDetailStatistics {
-  team: TeamStatistics;
-  competition_name: string | null;
-  home_win_pct: number | null;
-  away_win_pct: number | null;
-  recent_form: string[];
-  recent_matches: TeamRecentMatch[];
-  totals: Record<string, number | null>;
-  players: PlayerStatistics[];
+export interface FormMatch {
+  match_id: number;
+  commence_time: string;
+  opponent: string;
+  is_home: boolean;
+  goals_for: number;
+  goals_against: number;
+  /** W / D / L (se enseña como G / E / P). */
+  result: 'W' | 'D' | 'L';
+}
+
+export interface AbsenceItem {
+  name: string;
+  status: 'missing' | 'doubtful' | string;
+  reason: string | null;
+}
+
+export interface LineupPlayer {
+  name: string;
+  /** G / D / M / F. */
+  position: string | null;
+  /** Solo en el once probable: ``missing`` (baja) o ``doubtful`` (duda). */
+  status: string | null;
+  /** Foto (CDN de Flashscore); ``null`` si aún no se conoce. */
+  photo_url?: string | null;
+}
+
+export type LineupKind = 'official' | 'played' | 'probable' | 'none';
+
+export interface TeamLineup {
+  kind: LineupKind;
+  starters: LineupPlayer[];
+  /** Once probable: de qué partido sale ("vs Sevilla · 12/10"). */
+  based_on: string | null;
+}
+
+export interface KeyPlayer {
+  player_id: number;
+  name: string;
+  position: string | null;
+  apps: number;
+  starts: number;
+  minutes: number;
+  goals: number;
+  shots: number;
+  shots_on_target: number;
+  yellow_cards: number;
+  shots_on_target_per90: number | null;
+  shots_per90: number | null;
+  /** Foto (CDN de Flashscore); ``null`` si aún no se conoce. */
+  photo_url?: string | null;
+}
+
+export interface TeamPreview {
+  team_id: number;
+  name: string;
+  logo_url: string | null;
+  primary_color: string | null;
+  secondary_color: string | null;
+  overall: TeamAverages;
+  /** Local: en casa. Visitante: fuera. */
+  venue: TeamAverages;
+  form: FormMatch[];
+  absences: AbsenceItem[];
+  lineup: TeamLineup;
+  players: KeyPlayer[];
+}
+
+export interface MatchPreview {
+  match_id: number;
+  league_name: string;
+  league_sport_key: string;
+  commence_time: string;
+  status: MatchStatus;
+  home_score: number | null;
+  away_score: number | null;
+  /** Última vez que se leyeron cuotas de este partido. */
+  odds_updated_at: string | null;
+  home: TeamPreview;
+  away: TeamPreview;
 }
 
 export interface Odds {
@@ -138,6 +190,8 @@ export interface GradedOddsLine {
   confidence: ValueBetConfidence;
   model_probability: string | null;
   model_ev: string | null;
+  /** Cuota <= 4,00: puede marcarse como valor. Si es false la línea es solo informativa. */
+  recommendable: boolean;
   /** Esperanza goles local (Poisson) cuando hay modelo de partido. */
   lambda_home?: string | null;
   lambda_away?: string | null;
@@ -174,11 +228,20 @@ export interface SavedParlay {
   combined_odds: string;
   model_joint_probability: string | null;
   legs_snapshot: SavedParlayLegPersist[];
-  grading_snapshot: { legs: SavedParlayLegPersist[] } | null;
+  grading_snapshot: { legs: SavedParlayLegPersist[]; auto_result?: string } | null;
+  /** pending | hit | miss | needs_review | void (si hay `manual_result`, es ese). */
   overall_result: string;
+  /** Corrección del usuario: hit | miss | void; null = manda la liquidación automática. */
+  manual_result: ResultadoManual | null;
+  /** Importe apostado en euros (Decimal como texto); null en las guardadas sin importe. */
+  stake: string | null;
+  /** Beneficio neto en euros si ya está liquidada y tiene importe; si no, null. */
+  profit: string | null;
   last_graded_at: string | null;
   created_at: string;
 }
+
+export type ResultadoManual = 'hit' | 'miss' | 'void';
 
 /** Picks del día generados por el backend (métricas de transparencia de la app). */
 export interface FeaturedDailyPickRow {
@@ -204,7 +267,12 @@ export interface UserParlayMetrics {
   needs_review: number;
   hits: number;
   misses: number;
+  voids: number;
   rate_pct: number | null;
+  /** Euros (Decimal como texto): apostado en ganadas + perdidas, y beneficio neto. */
+  staked: string;
+  profit: string;
+  roi_pct: string | null;
 }
 
 export interface AuthTokenResponse {

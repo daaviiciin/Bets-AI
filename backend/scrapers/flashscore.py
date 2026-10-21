@@ -881,6 +881,26 @@ class FlashscorePlayerMatchStats:
     position: str | None
     rating: float | None
     stats: dict[str, float]  # claves = columnas de PlayerMatchStats
+    # Foto del jugador en el CDN de imágenes de Flashscore ("zJsYDqgl-URqd4A5l.png").
+    photo_path: str | None = None
+
+
+# ``participant.images`` de ``epmsse`` trae dos tamaños de la misma foto (variantType 15 y
+# 24); se guarda la 15 y, si falta, cualquier otra.
+PLAYER_PHOTO_VARIANTS = (15, 24)
+
+
+def player_photo_path(images: list[dict] | None) -> str | None:
+    """Ruta de la foto de jugador entre las ``images`` de ``epmsse`` (``None`` si no hay)."""
+    paths: dict[int | None, str] = {}
+    for img in images or []:
+        path = (img or {}).get("path")
+        if isinstance(path, str) and path.strip() and "/" not in path:
+            paths.setdefault(img.get("variantType"), path.strip())
+    for variant in PLAYER_PHOTO_VARIANTS:
+        if variant in paths:
+            return paths[variant]
+    return next(iter(paths.values()), None)
 
 
 def fetch_player_match_stats(match_id: str) -> tuple[dict, dict]:
@@ -965,6 +985,7 @@ def parse_player_match_stats(players_payload: dict, stats_payload: dict) -> list
             position=position.get("name"),
             rating=rating_by_player.get(player_id),
             stats=stats,
+            photo_path=player_photo_path(participant.get("images")),
         ))
     return out
 

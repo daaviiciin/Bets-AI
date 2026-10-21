@@ -23,6 +23,10 @@ matemáticamente es una apuesta de valor.
 **Criterio de Kelly**: fracción óptima del bankroll a apostar para maximizar
 el crecimiento logarítmico esperado. El Kelly puro es agresivo; los
 profesionales usan Kelly fraccional (1/2, 1/4) según su tolerancia al riesgo.
+
+**Cuota recomendable**: solo se recomienda (value bet, recomendación, combinada,
+pick destacado, marca de valor) una cuota ``<= MAX_RECOMMENDABLE_ODDS``. Las
+cuotas por encima se guardan y se muestran, pero son solo informativas.
 """
 
 from __future__ import annotations
@@ -34,6 +38,20 @@ getcontext().prec = 28
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
+
+# Regla de dominio (no es configuración): por encima de esta cuota la línea es informativa.
+# Fuente única para el detector de value bets, recomendaciones, combinadas y graded odds.
+MAX_RECOMMENDABLE_ODDS = Decimal("4.00")
+
+
+def is_recommendable_odds(odds: Decimal | float | int | str | None) -> bool:
+    """``True`` si la cuota es válida (> 1) y no supera ``MAX_RECOMMENDABLE_ODDS`` (4,00 incluida)."""
+    if odds is None:
+        return False
+    odds = _ensure_decimal(odds)
+    if not odds.is_finite():
+        return False
+    return ONE < odds <= MAX_RECOMMENDABLE_ODDS
 
 
 def implied_probability(odds: Decimal) -> Decimal:

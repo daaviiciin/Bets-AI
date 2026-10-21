@@ -31,8 +31,13 @@ class SavedParlay(Base, TimestampMixin):
     #: Ser list[dict]: match_id, home_team, away_team, league, market_key, outcome_name ...
     legs_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
     grading_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    #: pending | hit | miss | needs_review (resumen combinada cuando todas las patas tienen resultado).
+    #: pending | hit | miss | needs_review | void. Si hay ``manual_result``, es ese; si no, el automático.
     overall_result: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    #: Corrección del usuario (hit | miss | void). Manda sobre la liquidación automática.
+    manual_result: Mapped[str | None] = mapped_column(String(24), nullable=True)
+
+    #: Importe apostado en euros; null en las guardadas antes de existir el campo.
+    stake: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     last_graded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

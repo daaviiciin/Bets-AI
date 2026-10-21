@@ -12,6 +12,53 @@ Regla: no se empieza una fase hasta cerrar la anterior, salvo decisión explíci
 
 ---
 
+## 📍 Dónde nos quedamos (2026-10-19, ~20:30), para retomar
+
+Tres agentes en paralelo. Decisiones del usuario: portada solo decorativa; fotos enlazadas al CDN de
+Flashscore; una petición a Winamax; sesión de 7 días; rate limit en el login (5/min), en los refresh
+y general por IP; dependencias de Python y npm; "todo protegido tras login". **No elegido:** C-4
+(PBKDF2 a 600k y `compare_digest`).
+
+- ✅ **Portada decorativa** del dashboard: `pages/dashboard/portada.ts` (campo en SVG en perspectiva,
+  entrada de unos 0,9 s solo la primera vez en cada sesión). Build y tests en verde. **Falta verla
+  en el navegador** y revisar la frase del subtítulo, que la escribió el agente.
+- ✅ **Fotos y cuotas de jugador**: Winamax cambió los ids de mercado. Ahora son 6864 (N+ tiros a
+  puerta), 6858 (N+ tiros), **6921 (N+ paradas, nuevo `player_saves_alt`)** y 6933 (tarjeta).
+  Muestra en `data/raw/winamax_muestras/`. Fotos en `players.photo_path` (migración `05b07e5715a6`,
+  aplicada), servicio `services/player_photos.py`; se rellenan solas con los refreshes. 601 tests.
+  Pendiente: comprobar que la variante 15 de la foto no se ve pixelada (`PLAYER_PHOTO_VARIANTS`).
+  Las paradas van sin P del modelo (fase 3).
+- ✅ **Seguridad: TERMINADA** (estado por id en `AUDITORIA_SEGURIDAD.md` → "Aplicado el 2026-10-19").
+  `pip-audit` 0 vulnerabilidades, `npm audit` 0, 601 tests backend + 29 frontend. Comprobado con curl:
+  401 sin token, 401 con un token firmado con el secreto antiguo, 429 en el 6.º login. `httpx2` quitado
+  (queda `httpx==0.28.1` oficial). Solo queda pendiente C-4 (no elegido) y lo informativo (H-6…H-9, C-13).
+  Detalle de cómo estaba a media tarea (histórico):
+  - ☑ `JWT_SECRET` escrito en `.env` (nadie lo ha visto); se tocaron `config.py`, `.env.example` y `.gitignore`.
+  - ☑ Postgres solo en `127.0.0.1` (`docker-compose.yml`). Falta comprobar que el contenedor se
+    recreó y está `healthy`.
+  - ☑ `backend/tools/set_password.py` creado; `login.html` ya no muestra `admin/1234`.
+  - ☑ `auth.guard.ts`, el interceptor y `app.routes.ts` tocados ("todo tras login").
+  - ☑ `deps/rate_limit.py`, `deps/seguridad_http.py` (cabeceras) y `tests/test_seguridad_api.py` nuevos.
+  - ☑ `requirements.txt` subido: fastapi 0.149.0, PyJWT 2.15.1, curl_cffi 0.16.3.
+  - ⚠️ **Revisar `httpx2==2.14.0` en `requirements.txt`**: el TestClient usa `httpx`, no `httpx2`;
+    podría ser un typosquat. Se le pidió al agente que lo cambie por `httpx` y lo desinstale. Si
+    sigue ahí: `pip uninstall -y httpx2` y poner `httpx`.
+  - ☐ Sin confirmar: `npm update` / `ng update` y `npm audit`, `pip-audit` final, pruebas con curl
+    (401 sin token, 429 en el 6.º login) y la sección "Aplicado el 2026-10-19" de
+    `AUDITORIA_SEGURIDAD.md`. Si no está, retomar desde ahí.
+  - **Lo que tiene que hacer el usuario al volver:** `.\.venv\Scripts\python.exe -m backend.tools.set_password admin`
+    (hasta entonces sigue siendo `1234`; mínimo 10 caracteres), reiniciar la API (la de :8000 seguía con el
+    código viejo) y volver a iniciar sesión.
+  - Avisos: detrás del proxy de Angular todo llega desde 127.0.0.1, así que el límite de 120/min es en la
+    práctica global; un refresh que falla gasta igualmente su cupo de 3 min; `docker compose up -d` falló una
+    vez con "port 5432 not available" y al reintentar fue bien (si le pasa a la tarea programada, se salta ese refresh).
+- Refresh del 19/10 a las 19:13 (recuperó lo perdido del 17 y el 18): OK, 0 errores de Flashscore,
+  77 partidos con cuotas. A las 21:00 quedaban 45 partidos de bajas en cola; los recoge la tarea
+  programada.
+- No hay nada commiteado: conviene hacer commit al volver (hay mucho cambio sin guardar).
+
+---
+
 ## ✅ Hecho (cerró la fase 1): cuotas de Winamax por liga vía WebSocket
 
 **Anotado el 2026-10-15 a mediodía; el usuario lo retoma esa tarde.**
@@ -326,7 +373,7 @@ Los endpoints de los bloques 3 a 6 hay que comprobarlos con un partido real ante
   - Refresh **manual**, sin programar: el "cada X horas" lo marca el usuario al lanzarlo.
   - Si una línea falta en el refresh anterior del partido y vuelve, abre fila nueva aunque
     tenga la misma cuota (el intervalo no cubre el hueco).
-  - Se mantiene `MAX_STORED_ODDS` (no se guardan cuotas ≥ 4,00).
+  - Se mantiene `MAX_STORED_ODDS` (desde 2026-10-17, no se guardan cuotas > 10,00).
   - **A)** Solo apertura y cierre de cada línea. Ocupa poco y basta para medir CLV.
   - **B)** Todos los snapshots. Permite estudiar cómo se mueven las cuotas, pero la base de datos crece mucho.
   - **C)** Apertura, cierre y un snapshot cada X horas.
@@ -421,6 +468,55 @@ El usuario necesita como mínimo las cuotas de los partidos que se juegan hoy.
   router en el test); pendiente de arreglar.
 
 ## Fase 2 — UX/UI (en curso desde 2026-10-15)
+
+### Bloque 1 (2026-10-16/17): Partidos + página de partido + boletín ✅
+
+Proceso Impeccable completo: `init` (PRODUCT.md), `shape` (brief confirmado), ronda de dirección
+visual (elegida **"Grafismo de retransmisión"**; contrato en
+`.impeccable/surfaces/frontend-src-app-pages-match-detail.md`), construcción, dos pasadas de capturas
+(1440 y 390 px, `.impeccable/review/`), detector sin hallazgos y revisión final independiente
+(dos rondas de correcciones: 8 + 3). El sistema visual queda en **`DESIGN.md`** (y
+`.impeccable/design.json`): tokens `tv-*`, reglas y componentes para migrar el resto de páginas.
+
+- **Portada (`/dashboard`)**: solo partidos de los próximos 5 días, por día (abre en el primero) y
+  competición, con escudo y 1X2 de Winamax; cada cuota va al boletín con un clic.
+- **Partido (`/partido/:id`, sobre `match-detail`)**: marcador con los colores de los dos clubes y
+  5 pestañas: Previa (onces en perspectiva, medias en su campo, forma, bajas, mercados clave),
+  Alineaciones, Estadísticas (casa/fuera o temporada, por mitades, últimos 5), Cuotas (todas las
+  líneas en lenguaje llano con P del modelo y EV; totales en tabla Más/Menos) y Jugadores (por 90' y
+  sus cuotas de goleador). Hueco "Mejores cuotas · próximamente" reservado para la fase 3.
+- **Boletín lateral** en todas las páginas (`BetslipService`, `localStorage`), guarda en Mis apuestas.
+- **Backend nuevo**: `GET /matches/{id}/preview` (`match_preview.py`), `with_odds` en `/matches`
+  (`match_listing.py`, 1X2 con nombres de Winamax en español emparejados), `match_id` en
+  `/dashboard/graded-odds`, escudos + colores de club (`team_crests.py`, Pillow, tabla
+  `CLUB_COLOR_OVERRIDES` revisada a mano), alineación oficial bajo demanda (`match_lineups.py`,
+  tabla `match_lineups`). Migración `e4e49e99c5f9`. CLI `backfill_team_crests`.
+- `df_lu` (alineaciones de Flashscore) **ya no existe** (devuelve `0`): la oficial sale de `epmsse`
+  (`inBaseLineup`). Verificado el 2026-10-17 con Everton–Chelsea a 31 min del inicio: los dos
+  onces oficiales (11 + 11, con posición) llegan bien.
+- Tests: 481 backend + 17 frontend (los 2 de `app.spec.ts` que fallaban, arreglados).
+
+Pendiente de este bloque / siguientes:
+- ✅ (2026-10-17) Tope de cuotas: `MAX_STORED_ODDS` sube a 10,00 (se guardan y se ven) y
+  `MAX_RECOMMENDABLE_ODDS = 4,00` (`value_calculator.py`) impide que una cuota mayor llegue a
+  value bets, recomendaciones, combinadas, picks destacados o a la marca "con valor" de las
+  graded odds (`recommendable` en cada línea). Primer refresh: 11.846 cuotas (antes 6.473).
+- Nombres de Flashscore "Apellido Nombre" (ya estaba detectado).
+- ✅ (2026-10-21) Migrar al mundo nuevo: Mis apuestas, Transparencia y Login (tokens `tv-*`).
+  - **Login**: rótulo "Bets [AI]" con la entrada de la portada; el PNG solo queda en `public/brand`
+    (favicon nuevo `favicon.svg`).
+  - **Portada**: balón de estrellas propio (no el logotipo de la UEFA) que entra rodando hasta el
+    punto central; su posición se proyecta con la misma perspectiva del campo (`posicionBalon`).
+  - **Estadísticas eliminada** (página, ruta, enlace, `GET /statistics/*` y sus schemas): las
+    estadísticas viven en cada partido.
+  - **Mis apuestas**: importe al guardar desde el boletín (simples y combinadas), beneficio, ROI y
+    % de acierto; corrección manual ganada / perdida / nula (`PATCH /me/parlays/{id}`) que manda
+    sobre la automática. Migración `333abb2b3059` (`stake`, `manual_result`).
+  - **Transparencia**: solo los picks diarios del modelo (`featured_daily_picks`): acierto, racha,
+    picks de hoy e histórico por día. Las reglas de selección se sustituyen en la fase 3.
+  - Beneficio (`beneficio_apuesta`): ganada = importe × (cuota − 1), perdida = −importe, nula = 0 €
+    (fuera de lo apostado del ROI); pendientes, "a revisar" y sin importe no cuentan.
+- Páginas sin ruta que siguen ahí: `matches`, `value-bets`, `recommendations`, `analisis`, `calibration`.
 
 Ya detectado:
 - Nombres de jugadores nuevos de Flashscore vienen como "Apellido Nombre" ("Undav Deniz").

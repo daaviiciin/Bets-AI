@@ -117,6 +117,8 @@ class FlashscorePlayerStatsIngester:
             )
             if created:
                 result.players_created += 1
+            if row.photo_path and player.photo_path != row.photo_path:
+                player.photo_path = row.photo_path
             pms = self.session.scalar(
                 select(PlayerMatchStats).where(
                     PlayerMatchStats.match_id == match.id,

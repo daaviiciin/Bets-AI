@@ -13,7 +13,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from backend.services import poisson_model as pm
+from backend.services import value_calculator as vc
 from backend.services.value_detector import (
+    ValueBet,
     ValueDetector,
     _compute_confidence,
     _parse_player_prop_side,
@@ -358,6 +360,48 @@ class TestModelProbabilityMapping:
             home_team_name="A", away_team_name="B",
         )
         assert p is None
+
+
+class TestTopeCuotaRecomendable:
+    """El detector nunca emite una value bet con cuota > 4,00, aunque el modelo le vea EV."""
+
+    @staticmethod
+    def _1x2(local: str, empate: str, visitante: str) -> list[ValueBet]:
+        # Pipeline oficial (un solo libro) sin umbrales: sin el tope saldrían las tres.
+        detector = ValueDetector(
+            session=MagicMock(), min_ev_model=Decimal("-1"), official_pipeline=True,
+        )
+        detector._h2h_min_model_prob = Decimal("0")
+        winamax = MagicMock()
+        winamax.id, winamax.key, winamax.title = 1, "winamax_es", "Winamax (ES)"
+        filas = []
+        for nombre, cuota in (("Real Madrid", local), ("Draw", empate), ("Espanyol", visitante)):
+            fila = MagicMock()
+            fila.bookmaker, fila.outcome_name, fila.price = winamax, nombre, Decimal(cuota)
+            filas.append(fila)
+        expectation = pm.predict(
+            home=pm.TeamLeagueAverages(matches_played=20, goals_for_per_match=2.5, goals_against_per_match=0.8),
+            away=pm.TeamLeagueAverages(matches_played=20, goals_for_per_match=0.7, goals_against_per_match=2.0),
+            league_teams=[
+                pm.TeamLeagueAverages(matches_played=20, goals_for_per_match=1.4, goals_against_per_match=1.4),
+            ],
+        )
+        match = TestModelProbabilityMapping.mk_soccer_match("Real Madrid", "Espanyol")
+        return detector._detect_h2h(match, filas, expectation)
+
+    def test_solo_sale_la_cuota_que_no_pasa_de_4(self) -> None:
+        bets = self._1x2("1.30", "5.50", "9.00")
+        assert [b.outcome_name for b in bets] == ["Real Madrid"]
+
+    def test_4_justo_sigue_siendo_candidata(self) -> None:
+        bets = self._1x2("1.90", "4.00", "4.50")
+        assert sorted(b.outcome_name for b in bets) == ["Draw", "Real Madrid"]
+        assert all(b.offered_odds <= vc.MAX_RECOMMENDABLE_ODDS for b in bets)
+
+    def test_sin_el_tope_saldrian_las_tres(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Comprueba que el test de arriba no pasa por casualidad: lo único que las quita es el tope.
+        monkeypatch.setattr(vc, "is_recommendable_odds", lambda _cuota: True)
+        assert len(self._1x2("1.30", "5.50", "9.00")) == 3
 
 
 class TestParsePlayerPropSide:

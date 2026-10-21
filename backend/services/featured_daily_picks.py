@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from backend.models import FeaturedDailyPick, Match
+from backend.services import value_calculator as vc
 from backend.services.saved_parlay_grading import grade_single_leg
 from backend.services.value_detector import ValueBet, ValueDetector
 
@@ -45,9 +46,15 @@ def value_bet_to_leg_dict(b: ValueBet) -> dict[str, Any]:
 
 
 def select_top_distinct_matches(bets: list[ValueBet], *, max_picks: int = MAX_PICKS) -> list[ValueBet]:
-    """Entre value bets de confianza **alta**, ordena por EV modelo y toma partidos distintos."""
+    """Entre value bets de confianza **alta**, ordena por EV modelo y toma partidos distintos.
 
-    high = [b for b in bets if b.confidence == "high"]
+    Nunca elige una cuota > ``MAX_RECOMMENDABLE_ODDS`` (el detector ya las excluye).
+    """
+
+    high = [
+        b for b in bets
+        if b.confidence == "high" and vc.is_recommendable_odds(b.offered_odds)
+    ]
 
     def sort_key(b: ValueBet) -> tuple[float, float]:
         me = float(b.model_ev) if b.model_ev is not None else -999.0

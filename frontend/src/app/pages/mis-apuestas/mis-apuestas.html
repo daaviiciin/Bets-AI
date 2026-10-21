@@ -1,162 +1,278 @@
-<div class="min-h-screen bg-gradient-to-b from-brand-bg-deep via-brand-bg-mid to-brand-bg-deep text-white pb-16">
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
-    <div class="space-y-3">
-      <p class="text-xs font-medium uppercase tracking-[0.2em] text-brand-cyan/85">PostgreSQL</p>
-      <h1 class="text-3xl font-semibold text-white tracking-tight">Mis combinadas</h1>
-      <p class="text-brand-muted text-sm max-w-xl leading-relaxed">
-        Cada fila es una <strong class="text-white font-medium">combinada completa</strong> tal como la guardaste desde el simulador del dashboard.
-        Tras los partidos, usa <strong class="text-white font-medium">Comprobar todas</strong> para recalcular todas las combinadas según el marcador cargado en base de datos,
-        o <strong class="text-white font-medium">Comprobar resultado</strong> en una fila concreta. Misma lógica que el simulador (1×2, totales con marcador claro, BTTS; el resto puede quedar en revisión).
-      </p>
-      <div class="flex flex-wrap gap-3 pt-2">
-        <button
-          type="button"
-          (click)="refreshGrades()"
-          [disabled]="bulkGrading() || parlays().length === 0 || refreshingId() !== null"
-          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium
-                 bg-brand-cyan/12 border border-brand-cyan/35 text-brand-cyan hover:bg-brand-cyan/18
-                 transition-all disabled:opacity-45 shadow-[0_0_20px_-10px_rgb(0_229_255_/_40%)]">
-          @if (bulkGrading()) {
-            <span class="size-4 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin"></span>
-            <span>Comprobando…</span>
-          } @else {
-            <span>Comprobar todas</span>
-          }
-        </button>
-        <button
-          type="button"
-          (click)="reload()"
-          [disabled]="listBusy() || bulkGrading() || refreshingId() !== null"
-          class="text-sm font-medium px-4 py-2.5 rounded-xl border border-brand-blue/30 text-brand-muted hover:border-brand-cyan/35 hover:text-white transition-colors disabled:opacity-40">
-          Recargar lista
-        </button>
+<section class="mx-auto max-w-[1440px] px-4 pb-16 pt-8 sm:px-8">
+  <!-- Cartela: el título barre con su filete guía y el filete se traza hasta "Comprobar". -->
+  <div class="flex flex-wrap items-end gap-x-5 gap-y-4">
+    <h1 class="rotulo tv-guia text-5xl leading-none sm:text-6xl">Mis apuestas</h1>
+    <span class="mb-1.5 flex min-w-0 items-end gap-2 sm:mb-2 sm:flex-1" aria-hidden="true">
+      <span class="tv-barras"></span>
+      <span class="tv-trazo hidden h-px min-w-8 flex-1 bg-tv-line sm:block" style="--tv-t: 400ms"></span>
+    </span>
+    <button
+      type="button"
+      (click)="checkAll()"
+      [disabled]="checking() || !bets().length"
+      style="--tv-t: 300ms"
+      class="tv-barrido ml-auto flex items-center gap-2 border border-tv-line bg-tv-panel px-4 py-2 transition-[border-color,scale] duration-150 hover:border-tv-muted active:scale-[0.97] disabled:opacity-60 sm:ml-0">
+      <app-icon name="refresh" [size]="16" [class.animate-spin]="checking()" />
+      <span class="font-display text-[15px] font-bold uppercase tracking-wide">
+        {{ checking() ? 'Comprobando…' : 'Comprobar resultados' }}
+      </span>
+    </button>
+  </div>
+  <p class="tv-sube mt-2 max-w-[70ch] text-tv-muted" style="--tv-t: 200ms">
+    Lo que guardas desde el boletín, con su importe. Se liquidan solas con los marcadores de
+    Flashscore; si alguna no te cuadra, corrígela a mano.
+  </p>
+
+  @if (error()) {
+    <p class="mt-4 border-l-2 border-tv-alert bg-tv-panel px-4 py-3 text-sm" role="alert">
+      {{ error() }}
+    </p>
+  }
+
+  <!-- Marcador del usuario: las cifras cuentan desde 0 al aparecer. -->
+  @if (metrics(); as m) {
+    <dl class="mt-8 grid grid-cols-2 gap-px border border-tv-line bg-tv-line sm:grid-cols-3 lg:grid-cols-5">
+      <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 120ms">
+        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Acierto</dt>
+        <dd class="rotulo mt-1 text-4xl tabular-nums" [tvCifra]="m.rate_pct" [tvFormato]="fmtPct" [tvDesde]="0"></dd>
+        <dd class="mt-1 text-xs text-tv-muted">{{ m.hits }} de {{ m.hits + m.misses }} liquidadas</dd>
       </div>
-      @if (error()) {
-        <div class="rounded-xl border border-rose-500/35 bg-rose-950/25 px-4 py-3 text-sm text-rose-200">
-          {{ error() }}
-        </div>
+      <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 160ms">
+        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Beneficio</dt>
+        <dd
+          class="rotulo mt-1 text-4xl tabular-nums"
+          [tvCifra]="m.profit"
+          [tvFormato]="fmtEurosSigno"
+          [tvDesde]="0"></dd>
+        <dd class="mt-1 text-xs text-tv-muted">Ganado menos perdido</dd>
+      </div>
+      <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 200ms">
+        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">ROI</dt>
+        <dd class="rotulo mt-1 text-4xl tabular-nums" [tvCifra]="m.roi_pct" [tvFormato]="fmtPct" [tvDesde]="0"></dd>
+        <dd class="mt-1 text-xs text-tv-muted">Beneficio sobre lo apostado</dd>
+      </div>
+      <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 240ms">
+        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Apostado</dt>
+        <dd
+          class="rotulo mt-1 text-4xl tabular-nums"
+          [tvCifra]="m.staked"
+          [tvFormato]="fmtEurosCifra"
+          [tvDesde]="0"></dd>
+        <dd class="mt-1 text-xs text-tv-muted">En ganadas y perdidas</dd>
+      </div>
+      <div class="tv-barrido col-span-2 bg-tv-panel px-4 py-4 sm:col-span-1 sm:px-5" style="--tv-t: 280ms">
+        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">En juego</dt>
+        <dd class="rotulo mt-1 text-4xl tabular-nums">{{ m.pending }}</dd>
+        <dd class="mt-1 text-xs text-tv-muted">
+          {{ m.needs_review }} a revisar · {{ m.voids }} {{ m.voids === 1 ? 'nula' : 'nulas' }}
+        </dd>
+      </div>
+    </dl>
+  }
+
+  @if (loading() && !bets().length) {
+    <div class="mt-8 space-y-3" aria-busy="true" aria-label="Cargando tus apuestas">
+      @for (i of [0, 1, 2]; track i) {
+        <div class="tv-carga h-36" [style.--i]="i"></div>
+      }
+    </div>
+  } @else if (!bets().length && !error()) {
+    <div class="mt-8 border border-tv-line bg-tv-panel px-6 py-14 text-center">
+      <app-icon name="ticket" [size]="32" class="mx-auto text-tv-muted" />
+      <p class="mt-3 text-lg font-semibold">Todavía no has guardado ninguna apuesta.</p>
+      <p class="mx-auto mt-1 max-w-[46ch] text-sm text-tv-muted">
+        Pulsa las cuotas de un partido para llevarlas al boletín, pon el importe y guárdala. Aquí
+        verás si aciertas y cuánto ganas.
+      </p>
+      <a
+        routerLink="/dashboard"
+        class="skew mt-6 inline-block bg-tv-ink px-5 py-2.5 text-tv-night transition-[filter,scale] duration-150 hover:brightness-90 active:scale-[0.97]">
+        <span class="unskew rotulo block">Ver partidos</span>
+      </a>
+    </div>
+  } @else if (bets().length) {
+    <div class="mt-8 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrar por estado">
+      @for (f of filtros; track f.id) {
+        <button
+          type="button"
+          (click)="filtro.set(f.id)"
+          [attr.aria-pressed]="filtro() === f.id"
+          class="filtro"
+          [class.filtro-on]="filtro() === f.id">
+          {{ f.label }} <span class="filtro-n tabular-nums">{{ counts()[f.id] }}</span>
+        </button>
       }
     </div>
 
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-      <div class="rounded-xl border border-brand-blue/20 bg-brand-bg-panel/40 px-4 py-3">
-        <div class="text-[10px] uppercase text-brand-muted">Guardadas</div>
-        <div class="text-2xl font-semibold text-white tabular-nums">{{ summary().total }}</div>
-      </div>
-      <div class="rounded-xl border border-brand-blue/20 bg-brand-bg-panel/40 px-4 py-3">
-        <div class="text-[10px] uppercase text-brand-muted">Pendientes</div>
-        <div class="text-2xl font-semibold text-amber-200/95 tabular-nums">{{ summary().pending }}</div>
-      </div>
-      <div class="rounded-xl border border-amber-500/25 bg-amber-950/10 px-4 py-3">
-        <div class="text-[10px] uppercase text-brand-muted">A revisar</div>
-        <div class="text-2xl font-semibold text-amber-200/95 tabular-nums">{{ summary().needsReview }}</div>
-      </div>
-      <div class="rounded-xl border border-brand-blue/20 bg-brand-bg-panel/40 px-4 py-3">
-        <div class="text-[10px] uppercase text-brand-muted">OK / KO cerradas</div>
-        <div class="text-xl font-semibold text-white tabular-nums">
-          {{ summary().hits }} / {{ summary().misses }}
-        </div>
-      </div>
-      <div class="rounded-xl border border-brand-blue/20 bg-brand-bg-panel/40 px-4 py-3 sm:col-span-2 lg:col-span-1">
-        <div class="text-[10px] uppercase text-brand-muted">% acierto combinadas</div>
-        <div class="text-2xl font-semibold text-brand-cyan tabular-nums">
-          {{ summary().ratePct != null ? summary().ratePct + '%' : '—' }}
-        </div>
-      </div>
-    </div>
-
-    @if (listBusy() && parlays().length === 0) {
-      <div class="rounded-2xl border border-brand-blue/20 bg-brand-bg-panel/30 px-8 py-16 text-center text-brand-muted text-sm space-y-3">
-        <span class="inline-block size-8 border-2 border-brand-cyan/30 border-t-brand-cyan rounded-full animate-spin mx-auto"></span>
-        <p>Cargando combinadas…</p>
-      </div>
-    } @else if (!listBusy() && parlays().length === 0) {
-      <div class="rounded-2xl border border-brand-blue/20 bg-brand-bg-panel/30 px-8 py-16 text-center text-brand-muted text-sm space-y-3">
-        <p>No hay combinadas guardadas todavía.</p>
-        <p>
-          Ve al <strong class="text-white">Dashboard</strong>: monta la combinada en «Simulador de combinada» y pulsa
-          <strong class="text-white">Guardar combinada en servidor</strong> (debes haber iniciado sesión).
-        </p>
-      </div>
-    } @else if (parlays().length > 0) {
-      <div class="space-y-5">
-        @for (p of parlays(); track p.id) {
-          <article class="rounded-2xl border border-brand-cyan/15 bg-brand-bg-panel/35 px-6 py-5 space-y-4 shadow-lg shadow-brand-blue/5 backdrop-blur-sm">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div class="space-y-2 min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span
-                    class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
-                    [class]="overallBadgeClass(p.overall_result)">
-                    {{ overallShortLabel(p.overall_result) }}
-                  </span>
-                  <div class="text-white font-medium text-lg">{{ p.title ?? 'Combinada sin nombre' }}</div>
-                </div>
-                <div class="text-xs text-brand-muted">{{ overallLabel(p.overall_result) }}</div>
-              </div>
-              <div class="text-right text-xs text-brand-muted">
-                <div>Guardada {{ fmtDateShort(p.created_at) }}</div>
-                @if (p.last_graded_at) {
-                  <div>Último cálculo {{ fmtDateShort(p.last_graded_at) }}</div>
-                }
-              </div>
-            </div>
-            <div class="flex flex-wrap gap-6 text-sm">
-              <div>
-                <div class="text-[10px] uppercase text-brand-muted">Cuota combinada (al guardar)</div>
-                <div class="font-semibold text-white tabular-nums mt-1">{{ fmtOdds(p.combined_odds) }}</div>
-              </div>
-              <div>
-                <div class="text-[10px] uppercase text-brand-muted">P modelo conjunta (al guardar)</div>
-                <div class="font-semibold text-brand-cyan tabular-nums mt-1">{{ mpAtSave(p) }}</div>
-              </div>
-            </div>
-            <ul class="space-y-2 text-sm border-t border-brand-blue/15 pt-4">
-              @for (lg of gradedLegs(p); track lg.match_id + lg.market_key + lg.outcome_name + (lg.outcome_point ?? '') + (lg.player_name ?? '')) {
-                <li class="flex flex-wrap justify-between gap-2 rounded-lg border border-brand-blue/20 bg-brand-bg-deep/50 px-4 py-3">
-                  <div>
-                    <div class="text-white font-medium">{{ lg.home_team }} – {{ lg.away_team }}</div>
-                    <div class="text-brand-muted text-xs mt-0.5">{{ legLabel(lg) }}</div>
-                    @if (lg.score_text) {
-                      <div class="text-xs text-brand-muted/80 mt-1">{{ lg.score_text }}</div>
-                    }
-                  </div>
-                  <div class="text-right text-xs shrink-0">
-                    <div class="text-brand-muted tabular-nums">cuota {{ fmtOdds(lg.offered_odds) }}</div>
-                    @if (lg.model_probability) {
-                      <div class="text-brand-muted/90 tabular-nums">P {{ fmtAbsPct(lg.model_probability, 1) }}</div>
-                    }
-                    <div class="mt-1 font-medium" [class]="legResultClass(lg.result)">
-                      {{ lg.result === 'hit' ? 'Pata OK' : lg.result === 'miss' ? 'Pata KO' : lg.result === 'needs_review' ? 'Revisar' : 'Pendiente' }}
-                    </div>
-                  </div>
-                </li>
-              }
-            </ul>
-            <div class="flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                (click)="refreshOneParlay(p.id)"
-                [disabled]="bulkGrading() || refreshingId() !== null"
-                class="inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg border border-brand-cyan/40 text-brand-cyan hover:bg-brand-cyan/10 disabled:opacity-40">
-                @if (refreshingId() === p.id) {
-                  <span class="size-3.5 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin"></span>
-                  <span>Comprobando…</span>
-                } @else {
-                  <span>Comprobar resultado</span>
-                }
-              </button>
-              <button
-                type="button"
-                (click)="remove(p.id)"
-                [disabled]="bulkGrading() || refreshingId() !== null"
-                class="text-xs font-medium text-rose-300/90 px-3 py-1.5 rounded-lg border border-rose-500/35 hover:bg-rose-500/10 disabled:opacity-40">
-                Eliminar
-              </button>
-            </div>
-          </article>
-        }
-      </div>
+    @if (!visibles().length) {
+      <p class="mt-6 text-tv-muted">No hay apuestas en este estado.</p>
     }
-  </div>
-</div>
+
+    <ol class="mt-4 space-y-3">
+      @for (b of visibles(); track b.id) {
+        <li tvEntra="apuesta" class="tv-barrido border border-tv-line bg-tv-panel" [attr.aria-busy]="busyId() === b.id">
+          <!-- Cabecera: estado, nombre y dinero. -->
+          <div class="flex flex-wrap items-start gap-x-6 gap-y-3 px-4 py-4 sm:px-5">
+            <div class="flex min-w-0 flex-1 items-start gap-3">
+              <span class="estado shrink-0" [attr.data-estado]="b.overall_result">
+                @switch (b.overall_result) {
+                  @case ('hit') { <app-icon name="check" [size]="14" /> }
+                  @case ('miss') { <app-icon name="x" [size]="14" /> }
+                  @case ('needs_review') { <app-icon name="alert" [size]="14" /> }
+                  @case ('pending') { <app-icon name="clock" [size]="14" /> }
+                }
+                {{ estado(b.overall_result) }}
+              </span>
+              <div class="min-w-0">
+                <h2 class="truncate font-semibold">{{ b.title ?? kind(b) }}</h2>
+                <p class="text-sm text-tv-muted">
+                  @if (b.title) { {{ kind(b) }} · }
+                  {{ fmtDateShort(b.created_at) }}
+                  @if (b.manual_result) {
+                    · <span class="text-tv-ink">corregida a mano</span>
+                    @if (autoResult(b); as auto) {
+                      (automático: {{ estado(auto).toLowerCase() }})
+                    }
+                  }
+                </p>
+              </div>
+            </div>
+
+            <dl class="flex shrink-0 gap-6 text-right">
+              <div>
+                <dt class="text-xs text-tv-muted">Cuota</dt>
+                <dd class="font-display text-xl font-bold tabular-nums">{{ fmtCuota(b.combined_odds) }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-tv-muted">Importe</dt>
+                <dd class="font-display text-xl font-bold tabular-nums">
+                  {{ b.stake ? fmtEuros(b.stake) : '—' }}
+                </dd>
+              </div>
+              <div class="min-w-24">
+                @if (b.profit !== null) {
+                  <dt class="text-xs text-tv-muted">Beneficio</dt>
+                  <dd class="font-display text-xl font-bold tabular-nums">{{ fmtEuros(b.profit, true) }}</dd>
+                } @else if (payout(b); as cobro) {
+                  <dt class="text-xs text-tv-muted">Si acierta</dt>
+                  <dd class="font-display text-xl font-bold tabular-nums text-tv-muted">{{ fmtEuros(cobro) }}</dd>
+                } @else {
+                  <dt class="text-xs text-tv-muted">Beneficio</dt>
+                  <dd class="font-display text-xl font-bold text-tv-muted">—</dd>
+                }
+              </div>
+            </dl>
+          </div>
+
+          <!-- Selecciones con su resultado. -->
+          <ul class="border-t border-tv-line">
+            @for (lg of legs(b); track $index) {
+              <li class="grid grid-cols-[1.25rem_1fr_auto] items-start gap-x-3 border-b border-tv-line/60 px-4 py-2.5 last:border-b-0 sm:px-5">
+                <span class="pierna mt-0.5" [attr.data-estado]="lg.result ?? 'pending'" [attr.aria-label]="estado(lg.result ?? 'pending')">
+                  @switch (lg.result) {
+                    @case ('hit') { <app-icon name="check" [size]="16" /> }
+                    @case ('miss') { <app-icon name="x" [size]="16" /> }
+                    @case ('needs_review') { <app-icon name="alert" [size]="16" /> }
+                    @default { <app-icon name="clock" [size]="16" /> }
+                  }
+                </span>
+                <div class="min-w-0">
+                  <p class="truncate text-sm">
+                    @if (lg.match_id) {
+                      <a [routerLink]="['/partido', lg.match_id]" class="hover:underline underline-offset-4">
+                        {{ lg.home_team }} – {{ lg.away_team }}
+                      </a>
+                    } @else {
+                      {{ lg.home_team }} – {{ lg.away_team }}
+                    }
+                  </p>
+                  <p class="truncate text-sm text-tv-muted">
+                    {{ legLabel(lg) }}
+                    @if (lg.score_text) { · {{ lg.score_text }} }
+                  </p>
+                </div>
+                <span class="font-display font-bold tabular-nums">{{ fmtCuota(lg.offered_odds) }}</span>
+              </li>
+            }
+          </ul>
+
+          <!-- Acciones: corregir (resultado e importe) y borrar con confirmación. -->
+          <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-tv-line px-4 py-2.5 sm:px-5">
+            <button
+              type="button"
+              (click)="toggleEdit(b)"
+              [attr.aria-expanded]="editingId() === b.id"
+              class="text-sm text-tv-muted underline-offset-4 transition-colors hover:text-tv-ink hover:underline">
+              {{ editingId() === b.id ? 'Cerrar' : 'Corregir' }}
+            </button>
+            @if (confirmDeleteId() === b.id) {
+              <span class="text-sm text-tv-muted">¿Borrarla?</span>
+              <button
+                type="button"
+                (click)="remove(b.id)"
+                [disabled]="busyId() !== null"
+                class="text-sm font-semibold text-tv-alert underline-offset-4 hover:underline disabled:opacity-60">
+                Sí, borrar
+              </button>
+              <button type="button" (click)="askDelete(b.id)" class="text-sm text-tv-muted hover:text-tv-ink">
+                No
+              </button>
+            } @else {
+              <button
+                type="button"
+                (click)="askDelete(b.id)"
+                class="flex items-center gap-1 text-sm text-tv-muted transition-colors hover:text-tv-alert">
+                <app-icon name="trash" [size]="14" /> Borrar
+              </button>
+            }
+          </div>
+
+          @if (editingId() === b.id) {
+            <div class="grid gap-5 border-t border-tv-line bg-tv-deep px-4 py-4 sm:grid-cols-2 sm:px-5">
+              <div>
+                <p class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Resultado</p>
+                <div class="mt-2 flex flex-wrap gap-2" role="group" aria-label="Fijar el resultado a mano">
+                  <button type="button" class="filtro filtro-sm" [class.filtro-on]="b.manual_result === 'hit'" [attr.aria-pressed]="b.manual_result === 'hit'" [disabled]="busyId() !== null" (click)="setResult(b, 'hit')">Ganada</button>
+                  <button type="button" class="filtro filtro-sm" [class.filtro-on]="b.manual_result === 'miss'" [attr.aria-pressed]="b.manual_result === 'miss'" [disabled]="busyId() !== null" (click)="setResult(b, 'miss')">Perdida</button>
+                  <button type="button" class="filtro filtro-sm" [class.filtro-on]="b.manual_result === 'void'" [attr.aria-pressed]="b.manual_result === 'void'" [disabled]="busyId() !== null" (click)="setResult(b, 'void')">Nula</button>
+                  <button type="button" class="filtro filtro-sm" [class.filtro-on]="!b.manual_result" [attr.aria-pressed]="!b.manual_result" [disabled]="busyId() !== null" (click)="setResult(b, null)">Automático</button>
+                </div>
+                <p class="mt-2 text-xs text-tv-muted">Nula: se devuelve el importe (partido suspendido, apuesta anulada…).</p>
+              </div>
+              <form (submit)="$event.preventDefault(); saveStake(b)">
+                <label [for]="'importe-' + b.id" class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">
+                  Importe (€)
+                </label>
+                <div class="mt-2 flex gap-2">
+                  <input
+                    [id]="'importe-' + b.id"
+                    type="text"
+                    inputmode="decimal"
+                    autocomplete="off"
+                    maxlength="10"
+                    placeholder="10,00"
+                    [value]="stakeDraft()"
+                    (input)="stakeDraft.set($any($event.target).value)"
+                    [attr.aria-invalid]="stakeInvalid()"
+                    class="w-32 border bg-tv-night px-3 py-1.5 text-right tabular-nums focus:outline-none"
+                    [class]="stakeInvalid() ? 'border-tv-alert' : 'border-tv-line focus:border-tv-ink'" />
+                  <button
+                    type="submit"
+                    [disabled]="busyId() !== null || stakeInvalid()"
+                    class="filtro filtro-sm filtro-on disabled:opacity-60">
+                    Guardar
+                  </button>
+                </div>
+                @if (stakeInvalid()) {
+                  <p class="mt-1 text-xs text-tv-alert">Escribe un importe válido, por ejemplo 10 o 12,50.</p>
+                } @else {
+                  <p class="mt-1 text-xs text-tv-muted">Déjalo vacío para quitar el importe.</p>
+                }
+              </form>
+            </div>
+          }
+        </li>
+      }
+    </ol>
+  }
+</section>

@@ -1,145 +1,177 @@
-import { Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { forkJoin, of, type Observable } from 'rxjs';
-import { catchError, finalize, switchMap } from 'rxjs/operators';
+import { forkJoin, of } from 'rxjs';
+import { catchError, finalize, switchMap, tap } from 'rxjs/operators';
 
 import { ApiService } from '../../core/api.service';
-import { AuthService } from '../../core/auth.service';
 import {
-  fmtAbsPct,
-  fmtDateShort,
-  fmtOdds,
+  fmtCuota,
+  fmtDayName,
+  fmtEv,
+  fmtProb,
+  fmtTime,
   outcomeLabel,
 } from '../../core/format';
 import type {
   FeaturedDailyPickRow,
   FeaturedPicksMetrics,
   SavedParlayLegPersist,
-  UserParlayMetrics,
 } from '../../core/models';
+import { Icon } from '../../shared/icon';
+import { TvCifra, TvEntra } from '../../shared/tv-motion';
 
+/** Cuántos picks liquidados enseña la racha. */
+const RACHA = 30;
+
+const ESTADO: Record<string, string> = {
+  hit: 'Acierto',
+  miss: 'Fallo',
+  needs_review: 'A revisar',
+  pending: 'Pendiente',
+};
+
+/**
+ * Transparencia: los picks que el modelo elige cada día, congelados antes de los partidos y
+ * liquidados después con los marcadores. No se borra ningún fallo: es el historial con el que se
+ * mide el modelo. Las reglas de selección son las de hoy (fase 3: reglas propias del usuario).
+ */
 @Component({
   selector: 'app-transparencia',
-  imports: [RouterLink],
+  imports: [NgTemplateOutlet, RouterLink, Icon, TvCifra, TvEntra],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './transparencia.html',
+  styles: `
+    /* Racha: un cuadro por pick liquidado (relleno = acierto, contorno = fallo), como la forma V/E/D. */
+    .racha {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(14px, 1fr));
+      gap: 4px;
+      max-width: 34rem;
+    }
+
+    .racha > span {
+      aspect-ratio: 1;
+      border: 1.5px solid var(--color-tv-muted);
+    }
+
+    .racha > span[data-estado='hit'] {
+      background: var(--color-tv-ink);
+      border-color: var(--color-tv-ink);
+    }
+
+    .marca {
+      display: inline-flex;
+      color: var(--color-tv-muted);
+    }
+
+    .marca[data-estado='hit'] {
+      color: var(--color-tv-ink);
+    }
+
+    .marca[data-estado='needs_review'] {
+      color: var(--color-tv-doubt);
+    }
+  `,
 })
 export class Transparencia {
   private readonly api = inject(ApiService);
-  private readonly auth = inject(AuthService);
 
-  protected readonly busy = signal(false);
+  protected readonly loading = signal(true);
+  protected readonly checking = signal(false);
   protected readonly error = signal<string | null>(null);
 
-  protected readonly featuredMetrics = signal<FeaturedPicksMetrics | null>(null);
+  protected readonly metrics = signal<FeaturedPicksMetrics | null>(null);
   protected readonly today = signal<FeaturedDailyPickRow | null>(null);
-  protected readonly history = signal<FeaturedDailyPickRow[]>([]);
-  protected readonly myParlays = signal<UserParlayMetrics | null>(null);
+  private readonly rows = signal<FeaturedDailyPickRow[]>([]);
 
-  protected readonly fmtDateShort = fmtDateShort;
-  protected readonly fmtOdds = fmtOdds;
-  protected readonly fmtAbsPct = fmtAbsPct;
+  /** Días anteriores a hoy, más reciente primero (la fila de hoy va en su propia sección). */
+  protected readonly history = computed(() => {
+    const hoy = this.today()?.pick_date;
+    return this.rows().filter((r) => r.pick_date !== hoy);
+  });
+
+  /** Últimos picks liquidados, del más antiguo al más reciente (se lee de izquierda a derecha). */
+  protected readonly racha = computed(() =>
+    this.rows()
+      .flatMap((r) => r.legs)
+      .filter((l) => l.result === 'hit' || l.result === 'miss')
+      .slice(0, RACHA)
+      .reverse(),
+  );
+
+  protected readonly fmtCuota = fmtCuota;
+  protected readonly fmtProb = fmtProb;
+  protected readonly fmtEv = fmtEv;
+  protected readonly fmtTime = fmtTime;
+  protected readonly fmtPct = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)} %`);
+  protected readonly fmtEntero = (v: number | null) => (v == null ? '—' : String(Math.round(v)));
 
   constructor() {
     this.reload();
   }
 
-  private loadTransparency$(): Observable<{
-    featured: FeaturedPicksMetrics;
-    today: FeaturedDailyPickRow;
-    history: FeaturedDailyPickRow[];
-    mine: UserParlayMetrics | null;
-  }> {
-    const mine$ = this.auth.isLoggedIn()
-      ? this.api.getMyParlayMetricsSummary().pipe(
-          catchError(() => of(null)),
-        )
-      : of(null);
-
-    return forkJoin({
-      featured: this.api.getFeaturedPicksMetrics(),
-      today: this.api.getFeaturedPicksToday(),
-      history: this.api.getFeaturedPicksHistory(45),
-      mine: mine$,
-    });
-  }
-
   protected reload(): void {
-    this.busy.set(true);
+    this.loading.set(true);
     this.error.set(null);
-    this.loadTransparency$()
-      .pipe(finalize(() => this.busy.set(false)))
-      .subscribe({
-        next: ({ featured, today, history, mine }) => {
-          this.featuredMetrics.set(featured);
-          this.today.set(today);
-          this.history.set(history);
-          this.myParlays.set(mine);
-        },
-        error: (err) =>
-          this.error.set(
-            err?.error?.detail ?? err.message ?? 'No se pudo cargar la transparencia',
-          ),
-      });
+    this.load$()
+      .pipe(finalize(() => this.loading.set(false)))
+      .subscribe({ error: () => this.error.set('No se pudieron cargar los picks del modelo.') });
   }
 
-  protected refreshFeaturedGrades(): void {
-    this.busy.set(true);
+  /** Vuelve a liquidar todos los picks con los marcadores ya cargados. */
+  protected checkAll(): void {
+    if (this.checking()) return;
+    this.checking.set(true);
     this.error.set(null);
     this.api
       .refreshFeaturedPicksGrading()
       .pipe(
         catchError((err) => {
           this.error.set(
-            typeof err?.error?.detail === 'string'
-              ? err.error.detail
-              : err.message ?? 'Error al recalificar picks en servidor',
+            err?.status === 429
+              ? 'Acabas de comprobarlos. Espera un minuto y vuelve a probar.'
+              : 'No se pudieron comprobar los resultados.',
           );
           return of(null);
         }),
-        switchMap(() => this.loadTransparency$()),
-        finalize(() => this.busy.set(false)),
+        switchMap(() => this.load$()),
+        finalize(() => this.checking.set(false)),
       )
-      .subscribe({
-        next: ({ featured, today, history, mine }) => {
-          this.error.set(null);
-          this.featuredMetrics.set(featured);
-          this.today.set(today);
-          this.history.set(history);
-          this.myParlays.set(mine);
-        },
-        error: (err) =>
-          this.error.set(
-            err?.error?.detail ?? err.message ?? 'No se pudo cargar la transparencia',
-          ),
-      });
+      .subscribe({ error: () => this.error.set('No se pudieron cargar los picks del modelo.') });
+  }
+
+  protected dayName(row: FeaturedDailyPickRow): string {
+    // Mediodía local: "2026-10-20" a secas se leería como medianoche UTC.
+    return fmtDayName(`${row.pick_date}T12:00:00`);
+  }
+
+  protected dayScore(row: FeaturedDailyPickRow): string {
+    const hits = row.legs.filter((l) => l.result === 'hit').length;
+    const settled = row.legs.filter((l) => l.result === 'hit' || l.result === 'miss').length;
+    return settled ? `${hits} de ${settled}` : 'Sin liquidar';
   }
 
   protected legLabel(leg: SavedParlayLegPersist): string {
-    return outcomeLabel(leg.market_key, leg.outcome_name, leg.outcome_point);
+    const sel = outcomeLabel(leg.market_key, leg.outcome_name, leg.outcome_point);
+    return leg.player_name ? `${leg.player_name} · ${sel}` : sel;
   }
 
-  protected legResultClass(r: string | undefined): string {
-    switch (r) {
-      case 'hit':
-        return 'text-emerald-300';
-      case 'miss':
-        return 'text-rose-300';
-      case 'needs_review':
-        return 'text-amber-200';
-      default:
-        return 'text-brand-muted';
-    }
+  protected estado(r: string | undefined): string {
+    return ESTADO[r ?? 'pending'] ?? 'Pendiente';
   }
 
-  protected legStatusText(leg: SavedParlayLegPersist): string {
-    const r = leg.result;
-    if (r === 'hit') return 'Acierto';
-    if (r === 'miss') return 'Fallo';
-    if (r === 'needs_review') return 'Revisar';
-    return 'Pendiente';
-  }
-
-  protected isLoggedIn(): boolean {
-    return this.auth.isLoggedIn();
+  private load$() {
+    return forkJoin({
+      metrics: this.api.getFeaturedPicksMetrics(),
+      today: this.api.getFeaturedPicksToday(),
+      history: this.api.getFeaturedPicksHistory(60),
+    }).pipe(
+      tap(({ metrics, today, history }) => {
+        this.metrics.set(metrics);
+        this.today.set(today);
+        this.rows.set(history);
+      }),
+    );
   }
 }

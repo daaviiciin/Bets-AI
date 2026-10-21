@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Placa "AI" de la marca: tinta inclinada −8° sobre la noche azul. -->
+  <rect width="64" height="64" fill="#0b1222"/>
+  <g transform="translate(32 32) skewX(-8)">
+    <rect x="-24" y="-20" width="48" height="40" fill="#f3f5f9"/>
+    <text x="0" y="12" text-anchor="middle" font-family="'Barlow Semi Condensed', 'Arial Narrow', Arial, sans-serif"
+      font-size="34" font-weight="800" font-style="italic" fill="#0b1222">AI</text>
+  </g>
+</svg>

@@ -242,6 +242,10 @@ class ParlayBuilder:
     ) -> list[ValueBet]:
         out: list[ValueBet] = []
         for b in bets:
+            # Ninguna pata por encima de MAX_RECOMMENDABLE_ODDS, aunque la estrategia lo permita
+            # (``from_profile`` usa el ``odds_max`` del perfil, que puede llegar a 20).
+            if not vc.is_recommendable_odds(b.offered_odds):
+                continue
             if not (strategy.leg_odds_min <= b.offered_odds <= strategy.leg_odds_max):
                 continue
             if b.fair_probability < strategy.leg_min_fair_prob:

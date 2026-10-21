@@ -30,6 +30,7 @@ from backend.models import (
     PlayerSeasonStats,
     Season,
 )
+from backend.services.busqueda_texto import ESCAPE_LIKE, patron_like_contiene
 
 router = APIRouter(prefix="/players", tags=["players"])
 
@@ -40,7 +41,7 @@ MAX_RECENT_LIMIT = 50
 @router.get("", response_model=list[PlayerOut])
 def list_players(
     q: str | None = Query(
-        None, min_length=2,
+        None, min_length=2, max_length=80,
         description="Búsqueda parcial por nombre (case-insensitive).",
     ),
     team_id: int | None = Query(None, description="Filtrar por equipo."),
@@ -58,7 +59,9 @@ def list_players(
         .limit(limit)
     )
     if q:
-        stmt = stmt.where(func.lower(Player.name).like(f"%{q.lower()}%"))
+        stmt = stmt.where(
+            func.lower(Player.name).like(patron_like_contiene(q), escape=ESCAPE_LIKE)
+        )
     if team_id is not None:
         stmt = stmt.where(Player.team_id == team_id)
     return list(db.scalars(stmt).all())
