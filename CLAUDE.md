@@ -17,10 +17,12 @@ cd frontend; npm test                                   # Vitest
 ```
 
 Scripts CLI: `python -m backend.tools.<nombre>` desde la raíz (`daily_refresh`, `import_flashscore_stats`,
-`calibrate_poisson`, `backtest_poisson`…).
+`generar_picks_del_dia`, `backtest_modelo` (backtest + calibración + `--promover` del modelo v2),
+`diagnostico_modelo`, `calibrate_poisson`, `backtest_poisson`…).
 
-**Python:** el `.venv` usa 3.10, igual que `start_bets_ai.bat` (`py -3.10`); el README dice 3.12+.
-Usa siempre el `.venv`. No cambies la versión del `.bat` ni del README sin preguntar.
+**Python:** el `.venv` usa 3.10 y `start_bets_ai.bat` arranca la API con él (antes usaba `py -3.10`
+global, al que le faltaban paquetes); el README dice 3.12+. Usa siempre el `.venv`. No cambies la
+versión del `.bat` ni del README sin preguntar.
 
 ## Arquitectura
 
@@ -42,7 +44,10 @@ Flujo de datos: `POST /refresh/official` → Flashscore (calendario, resultados,
 equipo/jugador, bajas: `services/daily_refresh.py`) → Winamax (cuotas; los props se enlazan con los
 jugadores de Flashscore) → `graded_odds_service` calcula P(modelo) y EV → `GET /dashboard/graded-odds`.
 **Sofascore ya no se usa** (responde `403` desde 2026-10); su código sigue en `scrapers/` y `services/`.
-Refresh automático: tarea de Windows → `refresh_programado.ps1` (09/15/21 h, log en `logs/`).
+Refresh automático: tarea de Windows → `refresh_programado.ps1` (hora fijada en UTC: 09/15/21 h en
+verano, 08/14/20 h en invierno; log en `logs/`). Con el portátil en suspensión se pierden tandas:
+ver HOJA_DE_RUTA. Al final genera los **picks del día** si faltan; la portada también los genera
+al abrirse (`POST /featured-picks/today`). Una vez guardados no cambian (trigger en BD).
 
 ## Convenciones
 
@@ -98,8 +103,10 @@ app), `ui-styling` (es para shadcn/React), `gpt-taste`, `industrial-brutalist-ui
 1. **Cerrada (2026-10-16): scraping de estadísticas mucho más completo.** Última tarea: cuotas de
    Winamax por liga vía WebSocket (`tournament:<id>`, 5 días vista). El backfill de stats sigue solo.
    Cada dato nuevo que se añada necesita modelo + migración + parser con test.
-2. **Ahora: mejorar UX/UI** del dashboard (crítica hecha; siguiente paso `/impeccable init`).
-3. **Por último: mejorar el modelo estadístico** y empezar el **modelo de predicción de apuestas**.
+2. **Cerrada: mejorar UX/UI** del dashboard (commit `a181389`).
+3. **Ahora: mejorar el modelo estadístico** y el **modelo de predicción de apuestas**. Plan por
+   bloques (B0–B13) y decisiones del usuario en [PLAN_FASE_3.md](PLAN_FASE_3.md); investigación de
+   modelos externos en [INVESTIGACION_MODELOS.md](INVESTIGACION_MODELOS.md).
 
 **El detalle, el diagnóstico, el estado de cada bloque y las decisiones pendientes están en
 [HOJA_DE_RUTA.md](HOJA_DE_RUTA.md).** Léelo al empezar trabajo de cualquier fase y actualiza las

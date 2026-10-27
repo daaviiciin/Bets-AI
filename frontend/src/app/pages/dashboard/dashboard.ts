@@ -19,6 +19,7 @@ import { type TeamPaint, isLight, matchPaint } from '../../core/team-colors';
 import { Icon } from '../../shared/icon';
 import { TeamCrest } from '../../shared/team-crest';
 import { TvCifra, TvEntra } from '../../shared/tv-motion';
+import { PicksDelDia } from './picks-del-dia';
 import { Portada } from './portada';
 import { ReglaJornada } from './regla-jornada';
 
@@ -40,12 +41,13 @@ interface DayGroup {
 }
 
 /**
- * Portada: los partidos de los próximos 5 días, por día y competición, con su 1X2.
- * Pulsar un partido abre su página; pulsar una cuota la lleva al boletín.
+ * Portada: los picks del día del modelo y los partidos de los próximos 5 días, por día y
+ * competición, con su 1X2. Pulsar un partido abre su página; pulsar una cuota la lleva al
+ * boletín.
  */
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, Icon, TeamCrest, TvEntra, TvCifra, ReglaJornada, Portada],
+  imports: [RouterLink, Icon, TeamCrest, TvEntra, TvCifra, ReglaJornada, Portada, PicksDelDia],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dashboard.html',
 })

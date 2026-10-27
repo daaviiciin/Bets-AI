@@ -116,12 +116,16 @@ class TestArranqueConfig:
 class TestLoginObligatorio:
     @pytest.mark.parametrize(
         "ruta",
-        ["/matches", "/dashboard/graded-odds", "/players?q=ab", "/value-bets", "/profiles",
+        ["/matches", "/dashboard/graded-odds", "/players?q=ab", "/value-bets",
          "/featured-picks/today", "/me/parlays", "/auth/me"],
     )
     def test_sin_token_401(self, crear_cliente, ruta: str) -> None:
         r = crear_cliente().get(ruta)
         assert r.status_code == 401
+
+    def test_router_profiles_retirado(self, crear_cliente) -> None:
+        # Fase 3: el modelo no sugiere importes (Kelly), así que /profiles ya no existe.
+        assert crear_cliente().get("/profiles").status_code == 404
 
     @pytest.mark.parametrize("ruta", ["/refresh/odds", "/refresh/official", "/refresh",
                                       "/featured-picks/refresh-grades"])

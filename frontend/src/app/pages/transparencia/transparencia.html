@@ -32,19 +32,25 @@
   @if (metrics(); as m) {
     <dl class="mt-8 grid grid-cols-2 gap-px border border-tv-line bg-tv-line lg:grid-cols-4">
       <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 120ms">
-        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Acierto del modelo</dt>
+        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Acierto de las simples</dt>
         <dd class="rotulo mt-1 text-4xl tabular-nums" [tvCifra]="m.rate_pct" [tvFormato]="fmtPct" [tvDesde]="0"></dd>
-        <dd class="mt-1 text-xs text-tv-muted">{{ m.hits }} de {{ m.hits + m.misses }} picks liquidados</dd>
+        <dd class="mt-1 text-xs text-tv-muted">
+          {{ m.hits }} de {{ m.hits + m.misses }} liquidadas · con valor {{ fmtPct(m.value_rate_pct ?? null) }}
+          · sin valor {{ fmtPct(m.novalue_rate_pct ?? null) }}
+        </dd>
       </div>
       <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 160ms">
         <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Aciertos · fallos</dt>
         <dd class="rotulo mt-1 text-4xl tabular-nums">{{ m.hits }} · {{ m.misses }}</dd>
-        <dd class="mt-1 text-xs text-tv-muted">{{ m.needs_review }} a revisar</dd>
+        <dd class="mt-1 text-xs text-tv-muted">{{ m.pending }} en juego · {{ m.needs_review }} a revisar</dd>
       </div>
       <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 200ms">
-        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">En juego</dt>
-        <dd class="rotulo mt-1 text-4xl tabular-nums" [tvCifra]="m.pending" [tvFormato]="fmtEntero" [tvDesde]="0"></dd>
-        <dd class="mt-1 text-xs text-tv-muted">Picks sin marcador todavía</dd>
+        <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Combinadas</dt>
+        <dd class="rotulo mt-1 text-4xl tabular-nums" [tvCifra]="m.combo_rate_pct ?? null" [tvFormato]="fmtPct" [tvDesde]="0"></dd>
+        <dd class="mt-1 text-xs text-tv-muted">
+          {{ m.combo_hits ?? 0 }} de {{ (m.combo_hits ?? 0) + (m.combo_misses ?? 0) }} liquidadas ·
+          {{ m.combo_pending ?? 0 }} en juego
+        </dd>
       </div>
       <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 240ms">
         <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Días con picks</dt>
@@ -52,6 +58,25 @@
         <dd class="mt-1 text-xs text-tv-muted">{{ m.total_legs }} picks en total</dd>
       </div>
     </dl>
+  }
+
+  @if (porModelo().length) {
+    <div class="mt-4 text-sm text-tv-muted">
+      <p class="font-display text-xs font-bold uppercase tracking-wider">Acierto por modelo</p>
+      <ul class="mt-1 space-y-0.5 tabular-nums">
+        @for (m of porModelo(); track m.version) {
+          <li>
+            <span class="text-tv-ink">{{ modeloLabel(m.version) }}</span> · simples
+            {{ m.simples.hits }} de {{ m.simples.hits + m.simples.misses }} ({{ fmtPct(m.simples.rate_pct) }})
+            · combinadas {{ m.combinadas.hits }} de {{ m.combinadas.hits + m.combinadas.misses }}
+            ({{ fmtPct(m.combinadas.rate_pct) }})
+            @if (m.simples.pending + m.combinadas.pending) {
+              · {{ m.simples.pending + m.combinadas.pending }} en juego
+            }
+          </li>
+        }
+      </ul>
+    </div>
   }
 
   @if (racha().length) {
@@ -80,6 +105,11 @@
         <!-- Picks de hoy. -->
         <h2 class="rotulo tv-dia pb-2 text-3xl">Picks de hoy</h2>
         @if (today(); as t) {
+          @if (t.generated_at) {
+            <p class="mt-1 text-sm text-tv-muted">
+              Congelados a las {{ fmtTime(t.generated_at) }} · {{ modeloLabel(t.model_version) }}
+            </p>
+          }
           @if (t.legs.length) {
             <ul class="mt-3 space-y-2">
               @for (lg of t.legs; track $index) {
@@ -91,6 +121,12 @@
               Hoy el modelo no ve ningún pick que cumpla sus reglas. Mejor no apostar que forzarlo.
             </p>
           }
+          <ng-container [ngTemplateOutlet]="combinada" [ngTemplateOutletContext]="{ $implicit: t }" />
+        } @else {
+          <p class="mt-4 text-tv-muted">
+            Los picks de hoy se generan la primera vez que se abre la portada (o en el refresh
+            programado de la mañana).
+          </p>
         }
 
         <!-- Histórico, un bloque por día. -->
@@ -109,6 +145,7 @@
                 <ng-container [ngTemplateOutlet]="pick" [ngTemplateOutletContext]="{ $implicit: lg }" />
               }
             </ul>
+            <ng-container [ngTemplateOutlet]="combinada" [ngTemplateOutletContext]="{ $implicit: row }" />
           </section>
         }
       </div>
@@ -117,14 +154,31 @@
       <aside class="h-fit border border-tv-line bg-tv-panel p-5 xl:sticky xl:top-24">
         <h2 class="font-display text-base font-bold uppercase tracking-wide">Cómo elige el modelo</h2>
         <ul class="mt-3 space-y-2 text-sm text-tv-muted">
-          <li>Hasta <span class="text-tv-ink">3 picks al día</span>, de partidos distintos.</li>
-          <li>Solo líneas con <span class="text-tv-ink">valor esperado positivo</span> y confianza alta del modelo Poisson.</li>
-          <li>Cuota de <span class="text-tv-ink">2,00 como máximo</span>: prima acertar sobre el pelotazo.</li>
-          <li>Se congelan al generarse: la cuota y la probabilidad son las de ese momento.</li>
+          <li>
+            <span class="text-tv-ink">Al menos 3 simples</span> de partidos distintos, con cuota de
+            <span class="text-tv-ink">1,30 a 1,70</span> y la mayor probabilidad del modelo.
+          </li>
+          <li>
+            Primero las que tienen valor (EV ≥ 0). Si no llegan a 3, se completa con las mejores
+            sin valor, marcadas como <span class="sin-valor">Sin valor</span>.
+          </li>
+          <li>
+            Una <span class="text-tv-ink">combinada de cuota 3 a 6</span> con partidos distintos.
+            Si no hay partidos suficientes, con varias selecciones de un mismo partido (MyMatch en
+            Winamax). Nunca cambia las simples.
+          </li>
+          <li>
+            Se generan una vez al día (refresh de la mañana o primera apertura) y se congelan: la
+            cuota y la probabilidad son las de ese momento.
+          </li>
         </ul>
         <p class="mt-4 border-t border-tv-line pt-3 text-xs text-tv-muted">
-          Estas reglas son provisionales: el modelo de predicción nuevo (fase 3) traerá las suyas, y
-          el historial seguirá midiéndose igual.
+          Desde el 26/10 las probabilidades salen del <span class="text-tv-ink">modelo v2</span>:
+          Dixon–Coles con encogimiento hacia la media (goles y xG), calibrado por mercado y mezclado
+          con la cuota de Winamax sin margen (60 % mercado). Solo dan picks los mercados que
+          pasaron el backtest (1X2 y doble oportunidad, goles del partido y de cada equipo, mitad
+          con más goles) y partidos de liga con al menos 5 partidos de cada equipo. El acierto de
+          cada modelo se mide por separado.
         </p>
       </aside>
     </div>
@@ -154,13 +208,71 @@
         {{ legLabel(lg) }}
         @if (lg.score_text) { · {{ lg.score_text }} }
       </p>
+      @if (lg.aviso) {
+        <p class="truncate text-xs text-tv-doubt">{{ lg.aviso }}</p>
+      }
     </div>
     <div class="text-right">
       <p class="font-display text-xl font-bold tabular-nums">{{ fmtCuota(lg.offered_odds) }}</p>
       <p class="text-xs tabular-nums text-tv-muted">
         P {{ fmtProb(lg.model_probability) }}
-        @if (lg.model_ev) { · EV {{ fmtEv(lg.model_ev) }} }
+        @if (lg.sin_valor) {
+          · <span class="sin-valor">Sin valor</span>
+        } @else if (lg.model_ev) {
+          · EV {{ fmtEv(lg.model_ev) }}
+        }
       </p>
     </div>
   </li>
+</ng-template>
+
+<!-- Combinada del día (filas v2); en las v1 no hay. -->
+<ng-template #combinada let-row>
+  @if (row.combo; as c) {
+    <div class="mt-3 border border-tv-line bg-tv-panel px-4 py-3">
+      <div class="flex items-baseline justify-between gap-4">
+        <p class="flex items-center gap-2">
+          <span class="marca" [attr.data-estado]="c.result ?? 'pending'" [attr.aria-label]="estado(c.result)">
+            @switch (c.result) {
+              @case ('hit') { <app-icon name="check" [size]="16" /> }
+              @case ('miss') { <app-icon name="x" [size]="16" /> }
+              @case ('needs_review') { <app-icon name="alert" [size]="16" /> }
+              @default { <app-icon name="clock" [size]="16" /> }
+            }
+          </span>
+          <span class="font-display text-sm font-bold uppercase tracking-wide">
+            Combinada · {{ c.legs.length }} patas{{ c.mismo_partido ? ' · MyMatch' : '' }}
+          </span>
+        </p>
+        <p class="font-display text-xl font-bold tabular-nums">{{ fmtCuota(c.combined_odds) }}</p>
+      </div>
+      <ul class="mt-2 space-y-1 text-sm text-tv-muted">
+        @for (lg of c.legs; track $index) {
+          <li class="flex items-baseline justify-between gap-3">
+            <span class="min-w-0 truncate">
+              <span class="marca align-middle" [attr.data-estado]="lg.result ?? 'pending'" [attr.aria-label]="estado(lg.result)">
+                @switch (lg.result) {
+                  @case ('hit') { <app-icon name="check" [size]="12" /> }
+                  @case ('miss') { <app-icon name="x" [size]="12" /> }
+                  @default { <app-icon name="clock" [size]="12" /> }
+                }
+              </span>
+              {{ lg.home_team }} – {{ lg.away_team }} · {{ legLabel(lg) }}
+            </span>
+            <span class="tabular-nums">{{ fmtCuota(lg.offered_odds) }}</span>
+          </li>
+        }
+      </ul>
+      <p class="mt-2 text-xs tabular-nums text-tv-muted">
+        P conjunta {{ fmtProb(c.joint_probability) }}
+        @if (c.sin_valor) {
+          · <span class="sin-valor">Sin valor</span>
+        } @else {
+          · EV {{ fmtEv(c.ev) }}
+        }
+      </p>
+    </div>
+  } @else if (row.rules_version === 'v2' && row.selection_meta?.motivo_combinada) {
+    <p class="mt-3 text-sm text-tv-muted">Sin combinada: {{ row.selection_meta.motivo_combinada }}.</p>
+  }
 </ng-template>

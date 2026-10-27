@@ -2,7 +2,8 @@
 setlocal
 
 set "ROOT=%~dp0"
-set "PYTHON=py -3.10"
+rem Ruta relativa a ROOT (sin espacios): el .venv tiene los mismos paquetes que los tests y la tarea programada.
+set "PYTHON=.venv\Scripts\python.exe"
 cd /d "%ROOT%"
 
 echo ========================================
@@ -18,17 +19,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
-where py >nul 2>nul
-if errorlevel 1 (
-    echo ERROR: El lanzador py de Python no esta instalado o no esta en PATH.
+if not exist "%PYTHON%" (
+    echo ERROR: No existe el entorno virtual .venv.
+    echo Crealo con: py -3.10 -m venv .venv
+    echo y despues:  .venv\Scripts\python.exe -m pip install -r requirements.txt
     pause
     exit /b 1
 )
 
-%PYTHON% -c "import fastapi, uvicorn, sqlalchemy, alembic" >nul 2>nul
+%PYTHON% -c "import fastapi, uvicorn, sqlalchemy, alembic, limits" >nul 2>nul
 if errorlevel 1 (
-    echo ERROR: Python 3.10 no tiene instaladas las dependencias del backend.
-    echo Instala las dependencias con: py -3.10 -m pip install -r requirements.txt
+    echo ERROR: El .venv no tiene instaladas las dependencias del backend.
+    echo Instala las dependencias con: .venv\Scripts\python.exe -m pip install -r requirements.txt
     pause
     exit /b 1
 )

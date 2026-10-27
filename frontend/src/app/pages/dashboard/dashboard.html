@@ -55,6 +55,9 @@
     </p>
   </div>
 
+  <!-- Picks del día del modelo: se generan (y congelan) la primera vez que se abre la app. -->
+  <app-picks-del-dia class="mt-8" />
+
   @if (!loading() && !error() && matches().length) {
     <app-regla-jornada
       class="mt-6 !hidden sm:!block"

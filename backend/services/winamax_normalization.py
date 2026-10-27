@@ -25,6 +25,8 @@ TOTALS_MARKETS: frozenset[str] = frozenset({
     "match_corners_totals",
     "match_shots_totals",
     "match_sot_totals",
+    "team_home_sot_totals",
+    "team_away_sot_totals",
     "match_first_half_totals",
     "team_home_first_half_totals_goals",
     "team_away_first_half_totals_goals",
@@ -121,6 +123,22 @@ def normalize_btts_outcome(label: str) -> str:
     if ll in {"no"}:
         return "No"
     return label.strip()[:1].upper() + label.strip()[1:] if label else "Yes"
+
+
+def highest_scoring_half_side(label: str) -> str | None:
+    """"Mitad con más goles": ``1ª mitad`` → ``1h``, ``Igual`` → ``tie``, ``2ª mitad`` → ``2h``.
+
+    El resultado se guarda con la etiqueta de Winamax; esto solo la interpreta (modelo y
+    liquidación). ``None`` si no se reconoce.
+    """
+    low = (label or "").strip().lower()
+    if low in {"igual", "empate", "tie", "draw", "x"}:
+        return "tie"
+    if low.startswith(("1", "primera")) or "1st" in low or "first" in low:
+        return "1h"
+    if low.startswith(("2", "segunda")) or "2nd" in low or "second" in low:
+        return "2h"
+    return None
 
 
 def normalize_double_chance_outcome(label: str, *, home_team: str, away_team: str) -> str:

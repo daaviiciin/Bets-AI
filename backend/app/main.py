@@ -10,9 +10,6 @@ Endpoints disponibles
 * ``GET /matches/{id}/odds``          — cuotas capturadas para un partido
 * ``GET /value-bets``                 — value bets detectadas (con EV+)
 * ``GET /dashboard/graded-odds``       — todas las cuotas Winamax recientes calificadas
-* ``GET /profiles``                   — lista de perfiles de apostador
-* ``GET /profiles/{name}``            — detalle de un perfil
-* ``GET /profiles/{name}/recommendations`` — recomendaciones personalizadas
 * ``GET /players``                    — búsqueda de jugadores por nombre
 * ``GET /players/{id}``               — datos básicos de un jugador
 * ``GET /players/{id}/stats``         — stats de temporada + histórico por partido
@@ -44,7 +41,6 @@ from backend.app.api import (
     matches,
     me_parlays,
     players,
-    profiles,
     refresh,
     value_bets,
 )
@@ -61,7 +57,6 @@ _ROUTERS_PROTEGIDOS = (
     me_parlays.router,
     matches.router,
     value_bets.router,
-    profiles.router,
     calibration.router,
     players.router,
 )

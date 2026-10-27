@@ -1,18 +1,60 @@
 # Hoja de ruta — Bets AI
 
-Última actualización: 2026-10-16
+Última actualización: 2026-10-25
 
 | Fase | Objetivo | Estado |
 |---|---|---|
-| 1 | Scraping de estadísticas mucho más completo | ✅ **Cerrada el 2026-10-16** (última tarea: cuotas Winamax por liga vía WebSocket, 5 días vista). El backfill de stats termina solo (3 refreshes/día) |
-| **2** | Mejorar UX/UI del dashboard | **Siguiente** (crítica hecha, nota 13/40; siguiente paso: `/impeccable init`) |
-| 3 | Mejorar el modelo estadístico y crear el modelo de predicción de apuestas | Pendiente |
+| 1 | Scraping de estadísticas mucho más completo | ✅ **Cerrada el 2026-10-16** (última tarea: cuotas Winamax por liga vía WebSocket, 5 días vista). Backfill de stats terminado (2026-10-24) |
+| 2 | Mejorar UX/UI del dashboard | ✅ **Cerrada** (commit `a181389`) |
+| **3** | Mejorar el modelo estadístico y crear el modelo de predicción de apuestas | **En curso**: plan en [PLAN_FASE_3.md](PLAN_FASE_3.md), investigación en [INVESTIGACION_MODELOS.md](INVESTIGACION_MODELOS.md) |
 
 Regla: no se empieza una fase hasta cerrar la anterior, salvo decisión explícita.
 
 ---
 
-## 📍 Dónde nos quedamos (2026-10-19, ~20:30), para retomar
+## 📍 Dónde nos quedamos (2026-10-25, ~19:15), para retomar
+
+**Refresh programado: diagnosticado, sin arreglar (decisión pendiente).**
+- Del 21/10 por la mañana al 25/10 solo terminaron 5 de ~14 tandas. El portátil pasa casi todo el
+  día en suspensión moderna (eventos Kernel-Power 506/507). La tarea arranca en los despertares cortos
+  (`StartWhenAvailable`), se congela al volver a dormir y el Programador la mata al pasar el límite
+  de 30 min (resultado `0xC000013A`). El 24/10 las dos tandas cortaron Winamax a medias y la de las
+  21:00 arrancó a las 23:58 sin llegar a escribir. El 22/10 a las 20:11 Postgres rechazó la conexión
+  justo después de despertar.
+- Los disparadores están anclados a UTC: desde el cambio de hora del 25/10 la tarea corre a las
+  **08, 14 y 20 h** (antes 09/15/21).
+- Recuperado a mano el 25/10 (18:26, 0 errores): 34 partidos cerrados con stats, stats de jugador de
+  30, bajas de 40 de 44 y cuotas de 14 partidos.
+- Opciones para decidir: que la tarea despierte el PC, no suspender con corriente, reintentar tras
+  despertar, o disparadores en hora local.
+
+**Arranque:** `start_bets_ai.bat` arranca ahora la API con el `.venv`. El `py -3.10` global no
+tenía `limits`, así que la API se cerraba al arrancar y el login decía "credenciales incorrectas o
+error de red". La contraseña de `admin` sigue siendo la de por defecto: cámbiala con
+`set_password`.
+
+**Fase 3, hecho el 25/10:**
+- **Mercado "Mitad con más goles" (betType 3317)**, que es el de 2ª parte que tiene Winamax
+  prepartido (no publica "2ª mitad – Nº total de goles"; comprobado en Sevilla–Osasuna y
+  Udinese–Milan, muestras en `data/raw/winamax_muestras/`). Se guarda, tiene P del modelo
+  (`probabilities_highest_scoring_half`, con s = 0,585 de goles en la 2ª parte) y se liquida sola
+  con los goles por mitad. El modelo da 1ª 27,2 % · igual 23,0 % · 2ª 49,8 %; en los datos ha salido
+  26 % · 23 % · 51 %.
+- **Picks del día v2 (B10, adelantado con el modelo actual `legacy-v1`).** Ver el bloque de la
+  fase 3. Los primeros se generaron el 25/10 a las 18:59, al abrir la portada.
+- `PLAN_FASE_3.md` (rescatado del historial del 21/10) e `INVESTIGACION_MODELOS.md`.
+
+**Pendiente:**
+- ~~El Poisson actual está muy sobreconfiado~~ ☑ resuelto con el modelo v2 (ver "Modelo v2 en
+  producción"): el Clásico pasa de 3,73–1,30 a 2,92–1,85 goles esperados y los EV pasan de +72 %
+  a valores realistas (−2 % a +9 %).
+- Generar los picks tarda unos 14 s, porque `list_graded_winamax_odds` también calcula los props de
+  jugador. Si molesta al abrir la app, filtrar por mercado.
+- No hay nada commiteado desde `a181389`.
+
+---
+
+## 📍 Dónde nos quedamos (2026-10-19, ~20:30), histórico
 
 Tres agentes en paralelo. Decisiones del usuario: portada solo decorativa; fotos enlazadas al CDN de
 Flashscore; una petición a Winamax; sesión de 7 días; rate limit en el login (5/min), en los refresh
@@ -505,8 +547,9 @@ Pendiente de este bloque / siguientes:
 - ✅ (2026-10-21) Migrar al mundo nuevo: Mis apuestas, Transparencia y Login (tokens `tv-*`).
   - **Login**: rótulo "Bets [AI]" con la entrada de la portada; el PNG solo queda en `public/brand`
     (favicon nuevo `favicon.svg`).
-  - **Portada**: balón de estrellas propio (no el logotipo de la UEFA) que entra rodando hasta el
-    punto central; su posición se proyecta con la misma perspectiva del campo (`posicionBalon`).
+  - **Portada**: apertura como jugada de telestrator (grúa de cámara, jugadores, tres pases y un
+    tiro con el balón por `animateMotion`, gol con golpe de cámara). La jugada va en bucle (ciclo de
+    6,9 s, pases de 0,9 s) y se para fuera de pantalla o con la pestaña oculta.
   - **Estadísticas eliminada** (página, ruta, enlace, `GET /statistics/*` y sus schemas): las
     estadísticas viven en cada partido.
   - **Mis apuestas**: importe al guardar desde el boletín (simples y combinadas), beneficio, ROI y
@@ -529,6 +572,117 @@ Ya detectado:
 Ya detectado:
 - Base actual: Poisson / Dixon–Coles (`poisson_model.py`), con calibración y backtest ya implementados.
 - La evaluación del modelo de apuestas dependerá del historial de cuotas de cierre (fase 1, bloque 2).
+
+### Modelo v2 en producción (2026-10-25, noche)
+
+- [x] **B3** `load_training_matches(session, cutoff)` + `assert_sin_fuga` (`model_dataset.py`):
+  sin partidos posteriores al corte ni eliminatorias UEFA (prórroga).
+- [x] **B4** `team_ratings_model.py`: Dixon–Coles con **encogimiento** (ridge N(0, σ²) en
+  ataque/defensa, liga y campo encogidos al global), ajuste conjunto (fuerza del rival), UEFA
+  compartiendo ratings con la liga, decaimiento temporal y mezcla goles–xG. Poisson penalizado
+  con gradiente exacto + ρ por máxima verosimilitud. Ajuste de 489 partidos en 0,02 s.
+- [x] **B5** (parcial) `market_probabilities.py`: 1X2, doble oportunidad, totales, goles por
+  equipo, ambos marcan y mitad con más goles desde la matriz Dixon–Coles; mercado sin margen
+  ("power") y mezcla. Falta: tiros a puerta y mitades por línea (B6).
+- [x] **B7** `model_calibration_v2.py` (Platt acotado b ∈ [0,5; 1], log-loss, Brier, ECE) +
+  `model_backtest.py` + CLI `backtest_modelo` (rejilla de 36, ventana A 15/09–01/10 para elegir,
+  B 01/10–25/10 para medir; bases: modelo actual sin fuga, tasa base y cierre de Winamax).
+- [x] **B8** tabla `model_versions` (migración `892f3f9f06c4`) + `model_registry.py` (versión
+  activa reajustada con los datos del momento, en caché) + `--promover` con puerta.
+- [x] **B9** `graded_odds_service`: si hay versión activa, la P de esos mercados sale del v2
+  (calibrada y mezclada con el mercado); el resto, del modelo actual. Picks: solo líneas v2 de
+  familias habilitadas, equipos con ≥ 5 partidos, mezcladas con el mercado y de liga.
+
+**Resultado del backtest (versión activa `dc-ridge-20261025-1839`):** σ = 0,4, semivida 60 días,
+60 % xG. Log-loss medio por familia en B: **v2 0,635**, modelo actual 0,687, tasa base 0,649. El
+cierre de Winamax sin margen gana al v2 solo (1X2 0,598 frente a 0,611), así que se mezcla:
+**60 % mercado** (0,6364, mejor que el modelo solo, 0,6403, y que el mercado solo, 0,6379).
+Familias habilitadas: 1X2/doble oportunidad, totales, goles por equipo y mitad con más goles;
+**ambos marcan no** (peor que la tasa base). El peso del mercado se eligió y midió en la misma
+ventana (el historial de cuotas empieza el 14/10): algo optimista. Repetir el backtest cada 1–2
+semanas (`python -m backend.tools.backtest_modelo --promover`).
+
+Picks: los del 25/10 son del modelo antiguo (`legacy-v1`); desde el 26/10 salen del v2.
+Transparencia separa el acierto por modelo.
+
+### Estado de los bloques (2026-10-25)
+
+- [x] **B2b** Winamax 3317 → `match_highest_scoring_half` ("Mitad con más goles"): P del modelo
+  (λ por mitades con s = 0,585) y liquidación con `goals_1h/2h` (`pending_stats` si faltan).
+- [~] **B10 Picks v2, adelantado con `legacy-v1`** (decisión del usuario del 25/10):
+  `services/daily_picks_v2.py` (puro) + `featured_daily_picks.py` + migración `3e547a4eef99`
+  (`combo_json`, `rules_version`, `model_version`, `generated_at`, `selection_meta`,
+  `picks_sha256` y un **trigger** que impide cambiar los picks guardados). Día de Madrid, partidos
+  que empiezan como pronto en 30 min. Al menos 3 simples de 1,30–1,70 (primero con valor, hasta 5;
+  si faltan, sin valor y marcados) y una combinada **3–6** (bajada de 4–6 el 25/10) de partidos
+  distintos o, si así no se llega, con varias selecciones de un mismo partido (MyMatch): P conjunta
+  con la matriz de marcadores, cuota estimada con la correlación y cuota mínima con valor. La
+  combinada nunca cambia las simples. Las patas candidatas
+  de la combinada son la mejor línea de cada tramo de cuota (1,25–1,45, 1,45–1,70 y 1,70–2,00);
+  con "las 3 de mayor P" nunca se llegaba a 4. `puntuar_combinada`: con valor → partidos
+  distintos → mayor P conjunta → menos patas. Se generan con `POST /featured-picks/today` (la
+  portada, al abrirse; si las cuotas tienen > 2 h, las actualiza antes) o con el CLI
+  `generar_picks_del_dia` (paso nuevo de `refresh_programado.ps1`). `GET /today` ya no genera.
+  Transparencia muestra la combinada, la insignia "Sin valor" y el acierto con valor, sin valor y
+  de las combinadas. **Falta:** el registro de `prediction_snapshots` y el `model_fit_id` (B8/B9).
+  Picks del 25/10: 2 simples congeladas a las 18:59 y combinada añadida a mano a las 19:20
+  conservando las simples (Barça más de 2,5 goles 1,84 + gana el Milan 1,74 = 3,20; copia de la fila
+  anterior en el scratchpad de la sesión).
+
+### Estado de los bloques (2026-10-21)
+
+- [x] **B0** Diagnóstico de datos: CLI `python -m backend.tools.diagnostico_modelo` (solo lectura) +
+  resumen puro en `services/model_dataset.py` (tests `test_model_dataset.py`).
+- [x] **B1** Liquidar mercados nuevos (`saved_parlay_grading.py`): doble oportunidad, goles 1ª/2ª
+  parte (partido y equipo), tiros a puerta de partido, de equipo y de jugador; estado
+  `pending_stats` (→ `needs_review` a las 72 h del saque); aplazado/cancelado → `void`.
+- [x] **B2** Winamax 6206 → `team_home_sot_totals`, 6207 → `team_away_sot_totals` (test con recorte
+  real de `match_72221330`). Tiros a puerta de jugador ya estaban (6864 `player_sot_alt`).
+  **Pendiente:** goles de la 2ª parte prepartido no tienen betType (ver abajo).
+- [x] Router `profiles` retirado (`api/profiles.py` borrado; Kelly/`suggested_stake` fuera). Se
+  conservan el modelo `user_profiles`, su tabla y los métodos de `api.service.ts` (solo los usa
+  la página sin ruta `recommendations`).
+- [ ] B3+ (dataset sin fuga, ratings, backtest, picks v2…).
+
+### Diagnóstico de datos (B0) — 2026-10-21
+
+Partidos terminados (15-ago → 20-oct-2026) y cobertura de `match_stats` (los dos equipos):
+
+| Liga | Partidos | Stats | xG | Goles por mitad | Tiros a puerta |
+|---|---:|---:|---:|---:|---:|
+| Bundesliga | 54 | 100 % | 100 % | 92,6 % | 100 % |
+| La Liga | 89 | 100 % | 100 % | 98,9 % | 100 % |
+| Ligue 1 | 63 | 100 % | 100 % | 100 % | 100 % |
+| Premier League | 70 | 100 % | 100 % | 98,6 % | 100 % |
+| Serie A | 70 | 100 % | 100 % | 97,1 % | 100 % |
+| Champions League | 18 | 50 % | 50 % | 50 % | 50 % |
+| Conference League | 18 | 0 % | 0 % | 0 % | 0 % |
+| Europa League | 18 | 0 % | 0 % | 0 % | 0 % |
+| **Total** | **400** | **88,8 %** | **88,8 %** | **86,8 %** | **88,8 %** |
+
+- Los 45 partidos sin stats son todos UEFA (9 de Champions, todos los de Europa y Conference).
+  xG ≥ 80 % solo en ligas domésticas → la mezcla con xG (mejora 5) sería solo para ellas.
+- Equipos que juegan liga y UEFA: **32**. UEFA tiene ~3 partidos por equipo.
+- `player_match_stats`: 12 408 filas (todas Flashscore), tiros a puerta en todas, 398 de 400
+  partidos. 198 filas con 0 minutos (suplentes sin jugar).
+- Mercados (`odds_history`, partidos con cuota): `double_chance` 191, `match_first_half_totals` 191,
+  `team_home/away_first_half_totals_goals` 190, `match_sot_totals` 89, `player_sot_alt` 98.
+  **Sin filas:** `team_home/away_sot_totals` (mapeados hoy, B2), `match_second_half_totals` y
+  goles de equipo en la 2ª parte (sin betType), `player_sot` (single-line, Winamax no lo publica).
+- Estados de partido: 400 `finished`, 97 `scheduled`; ningún `postponed`/`canceled` todavía.
+- `official_data_pipeline` efectivo (`get_settings()`): **False** (también en `.env.example`).
+  El modo no oficial excluye la casa más afilada en `value_detector`; decidir antes de B9/B10.
+- **Prórroga:** la BD no la guarda. `Match` solo tiene `status` y marcador, y el parser de
+  Flashscore solo mira `AB=3` (terminado); los códigos 6 (prórroga) y 7 (penaltis) son estados
+  en directo y el marcador final que se guarda incluiría la prórroga. Riesgo real hoy: **0
+  partidos** (ligas domésticas sin prórroga; UEFA en fase de liga sep-ene; los datos empiezan el
+  15-ago, sin previas). Habrá riesgo desde febrero (eliminatorias UEFA): antes hay que excluir
+  esos partidos o guardar el marcador a 90'. Red de seguridad en la liquidación: si los goles por
+  mitad no suman el marcador, la pata va a revisar (hoy pasa en 1 partido, `match_id=64`, por un
+  dato de mitades erróneo: 0-0 con 1 gol del local en la 2ª parte).
+- ~~Pendiente de muestra: goles de la 2ª parte prepartido~~ ☑ (2026-10-25): Winamax no publica
+  "2ª mitad – Nº total de goles" prepartido; el mercado que usa el usuario es "Mitad con más
+  goles" (3317), ya mapeado (B2b).
 
 ## Otros avisos
 

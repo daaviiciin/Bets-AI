@@ -72,6 +72,7 @@ from backend.services import basketball_model as bbm
 from backend.services import poisson_model as pm
 from backend.services import recent_goal_form as rgf
 from backend.services import value_calculator as vc
+from backend.services.winamax_normalization import highest_scoring_half_side
 
 SUPPORTED_MARKETS = {
     "h2h",
@@ -790,6 +791,15 @@ class ValueDetector:
                 home_team_name=home_team_name,
                 away_team_name=away_team_name,
             )
+
+        if mk == "match_highest_scoring_half":
+            mitad = highest_scoring_half_side(outcome_name)
+            if mitad is None:
+                return None
+            p_1h, p_igual, p_2h = pm.probabilities_highest_scoring_half(
+                expectation.lambda_home + expectation.lambda_away,
+            )
+            return Decimal(str({"1h": p_1h, "tie": p_igual, "2h": p_2h}[mitad]))
 
         return None
 

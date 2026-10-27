@@ -38,7 +38,14 @@ const ESTADO: Record<string, string> = {
   void: 'Nula',
   needs_review: 'A revisar',
   pending: 'Pendiente',
+  // Partido terminado, esperando stats (tiros a puerta, mitades…): se ve como pendiente.
+  pending_stats: 'Pendiente',
 };
+
+/** Estado para filtrar y contar: "esperando stats" cuenta como pendiente. */
+function filtroDe(r: string): string {
+  return r === 'pending_stats' ? 'pending' : r;
+}
 
 /**
  * Mis apuestas: el registro de lo que guardas desde el boletín (simples y combinadas), con su
@@ -125,13 +132,16 @@ export class MisApuestas {
     const c: Record<Filtro, number> = { todas: 0, pending: 0, hit: 0, miss: 0, needs_review: 0 };
     for (const b of this.bets()) {
       c.todas++;
-      if (b.overall_result in c) c[b.overall_result as Filtro]++;
+      const r = filtroDe(b.overall_result);
+      if (r in c) c[r as Filtro]++;
     }
     return c;
   });
   protected readonly visibles = computed(() => {
     const f = this.filtro();
-    return f === 'todas' ? this.bets() : this.bets().filter((b) => b.overall_result === f);
+    return f === 'todas'
+      ? this.bets()
+      : this.bets().filter((b) => filtroDe(b.overall_result) === f);
   });
 
   protected readonly fmtCuota = fmtCuota;

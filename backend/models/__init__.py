@@ -22,6 +22,7 @@ from backend.models.player_match_stats import PlayerMatchStats
 from backend.models.player_stats import PlayerSeasonStats
 from backend.models.saved_parlay import SavedParlay
 from backend.models.season import Season
+from backend.models.model_version import ModelVersion
 from backend.models.snapshot import Snapshot
 from backend.models.team import Team
 from backend.models.team_stats import TeamSeasonStats
@@ -40,6 +41,7 @@ __all__ = [
     "MatchAbsence",
     "MatchLineup",
     "MatchStats",
+    "ModelVersion",
     "Odds",
     "OddsHistory",
     "Player",

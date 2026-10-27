@@ -275,13 +275,30 @@ class FeaturedDailyPickOut(BaseModel):
     """Picks del día con patas corregidas si ya hay marcador."""
 
     pick_date: date
+    #: Simples (cada una con ``sin_valor``, ``aviso``, P y EV del modelo en las filas v2).
     legs: list[dict[str, Any]]
+    #: Combinada del día con sus patas y ``result``; null si no hubo (motivo en ``selection_meta``).
+    combo: dict[str, Any] | None = None
+    rules_version: str = "v1"
+    model_version: str | None = None
+    generated_at: datetime | None = None
+    selection_meta: dict[str, Any] | None = None
     last_graded_at: datetime | None = None
     created_at: datetime
 
 
+class FeaturedTodayOut(BaseModel):
+    """Picks de hoy: ``listo`` (con ``pick``), ``pendiente`` (aún sin generar) o ``sin_partidos``."""
+
+    estado: Literal["listo", "pendiente", "sin_partidos"]
+    motivo: str | None = None
+    #: ``True`` si al generarlos hubo que descargar antes las cuotas de Winamax.
+    cuotas_actualizadas: bool = False
+    pick: FeaturedDailyPickOut | None = None
+
+
 class FeaturedPicksMetricsOut(BaseModel):
-    """Métricas agregadas de las patas propuestas por la app (histórico)."""
+    """Métricas agregadas de los picks propuestos por la app (histórico)."""
 
     total_pick_days: int
     total_legs: int
@@ -289,7 +306,22 @@ class FeaturedPicksMetricsOut(BaseModel):
     misses: int
     pending: int
     needs_review: int
+    voids: int = 0
     rate_pct: float | None = None
+    #: Simples con valor (EV ≥ 0) frente a las que completaron el mínimo de 3 sin valor.
+    value_hits: int = 0
+    value_misses: int = 0
+    value_rate_pct: float | None = None
+    novalue_hits: int = 0
+    novalue_misses: int = 0
+    novalue_rate_pct: float | None = None
+    combos_total: int = 0
+    combo_hits: int = 0
+    combo_misses: int = 0
+    combo_pending: int = 0
+    combo_rate_pct: float | None = None
+    #: Por versión del modelo: ``{"simples": {hits, misses, …, rate_pct}, "combinadas": {…}}``.
+    por_modelo: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 class UserParlayMetricsOut(BaseModel):

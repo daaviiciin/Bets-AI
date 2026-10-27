@@ -114,6 +114,8 @@ _MARKET_FRIENDLY_NAME: dict[str, str] = {
     "match_corners_totals": "Total de córneres",
     "match_shots_totals": "Total de tiros",
     "match_sot_totals": "Total de tiros a puerta",
+    "team_home_sot_totals": "Tiros a puerta equipo local",
+    "team_away_sot_totals": "Tiros a puerta equipo visitante",
     "match_first_half_totals": "Total de goles (1ª mitad)",
     "team_home_first_half_totals_goals": "Goles local (1ª mitad)",
     "team_away_first_half_totals_goals": "Goles visitante (1ª mitad)",

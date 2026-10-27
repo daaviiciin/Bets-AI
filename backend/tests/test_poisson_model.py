@@ -15,6 +15,7 @@ from backend.services.poisson_model import (
     expected_goals,
     league_average_goals,
     predict,
+    probabilities_highest_scoring_half,
     probability_over_single_poisson,
     probability_over_total,
 )
@@ -256,3 +257,24 @@ class TestSinglePoissonTotals:
         po, pu = probability_over_single_poisson(0.0, 2.5)
         assert po == 0.0
         assert pu == 1.0
+
+
+class TestMitadConMasGoles:
+    def test_las_tres_probabilidades_suman_uno(self) -> None:
+        assert math.isclose(sum(probabilities_highest_scoring_half(2.9)), 1.0, abs_tol=1e-9)
+
+    def test_mitades_iguales_dan_la_misma_probabilidad_a_cada_una(self) -> None:
+        p1, _, p2 = probabilities_highest_scoring_half(2.6, second_half_share=0.5)
+        assert math.isclose(p1, p2, abs_tol=1e-12)
+
+    def test_mas_goles_tras_el_descanso_favorecen_la_segunda(self) -> None:
+        p1, _, p2 = probabilities_highest_scoring_half(3.0)
+        assert p2 > p1
+
+    def test_sin_goles_esperados_es_igual_seguro(self) -> None:
+        assert probabilities_highest_scoring_half(0.0) == pytest.approx((0.0, 1.0, 0.0))
+
+    def test_cerca_de_lo_observado_en_las_cinco_ligas(self) -> None:
+        # 2026-27 hasta el 25/10 (383 partidos, 3,09 goles por partido): 2ª > 1ª en el 51 %.
+        _, _, p2 = probabilities_highest_scoring_half(3.09)
+        assert 0.45 < p2 < 0.55

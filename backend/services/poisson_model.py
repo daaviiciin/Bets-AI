@@ -353,6 +353,43 @@ def probability_over_single_poisson(
     return max(0.0, min(1.0, p_over)), max(0.0, min(1.0, p_under))
 
 
+# Proporción de los goles que entran en la 2ª parte. Media de las 5 ligas en 2026-27 (383
+# partidos hasta el 25/10): 0,585, entre 0,561 (Serie A) y 0,621 (Bundesliga). El modelo v2
+# (fase 3, bloque B5) la estimará por liga, encogida hacia la global.
+SECOND_HALF_GOAL_SHARE: float = 0.585
+
+
+def probabilities_highest_scoring_half(
+    lambda_total: float,
+    *,
+    second_half_share: float = SECOND_HALF_GOAL_SHARE,
+    k_tail: int = 15,
+) -> tuple[float, float, float]:
+    """``(P(más goles en la 1ª), P(igual), P(más goles en la 2ª))`` del partido.
+
+    Los goles de cada mitad son Poisson independientes con λ₁ = λ·(1 − s) y λ₂ = λ·s,
+    donde λ es el total esperado del partido (local + visitante) y s ``second_half_share``.
+    Se renormaliza por la cola truncada en ``k_tail`` goles por mitad.
+    """
+    lam = max(0.0, float(lambda_total))
+    s = min(1.0, max(0.0, float(second_half_share)))
+    pmf_1 = [_poisson_pmf(k, lam * (1.0 - s)) for k in range(k_tail + 1)]
+    pmf_2 = [_poisson_pmf(k, lam * s) for k in range(k_tail + 1)]
+    gana_1 = igual = gana_2 = 0.0
+    for g1, p1 in enumerate(pmf_1):
+        for g2, p2 in enumerate(pmf_2):
+            if g1 > g2:
+                gana_1 += p1 * p2
+            elif g1 == g2:
+                igual += p1 * p2
+            else:
+                gana_2 += p1 * p2
+    total = gana_1 + igual + gana_2
+    if total <= 0.0:
+        return 0.0, 1.0, 0.0
+    return gana_1 / total, igual / total, gana_2 / total
+
+
 def derive_market_probabilities(
     lambda_home: float,
     lambda_away: float,

@@ -2,22 +2,12 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
-import { catchError, finalize, switchMap, tap } from 'rxjs/operators';
+import { catchError, finalize, map, switchMap, tap } from 'rxjs/operators';
 
 import { ApiService } from '../../core/api.service';
-import {
-  fmtCuota,
-  fmtDayName,
-  fmtEv,
-  fmtProb,
-  fmtTime,
-  outcomeLabel,
-} from '../../core/format';
-import type {
-  FeaturedDailyPickRow,
-  FeaturedPicksMetrics,
-  SavedParlayLegPersist,
-} from '../../core/models';
+import { fmtCuota, fmtDayName, fmtEv, fmtProb, fmtTime } from '../../core/format';
+import { selectionLabel } from '../../core/markets';
+import type { FeaturedDailyPickRow, FeaturedPicksMetrics, PickLeg } from '../../core/models';
 import { Icon } from '../../shared/icon';
 import { TvCifra, TvEntra } from '../../shared/tv-motion';
 
@@ -29,12 +19,15 @@ const ESTADO: Record<string, string> = {
   miss: 'Fallo',
   needs_review: 'A revisar',
   pending: 'Pendiente',
+  // Partido terminado, esperando stats: se ve como pendiente.
+  pending_stats: 'Pendiente',
+  void: 'Nulo',
 };
 
 /**
- * Transparencia: los picks que el modelo elige cada día, congelados antes de los partidos y
- * liquidados después con los marcadores. No se borra ningún fallo: es el historial con el que se
- * mide el modelo. Las reglas de selección son las de hoy (fase 3: reglas propias del usuario).
+ * Transparencia: los picks que el modelo elige cada día (simples y combinada), congelados antes
+ * de los partidos y liquidados después con los marcadores. No se borra ningún fallo: es el
+ * historial con el que se mide el modelo.
  */
 @Component({
   selector: 'app-transparencia',
@@ -72,6 +65,11 @@ const ESTADO: Record<string, string> = {
     .marca[data-estado='needs_review'] {
       color: var(--color-tv-doubt);
     }
+
+    .sin-valor {
+      font-weight: 700;
+      color: var(--color-tv-doubt);
+    }
   `,
 })
 export class Transparencia {
@@ -105,6 +103,20 @@ export class Transparencia {
   protected readonly fmtEv = fmtEv;
   protected readonly fmtTime = fmtTime;
   protected readonly fmtPct = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)} %`);
+
+  /** Acierto de cada versión del modelo, la más reciente primero. */
+  protected readonly porModelo = computed(() =>
+    Object.entries(this.metrics()?.por_modelo ?? {})
+      .map(([version, m]) => ({ version, ...m }))
+      .sort((a, b) => b.version.localeCompare(a.version)),
+  );
+
+  /** Nombre legible de una versión del modelo. */
+  protected modeloLabel(version: string | null | undefined): string {
+    if (!version || version === 'legacy-v1') return 'Poisson antiguo (legacy-v1)';
+    if (version === 'v1') return 'Reglas antiguas (v1)';
+    return `Modelo v2 (${version})`;
+  }
   protected readonly fmtEntero = (v: number | null) => (v == null ? '—' : String(Math.round(v)));
 
   constructor() {
@@ -152,9 +164,8 @@ export class Transparencia {
     return settled ? `${hits} de ${settled}` : 'Sin liquidar';
   }
 
-  protected legLabel(leg: SavedParlayLegPersist): string {
-    const sel = outcomeLabel(leg.market_key, leg.outcome_name, leg.outcome_point);
-    return leg.player_name ? `${leg.player_name} · ${sel}` : sel;
+  protected legLabel(leg: PickLeg): string {
+    return selectionLabel(leg, leg.home_team, leg.away_team);
   }
 
   protected estado(r: string | undefined): string {
@@ -164,7 +175,8 @@ export class Transparencia {
   private load$() {
     return forkJoin({
       metrics: this.api.getFeaturedPicksMetrics(),
-      today: this.api.getFeaturedPicksToday(),
+      // Aquí no se generan: si aún no hay picks de hoy, la portada los genera al abrirla.
+      today: this.api.getFeaturedPicksToday().pipe(map((t) => t.pick)),
       history: this.api.getFeaturedPicksHistory(60),
     }).pipe(
       tap(({ metrics, today, history }) => {

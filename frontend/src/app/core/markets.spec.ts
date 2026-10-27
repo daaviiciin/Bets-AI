@@ -46,6 +46,13 @@ describe('markets: selecciones en lenguaje llano', () => {
     expect(selectionLabel(line('h2h', 'Draw'), 'A', 'B')).toBe('Empate');
   });
 
+  it('mitad con más goles en lenguaje llano', () => {
+    const mk = 'match_highest_scoring_half';
+    expect(selectionLabel(line(mk, '2ª mitad'), 'A', 'B')).toBe('Más goles en la 2ª mitad');
+    expect(selectionLabel(line(mk, 'Igual'), 'A', 'B')).toBe('Mismos goles en las dos mitades');
+    expect(marketLabel(mk)).toBe('Mitad con más goles');
+  });
+
   it('un mercado desconocido no enseña su clave cruda', () => {
     expect(marketLabel('match_nuevo_raro')).toBe('Otros mercados');
     expect(marketGroup('player_algo_nuevo')).toBe('jugadores');

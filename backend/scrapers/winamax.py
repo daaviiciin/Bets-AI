@@ -97,6 +97,14 @@ MARKET_TYPES: dict[int, str] = {
     3621: "match_corners_totals",
     6202: "match_shots_totals",
     6205: "match_sot_totals",
+    # Tiros a puerta por equipo ("Número de tiros a puerta por <equipo>", ``total=N``).
+    # Muestra match_72221330 (Tottenham - Coventry): 6206 = local, 6207 = visitante.
+    6206: "team_home_sot_totals",
+    6207: "team_away_sot_totals",
+    # "Mitad con más goles" (pestaña Total de goles, al final): 1ª mitad / Igual / 2ª mitad.
+    # Visto en Sevilla - Osasuna y Udinese - Milan (2026-10-25). Winamax no publica
+    # "2ª mitad - Número total de goles" prepartido (solo "1ª mitad", 2531).
+    3317: "match_highest_scoring_half",
     # Primera mitad (IDs Winamax.es observados mayo 2026)
     2531: "match_first_half_totals",
     2394: "team_home_first_half_totals_goals",

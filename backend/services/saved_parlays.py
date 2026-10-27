@@ -10,7 +10,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from backend.models import Match, SavedParlay
-from backend.services.saved_parlay_grading import grade_single_leg, overall_from_leg_results
+from backend.services.saved_parlay_grading import (
+    cargar_stats_partidos,
+    cuota_efectiva,
+    grade_single_leg,
+    overall_from_leg_results,
+)
 
 #: Resultados que el usuario puede fijar a mano; ``void`` = nula (se devuelve el importe).
 RESULTADOS_MANUALES = frozenset({"hit", "miss", "void"})
@@ -54,15 +59,21 @@ def refresh_one_parlay(session: Session, row: SavedParlay) -> None:
         .options(joinedload(Match.home_team), joinedload(Match.away_team))
     )
     by_mid = {m.id: m for m in session.scalars(stmt).all()}
+    stats = cargar_stats_partidos(session, by_mid.values())
     graded: list[dict[str, Any]] = []
     for lg in row.legs_snapshot:
         mid = int(lg["match_id"])
-        g = grade_single_leg(dict(lg), by_mid.get(mid))
+        g = grade_single_leg(dict(lg), by_mid.get(mid), stats.get(mid))
         graded.append({**dict(lg), **g})
 
     ov = overall_from_leg_results([str(x["result"]) for x in graded])
     # El automático se guarda siempre, para enseñar qué dijo la corrección aunque el usuario mande.
-    row.grading_snapshot = {"legs": graded, "auto_result": ov}
+    snapshot: dict[str, Any] = {"legs": graded, "auto_result": ov}
+    efectiva = cuota_efectiva(graded)
+    if efectiva is not None:
+        # Hay patas nulas: cuota sin ellas, para corregir a mano una combinada con nulas.
+        snapshot["cuota_efectiva"] = str(efectiva)
+    row.grading_snapshot = snapshot
     row.overall_result = row.manual_result or ov
     row.last_graded_at = datetime.now(timezone.utc)
 
@@ -80,7 +91,7 @@ def refresh_all_parlays_for_user(session: Session, user_id: int) -> int:
 def beneficio_apuesta(resultado: str, importe: Decimal | None, cuota: Decimal) -> Decimal | None:
     """Beneficio neto en euros de una apuesta ya liquidada, o ``None`` si no cuenta.
 
-    ``resultado`` es ``overall_result`` (pending | hit | miss | needs_review | void), ``importe``
+    ``resultado`` es ``overall_result`` (pending | pending_stats | hit | miss | needs_review | void), ``importe``
     lo apostado (``None`` en apuestas guardadas antes de existir el campo) y ``cuota`` la cuota
     combinada decimal.
     """
@@ -115,7 +126,8 @@ def resumen_apuestas(rows: list[SavedParlay]) -> dict[str, Any]:
 
     return {
         "total": len(rows),
-        "pending": sum(1 for r in rows if r.overall_result == "pending"),
+        # "Esperando stats" cuenta como pendiente: el partido ya acabó pero falta el dato.
+        "pending": sum(1 for r in rows if r.overall_result in ("pending", "pending_stats")),
         "needs_review": sum(1 for r in rows if r.overall_result == "needs_review"),
         "hits": hits,
         "misses": misses,

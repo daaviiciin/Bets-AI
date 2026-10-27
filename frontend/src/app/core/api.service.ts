@@ -24,6 +24,7 @@ import {
   ResultsRefreshSummary,
   FeaturedDailyPickRow,
   FeaturedPicksMetrics,
+  FeaturedToday,
   UserParlayMetrics,
   SavedParlay,
   SavedParlayLegPersist,
@@ -274,8 +275,17 @@ export class ApiService {
     return this.http.get<UserParlayMetrics>(`${this.base}/me/parlays/metrics-summary`);
   }
 
-  getFeaturedPicksToday(): Observable<FeaturedDailyPickRow> {
-    return this.http.get<FeaturedDailyPickRow>(`${this.base}/featured-picks/today`);
+  /** Picks de hoy si ya se generaron (no genera nada). */
+  getFeaturedPicksToday(): Observable<FeaturedToday> {
+    return this.http.get<FeaturedToday>(`${this.base}/featured-picks/today`);
+  }
+
+  /**
+   * Genera y congela los picks de hoy si faltan (primera apertura del día). Si las cuotas de
+   * hoy están viejas, el backend las descarga antes: puede tardar hasta un minuto.
+   */
+  ensureFeaturedPicksToday(): Observable<FeaturedToday> {
+    return this.http.post<FeaturedToday>(`${this.base}/featured-picks/today`, {});
   }
 
   getFeaturedPicksHistory(days: number): Observable<FeaturedDailyPickRow[]> {

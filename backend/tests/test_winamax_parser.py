@@ -10,7 +10,9 @@ Validamos:
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -24,6 +26,8 @@ from backend.scrapers.winamax import (
     parse_match_bets,
     parse_player_props,
 )
+from backend.services.winamax_normalization import TOTALS_MARKETS, normalize_match_outcome
+from backend.services.winamax_odds_ingester import WinamaxOddsIngester
 
 
 # ---------------------------------------------------------------------------
@@ -474,3 +478,142 @@ class TestEstadisticasDeJugador:
         }
         props = parse_player_props(parse_match_bets(state, "1"))
         assert [(p.market_key, p.odds) for p in props] == [("player_to_score_2plus", 7.5)]
+
+
+# ---------------------------------------------------------------------------
+# Tiros a puerta por equipo (betType 6206 local / 6207 visitante)
+# ---------------------------------------------------------------------------
+
+_MUESTRA_72221330 = (
+    Path(__file__).resolve().parents[2] / "data" / "raw" / "winamax_muestras"
+    / "match_72221330_state.json"
+)
+
+# Recorte real de match_72221330 (Tottenham - Coventry City): bets del state.json y
+# outcomes/odds del PRELOADED_STATE de match_72221330.html (el state.json no los trae).
+TIROS_PUERTA_EQUIPO_STATE: dict = {
+    "matches": {"72221330": {"competitor1Name": "Tottenham", "competitor2Name": "Coventry City"}},
+    "bets": {
+        "722627825": {
+            "betId": 722627825, "matchId": 72221330, "betType": 6206,
+            "betTitle": "Número de tiros a puerta por Tottenham", "specialBetValue": "total=2.5",
+            "outcomes": [2239600447, 2239600448],
+        },
+        "722627831": {
+            "betId": 722627831, "matchId": 72221330, "betType": 6207,
+            "betTitle": "Número de tiros a puerta por Coventry City",
+            "specialBetValue": "total=1.5",
+            "outcomes": [2239600459, 2239600460],
+        },
+    },
+    "outcomes": {
+        "2239600447": {"label": "Más de 2,5", "code": "12"},
+        "2239600448": {"label": "Menos de 2,5", "code": "13"},
+        "2239600459": {"label": "Más de 1,5", "code": "12"},
+        "2239600460": {"label": "Menos de 1,5", "code": "13"},
+    },
+    "odds": {"2239600447": 1.04, "2239600448": 8, "2239600459": 1.12, "2239600460": 4.7},
+}
+
+
+class TestTirosAPuertaPorEquipo:
+    def _bets(self) -> dict:
+        return {b.market_key: b for b in parse_match_bets(TIROS_PUERTA_EQUIPO_STATE, "72221330")}
+
+    def test_6206_es_local_y_6207_visitante(self) -> None:
+        assert MARKET_TYPES[6206] == "team_home_sot_totals"
+        assert MARKET_TYPES[6207] == "team_away_sot_totals"
+        bets = self._bets()
+        assert "Tottenham" in bets["team_home_sot_totals"].title
+        assert "Coventry City" in bets["team_away_sot_totals"].title
+
+    def test_outcomes_mas_menos_con_su_linea(self) -> None:
+        bets = self._bets()
+        filas = []
+        for key in ("team_home_sot_totals", "team_away_sot_totals"):
+            bet = bets[key]
+            line = WinamaxOddsIngester._line_from_special_value(bet.special_bet_value)
+            for oc in bet.outcomes:
+                nombre = normalize_match_outcome(
+                    key, oc.label, home_team="Tottenham", away_team="Coventry City",
+                )
+                filas.append((key, nombre, line, oc.odds))
+        assert filas == [
+            ("team_home_sot_totals", "Over", 2.5, pytest.approx(1.04)),
+            ("team_home_sot_totals", "Under", 2.5, pytest.approx(8)),
+            ("team_away_sot_totals", "Over", 1.5, pytest.approx(1.12)),
+            ("team_away_sot_totals", "Under", 1.5, pytest.approx(4.7)),
+        ]
+
+    def test_son_mercados_de_totales(self) -> None:
+        assert {"team_home_sot_totals", "team_away_sot_totals"} <= TOTALS_MARKETS
+
+    @pytest.mark.skipif(not _MUESTRA_72221330.exists(), reason="muestra local no versionada")
+    def test_muestra_completa_local_y_visitante(self) -> None:
+        state = json.loads(_MUESTRA_72221330.read_text(encoding="utf-8"))
+        partido = state["matches"]["72221330"]
+        local, visitante = partido["competitor1Name"], partido["competitor2Name"]
+        titulos: dict[int, set[str]] = {}
+        for b in state["bets"].values():
+            if b.get("betType") in (6206, 6207):
+                titulos.setdefault(b["betType"], set()).add(b["betTitle"])
+        assert titulos[6206] == {f"Número de tiros a puerta por {local}"}
+        assert titulos[6207] == {f"Número de tiros a puerta por {visitante}"}
+
+    @pytest.mark.skipif(not _MUESTRA_72221330.exists(), reason="muestra local no versionada")
+    def test_muestra_sin_total_de_goles_de_la_segunda_mitad(self) -> None:
+        # Documenta por qué match_second_half_totals sigue sin betType: Winamax no lo publica
+        # prepartido (tampoco en las muestras del 2026-10-25). El mercado de 2ª parte que hay
+        # es "Mitad con más goles" (3317). Si aparece, hay que mapearlo con su id real.
+        state = json.loads(_MUESTRA_72221330.read_text(encoding="utf-8"))
+        titulos = {b.get("betTitle", "") for b in state["bets"].values()}
+        assert not any("2ª mitad" in t and "total de goles" in t.lower() for t in titulos)
+
+
+# ---------------------------------------------------------------------------
+# "Mitad con más goles" (betType 3317)
+# ---------------------------------------------------------------------------
+
+# Recorte real de match_72478662 (Sevilla FC - Osasuna), PRELOADED_STATE del 2026-10-25.
+MITAD_CON_MAS_GOLES_STATE: dict = {
+    "matches": {"72478662": {"competitor1Name": "Sevilla FC", "competitor2Name": "Osasuna"}},
+    "bets": {
+        "716800350": {
+            "betId": 716800350, "matchId": 72478662, "betType": 3317,
+            "betTitle": "Mitad con más goles", "specialBetValue": None,
+            "outcomes": [2221772598, 2221772600, 2221772599],
+        },
+    },
+    "outcomes": {
+        "2221772598": {"betId": 716800350, "label": "1ª mitad", "code": "1"},
+        "2221772600": {"betId": 716800350, "label": "Igual", "code": "2"},
+        "2221772599": {"betId": 716800350, "label": "2ª mitad", "code": "3"},
+    },
+    "odds": {"2221772598": 3.1, "2221772600": 3.1, "2221772599": 2.15},
+}
+
+
+class TestMitadConMasGoles:
+    def test_3317_se_mapea_a_mitad_con_mas_goles(self) -> None:
+        assert MARKET_TYPES[3317] == "match_highest_scoring_half"
+        (bet,) = parse_match_bets(MITAD_CON_MAS_GOLES_STATE, "72478662")
+        assert bet.market_key == "match_highest_scoring_half"
+        assert bet.title == "Mitad con más goles"
+
+    def test_outcomes_conservan_la_etiqueta_sin_linea(self) -> None:
+        (bet,) = parse_match_bets(MITAD_CON_MAS_GOLES_STATE, "72478662")
+        filas = [
+            (
+                normalize_match_outcome(
+                    bet.market_key, oc.label, home_team="Sevilla FC", away_team="Osasuna",
+                ),
+                oc.odds,
+            )
+            for oc in bet.outcomes
+        ]
+        assert filas == [("1ª mitad", 3.1), ("Igual", 3.1), ("2ª mitad", 2.15)]
+        assert WinamaxOddsIngester._line_from_special_value(bet.special_bet_value) is None
+
+    def test_no_es_un_mercado_de_totales(self) -> None:
+        # Si lo fuera, los tres resultados colapsarían en "Under".
+        assert "match_highest_scoring_half" not in TOTALS_MARKETS

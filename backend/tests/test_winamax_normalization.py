@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from backend.services.winamax_normalization import (
     canonical_market_key,
+    highest_scoring_half_side,
     normalize_btts_outcome,
     normalize_double_chance_outcome,
     normalize_h2h_outcome,
@@ -59,3 +60,18 @@ class TestNormalizeMatchOutcome:
 
     def test_h2h_delega_en_su_normalizador(self) -> None:
         assert normalize_match_outcome("h2h", "Empate", home_team="A", away_team="B") == "Draw"
+
+
+class TestHighestScoringHalfSide:
+    def test_etiquetas_de_winamax(self) -> None:
+        assert [highest_scoring_half_side(e) for e in ("1ª mitad", "Igual", "2ª mitad")] == [
+            "1h", "tie", "2h",
+        ]
+
+    def test_variantes_en_ingles_y_sin_ordinal(self) -> None:
+        assert highest_scoring_half_side("2nd half") == "2h"
+        assert highest_scoring_half_side("Primera mitad") == "1h"
+        assert highest_scoring_half_side("Tie") == "tie"
+
+    def test_etiqueta_desconocida_es_none(self) -> None:
+        assert highest_scoring_half_side("Ninguna") is None

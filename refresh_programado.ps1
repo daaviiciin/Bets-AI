@@ -1,7 +1,8 @@
 ﻿# Bets AI - refresh programado (lo lanza el Programador de tareas de Windows).
 # Ejecuta el pipeline diario de Flashscore (calendario, resultados, clasificación,
-# stats de equipo/jugador y bajas) con los límites por refresh del CLI, y después
-# las cuotas Winamax de los próximos 5 días. NO toca la Odds API (de pago).
+# stats de equipo/jugador y bajas) con los límites por refresh del CLI, después
+# las cuotas Winamax de los próximos 5 días y, si faltan, los picks del día.
+# NO toca la Odds API (de pago).
 # Log por día en logs\refresh_AAAA-MM-DD.log
 
 $ErrorActionPreference = 'Continue'
@@ -76,6 +77,12 @@ Write-Log 'Cuotas Winamax (próximos 5 días)...'
     ForEach-Object { "$_" } | Out-File -Append -Encoding utf8 $log
 $oddsCode = $LASTEXITCODE
 if ($code -eq 0) { $code = $oddsCode }
+
+# Picks del día (día de Madrid): se generan y congelan una vez, con las cuotas recién bajadas.
+# Si ya se abrió la app hoy, ya existen y esto no hace nada.
+Write-Log 'Picks del día...'
+& $python -m backend.tools.generar_picks_del_dia 2>&1 | ForEach-Object { "$_" } | Out-File -Append -Encoding utf8 $log
+if ($code -eq 0) { $code = $LASTEXITCODE }
 
 Write-Log "=== Fin del refresh (código $code) ==="
 exit $code

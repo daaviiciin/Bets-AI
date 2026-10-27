@@ -12,6 +12,7 @@ from sqlalchemy import func, select, tuple_
 from sqlalchemy.orm import Session, joinedload
 
 from backend.models import Bookmaker, League, Match, Odds, Season, Snapshot, TeamSeasonStats
+from backend.services import market_probabilities as mp
 from backend.services import poisson_model as pm
 from backend.services import value_calculator as vc
 from backend.services.value_detector import ValueDetector
@@ -531,6 +532,12 @@ class GradedOddsLine:
     lambda_away: Decimal | None = None
     implied_probability: Decimal | None = None
     model_summary_lines: tuple[str, ...] = ()
+    #: Modelo que dio ``model_probability``: la etiqueta de la versión v2 o ``legacy-v1``.
+    model_version: str = "legacy-v1"
+    #: v2: la P está mezclada con la del mercado (había cuotas de todo el mercado).
+    con_mercado: bool = False
+    #: v2: partidos del equipo con menos partidos en los datos del modelo.
+    partidos_min: int | None = None
 
 
 def confidence_from_model_ev(model_ev: Decimal | None) -> str:
@@ -711,6 +718,53 @@ def list_graded_winamax_odds(
     expectation_cache: dict[int, object | None] = {}
     season_stats_pair_cache: dict[int, tuple[TeamSeasonStats | None, TeamSeasonStats | None]] = {}
 
+    # Modelo v2 (si hay versión activa): P calibrada y mezclada con el mercado sin margen.
+    from backend.services.model_registry import MIN_PARTIDOS_PREDICCION, modelo_activo
+
+    modelo = modelo_activo(session, now)
+    prediccion_cache: dict[int, mp.MatchPrediction | None] = {}
+    sin_margen_cache: dict[int, dict[mp.ClaveLinea, float]] = {}
+    filas_por_partido: dict[int, list[Odds]] = defaultdict(list)
+    for o in rows:
+        if o.player_id is None:
+            filas_por_partido[o.match_id].append(o)
+
+    def prediccion_v2(m: Match) -> mp.MatchPrediction | None:
+        if m.id not in prediccion_cache:
+            ok = modelo is not None and modelo.partidos_min(m.home_team_id, m.away_team_id) >= MIN_PARTIDOS_PREDICCION
+            prediccion_cache[m.id] = (
+                modelo.prediccion(m.league.sport_key or "", m.home_team_id, m.away_team_id)
+                if ok and modelo is not None else None
+            )
+        return prediccion_cache[m.id]
+
+    def sin_margen(m: Match) -> dict[mp.ClaveLinea, float]:
+        if m.id not in sin_margen_cache:
+            lineas = [
+                (o.market.key if o.market else "", o.outcome_name,
+                 float(o.outcome_point) if o.outcome_point is not None else None, float(o.price))
+                for o in filas_por_partido.get(m.id, [])
+            ]
+            sin_margen_cache[m.id] = mp.probabilidades_sin_margen(lineas, m.home_team.name, m.away_team.name)
+        return sin_margen_cache[m.id]
+
+    def probabilidad_v2(o: Odds, m: Match, mk: str) -> tuple[Decimal, bool] | None:
+        """``(P, con_mercado)`` del v2 para la línea, o ``None`` si no la cubre."""
+        if modelo is None or o.player_id is not None or mk not in mp.MERCADOS_V2:
+            return None
+        pred = prediccion_v2(m)
+        if pred is None:
+            return None
+        punto = float(o.outcome_point) if o.outcome_point is not None else None
+        p = mp.probability_for_line(
+            pred, mk, o.outcome_name, punto, m.home_team.name, m.away_team.name, modelo.calibracion,
+        )
+        if p is None:
+            return None
+        p_mercado = sin_margen(m).get((mk, o.outcome_name, punto))
+        p = mp.mezclar(p, p_mercado, modelo.peso_mercado)
+        return Decimal(str(round(min(max(p, 1e-6), 1 - 1e-6), 6))), p_mercado is not None
+
     def expectation_for(mid: int):
         if mid not in expectation_cache:
             m = match_by_id.get(mid)
@@ -735,16 +789,21 @@ def list_graded_winamax_odds(
         exp_match = exp if isinstance(exp, pm.MatchExpectation) else None
         mk = o.market.key if o.market else ""
         pn = o.player.name if o.player else None
-        model_prob = det._model_probability(  # noqa: SLF001
-            exp,
-            m,
-            market_key=mk,
-            outcome_name=o.outcome_name,
-            outcome_point=o.outcome_point,
-            home_team_name=m.home_team.name,
-            away_team_name=m.away_team.name,
-            player_id=o.player_id,
-        )
+        v2 = probabilidad_v2(o, m, mk)
+        if v2 is not None:
+            model_prob, con_mercado = v2
+        else:
+            con_mercado = False
+            model_prob = det._model_probability(  # noqa: SLF001
+                exp,
+                m,
+                market_key=mk,
+                outcome_name=o.outcome_name,
+                outcome_point=o.outcome_point,
+                home_team_name=m.home_team.name,
+                away_team_name=m.away_team.name,
+                player_id=o.player_id,
+            )
         model_ev: Decimal | None = None
         model_prob_out = _finite_decimal_or_none(model_prob)
         if model_prob_out is not None and model_prob_out > Decimal("0"):
@@ -754,6 +813,10 @@ def list_graded_winamax_odds(
                 model_ev = None
         conf, recommendable = grade_line(safe_price, model_ev)
         lh, la, implied = _model_pricing_snapshot(exp_match, safe_price)
+        pred = prediccion_v2(m) if v2 is not None else None
+        if pred is not None:
+            lh = Decimal(str(round(pred.lambda_home, 3)))
+            la = Decimal(str(round(pred.lambda_away, 3)))
         hp, asp = season_pair_for(m.id)
         summ = _summary_lines_for_bet(
             match=m,
@@ -787,6 +850,12 @@ def list_graded_winamax_odds(
                 lambda_away=_finite_decimal_or_none(la),
                 implied_probability=_finite_decimal_or_none(implied),
                 model_summary_lines=summ,
+                model_version=modelo.tag if (v2 is not None and modelo is not None) else "legacy-v1",
+                con_mercado=con_mercado,
+                partidos_min=(
+                    modelo.partidos_min(m.home_team_id, m.away_team_id)
+                    if (v2 is not None and modelo is not None) else None
+                ),
             )
         )
 

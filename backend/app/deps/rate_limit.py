@@ -99,3 +99,9 @@ def limite_refresh(request: Request, user: AppUser = Depends(get_current_user)) 
 def limite_featured_picks(request: Request, user: AppUser = Depends(get_current_user)) -> None:
     """POST de featured-picks (recalificar / asegurar fecha): cupo propio, mismo ritmo."""
     _limite_por_usuario(request, "featured-picks", user)
+
+
+def limite_picks_hoy(request: Request, user: AppUser = Depends(get_current_user)) -> None:
+    """Generar los picks de hoy al abrir la app (puede descargar cuotas): cupo aparte, para no
+    bloquear "Comprobar resultados" justo después de entrar."""
+    _limite_por_usuario(request, "picks-hoy", user)

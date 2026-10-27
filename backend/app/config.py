@@ -77,6 +77,23 @@ class Settings(BaseSettings):
         description="Mín. P modelo para publicar picks 1X2 (elimina outsider sólo por margen alto).",
     )
 
+    #: Usa el modelo v2 (Dixon–Coles con encogimiento + calibración) si hay una versión activa.
+    model_v2_enabled: bool = Field(default=True)
+
+    # Picks del día (fase 3, B10): reglas del usuario del 2026-10-21.
+    picks_odds_min: float = Field(default=1.30, ge=1.01, le=10.0, description="Cuota mínima de las simples.")
+    picks_odds_max: float = Field(default=1.70, ge=1.01, le=10.0, description="Cuota máxima de las simples.")
+    picks_combo_odds_min: float = Field(default=3.0, ge=1.5, le=50.0, description="Cuota total mínima de la combinada.")
+    picks_combo_odds_max: float = Field(default=6.0, ge=1.5, le=50.0, description="Cuota total máxima de la combinada.")
+    picks_kickoff_margin_minutes: int = Field(
+        default=30, ge=0, le=240,
+        description="Solo partidos que empiecen como pronto dentro de N min al generar.",
+    )
+    picks_odds_max_age_minutes: int = Field(
+        default=120, ge=5, le=1440,
+        description="Al abrir la app, si las cuotas de hoy son más viejas, se actualizan antes de generar.",
+    )
+
     environment: str = Field(default="development")
     log_level: str = Field(default="INFO")
 

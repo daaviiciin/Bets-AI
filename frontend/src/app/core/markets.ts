@@ -121,6 +121,8 @@ const MARKETS: Record<string, MarketMeta> = {
   match_second_half_cards_totals: { label: 'Tarjetas en la 2ª parte', group: 'tarjetas', order: 42 },
   match_shots_totals: { label: 'Tiros del partido', group: 'tiros', order: 50 },
   match_sot_totals: { label: 'Tiros a puerta del partido', group: 'tiros', order: 51 },
+  team_home_sot_totals: { label: 'Tiros a puerta del local', group: 'tiros', order: 52 },
+  team_away_sot_totals: { label: 'Tiros a puerta del visitante', group: 'tiros', order: 53 },
   player_anytime_scorer: { label: 'Marca en cualquier momento', group: 'jugadores', order: 60 },
   player_scorer_and_team_wins: { label: 'Marca y gana su equipo', group: 'jugadores', order: 61 },
   player_to_score_2plus: { label: 'Marca 2 o más', group: 'jugadores', order: 62 },
@@ -179,6 +181,8 @@ const TEAM_TOTALS: Record<string, { side: 'home' | 'away'; tail: string }> = {
   team_away_first_half_totals_goals: { side: 'away', tail: 'goles en la 1ª parte' },
   team_home_second_half_totals_goals: { side: 'home', tail: 'goles en la 2ª parte' },
   team_away_second_half_totals_goals: { side: 'away', tail: 'goles en la 2ª parte' },
+  team_home_sot_totals: { side: 'home', tail: 'tiros a puerta' },
+  team_away_sot_totals: { side: 'away', tail: 'tiros a puerta' },
 };
 
 function overUnder(name: string, point: string | null, noun: string): string {
@@ -278,6 +282,11 @@ export function selectionLabel(line: LineLike, home: string, away: string): stri
   if (mk === 'match_winner_dnb') return `${name === 'Draw' ? 'Empate' : name} (sin empate)`;
   if (mk === 'btts') return name.toLowerCase() === 'yes' ? 'Sí marcan los dos' : 'No marcan los dos';
   if (mk === 'match_total_goals_odd_even') return `Total de goles ${name.toLowerCase()}`;
+  if (mk === 'match_highest_scoring_half' || mk === 'match_most_goals_half') {
+    return name.toLowerCase() === 'igual'
+      ? 'Mismos goles en las dos mitades'
+      : `Más goles en la ${name.toLowerCase()}`;
+  }
   if (TOTAL_NOUN[mk]) return overUnder(name, point, TOTAL_NOUN[mk]);
   const team = TEAM_TOTALS[mk];
   if (team) {

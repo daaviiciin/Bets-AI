@@ -228,8 +228,16 @@ export interface SavedParlay {
   combined_odds: string;
   model_joint_probability: string | null;
   legs_snapshot: SavedParlayLegPersist[];
-  grading_snapshot: { legs: SavedParlayLegPersist[]; auto_result?: string } | null;
-  /** pending | hit | miss | needs_review | void (si hay `manual_result`, es ese). */
+  /** `cuota_efectiva`: cuota sin las patas nulas (solo si hay alguna). */
+  grading_snapshot: {
+    legs: SavedParlayLegPersist[];
+    auto_result?: string;
+    cuota_efectiva?: string;
+  } | null;
+  /**
+   * pending | pending_stats | hit | miss | needs_review | void (si hay `manual_result`, es ese).
+   * `pending_stats`: el partido acabó pero faltan stats para liquidar; se muestra como pendiente.
+   */
   overall_result: string;
   /** Corrección del usuario: hit | miss | void; null = manda la liquidación automática. */
   manual_result: ResultadoManual | null;
@@ -243,12 +251,59 @@ export interface SavedParlay {
 
 export type ResultadoManual = 'hit' | 'miss' | 'void';
 
+/** Pata de un pick del modelo (simple o de la combinada), congelada al generarse. */
+export interface PickLeg extends SavedParlayLegPersist {
+  /** Modelo que dio la P (`legacy-v1` hasta que se promueva el v2). */
+  model_version?: string;
+  odds_captured_at?: string | null;
+  /** EV < 0: completa el mínimo de 3 simples aunque el modelo no le vea valor. */
+  sin_valor?: boolean;
+  aviso?: string | null;
+}
+
+export interface PickCombo {
+  legs: PickLeg[];
+  /** Con selecciones del mismo partido es una estimación: la cuota real la pone MyMatch. */
+  combined_odds: string;
+  joint_probability: string;
+  ev: string;
+  sin_valor: boolean;
+  /** Varias selecciones de un mismo partido (en Winamax se hace con MyMatch). */
+  mismo_partido?: boolean;
+  /** Producto simple de las cuotas de Winamax. */
+  cuota_winamax?: string;
+  /** Cuota desde la que tiene valor para el modelo (1/P conjunta). */
+  cuota_minima_valor?: string;
+  /** Resultado de la combinada (como `overall_result`); `pending` mientras se juega. */
+  result?: string;
+}
+
 /** Picks del día generados por el backend (métricas de transparencia de la app). */
 export interface FeaturedDailyPickRow {
   pick_date: string;
-  legs: SavedParlayLegPersist[];
+  legs: PickLeg[];
+  combo?: PickCombo | null;
+  /** `v1`: filas antiguas (sin combinada); `v2`: reglas 1,30–1,70 + combinada 3–6. */
+  rules_version?: string;
+  model_version?: string | null;
+  generated_at?: string | null;
+  selection_meta?: {
+    motivo_simples?: string;
+    motivo_combinada?: string;
+    candidatas?: number;
+    [clave: string]: unknown;
+  } | null;
   last_graded_at: string | null;
   created_at: string;
+}
+
+/** `GET/POST /featured-picks/today`. */
+export interface FeaturedToday {
+  estado: 'listo' | 'pendiente' | 'sin_partidos';
+  motivo: string | null;
+  /** Al generarlos hubo que descargar antes las cuotas de Winamax. */
+  cuotas_actualizadas: boolean;
+  pick: FeaturedDailyPickRow | null;
 }
 
 export interface FeaturedPicksMetrics {
@@ -258,6 +313,31 @@ export interface FeaturedPicksMetrics {
   misses: number;
   pending: number;
   needs_review: number;
+  /** Patas nulas (partido aplazado o cancelado). */
+  voids?: number;
+  rate_pct: number | null;
+  /** Simples con valor (EV ≥ 0) frente a las que completaron el mínimo sin valor. */
+  value_hits?: number;
+  value_misses?: number;
+  value_rate_pct?: number | null;
+  novalue_hits?: number;
+  novalue_misses?: number;
+  novalue_rate_pct?: number | null;
+  combos_total?: number;
+  combo_hits?: number;
+  combo_misses?: number;
+  combo_pending?: number;
+  combo_rate_pct?: number | null;
+  /** Acierto de cada versión del modelo por separado (`legacy-v1`, `dc-ridge-…`). */
+  por_modelo?: Record<string, { simples: PickCounts; combinadas: PickCounts }>;
+}
+
+export interface PickCounts {
+  hits: number;
+  misses: number;
+  pending: number;
+  needs_review: number;
+  voids: number;
   rate_pct: number | null;
 }
 
