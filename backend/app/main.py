@@ -6,17 +6,15 @@ Endpoints disponibles
 * ``GET /``                           — health check (público)
 * ``POST /auth/login``                — login (público, con límite de intentos por IP)
 * ``GET /matches``                    — lista de partidos próximos
-* ``GET /matches/{id}``               — detalle de un partido
-* ``GET /matches/{id}/odds``          — cuotas capturadas para un partido
-* ``GET /value-bets``                 — value bets detectadas (con EV+)
-* ``GET /dashboard/graded-odds``       — todas las cuotas Winamax recientes calificadas
-* ``GET /players``                    — búsqueda de jugadores por nombre
-* ``GET /players/{id}``               — datos básicos de un jugador
-* ``GET /players/{id}/stats``         — stats de temporada + histórico por partido
+* ``GET /matches/{id}/preview``       — ficha del partido (previa, stats, alineaciones)
+* ``GET /dashboard/graded-odds``      — todas las cuotas Winamax recientes calificadas
+* ``/featured-picks/*``               — picks del día, historial y métricas
+* ``/me/parlays*``                    — combinadas guardadas del usuario
+* ``POST /refresh/odds``              — botón "Actualizar cuotas" (solo Winamax)
 
 Todo salvo ``/`` y ``/auth/login`` exige ``Authorization: Bearer <token>``: la dependencia
-``get_current_user`` se añade al registrar cada router, sin tocar su lógica. Los ``POST
-/refresh*`` y los POST de featured-picks llevan además su propio límite por usuario.
+``get_current_user`` se añade al registrar cada router, sin tocar su lógica. ``POST
+/refresh/odds`` y los POST de featured-picks llevan además su propio límite por usuario.
 
 Documentación interactiva (solo con ``ENVIRONMENT=development``):
 * ``/docs``    (Swagger UI)
@@ -33,16 +31,12 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from backend.app.api import (
-    analysis,
     auth,
-    calibration,
     dashboard,
     featured_daily_picks,
     matches,
     me_parlays,
-    players,
     refresh,
-    value_bets,
 )
 from backend.app.config import Settings, comprobar_config_api, get_settings
 from backend.app.deps.auth_user import get_current_user
@@ -51,14 +45,10 @@ from backend.app.deps.seguridad_http import registrar_middlewares_seguridad
 
 #: Routers que exigen sesión. ``auth`` va aparte: /auth/login es público y /auth/me ya pide token.
 _ROUTERS_PROTEGIDOS = (
-    analysis.router,
     dashboard.router,
     featured_daily_picks.router,
     me_parlays.router,
     matches.router,
-    value_bets.router,
-    calibration.router,
-    players.router,
 )
 
 

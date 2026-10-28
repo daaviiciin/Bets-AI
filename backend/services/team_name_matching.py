@@ -166,6 +166,36 @@ def player_names_match(a: str | None, b: str | None) -> bool:
     return True
 
 
+_BASIC_NOISE_TOKENS: frozenset[str] = frozenset({
+    "fc", "cf", "ac", "sc", "afc", "rcd", "ud", "cd", "cp", "sv", "07", "04",
+    "club", "de", "calcio", "bv", "ssd", "asd",
+})
+
+
+def basic_normalize_team_name(name: str) -> str:
+    """Normalización ligera (sin alias ni abreviaturas) que usan Winamax y las combinadas.
+
+    Sin tildes, minúsculas y sin afijos comunes ("FC", "AC", "CF"...). Es más simple que
+    :func:`normalize_team_name`; no se unifican para no cambiar los emparejamientos actuales.
+    """
+    if not name:
+        return ""
+    txt = unicodedata.normalize("NFKD", name)
+    txt = "".join(c for c in txt if not unicodedata.combining(c))
+    txt = txt.lower().strip()
+    tokens = [t for t in txt.split() if t and t not in _BASIC_NOISE_TOKENS]
+    return " ".join(tokens)
+
+
+def basic_names_match(local: str, target: str) -> bool:
+    """Igual o sub-cadena en ambas direcciones (cubre Real Madrid CF / Real Madrid)."""
+    if not local or not target:
+        return False
+    if local == target:
+        return True
+    return local in target or target in local
+
+
 def find_matching_team_id(name: str, candidates: dict[int, str]) -> int | None:
     """Devuelve el id del **único** candidato que encaja con ``name``, o ``None``.
 

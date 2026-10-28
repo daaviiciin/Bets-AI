@@ -79,3 +79,6 @@ backups/
 
 # Grafo de graphify (se regenera con `graphify update .`)
 graphify-out/
+
+# Capturas y logs de las sesiones de Playwright (MCP)
+.playwright-mcp/

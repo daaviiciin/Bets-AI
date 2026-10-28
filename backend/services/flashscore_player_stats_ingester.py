@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,9 +29,68 @@ from backend.services.match_absences_ingester import (
     FLASHSCORE_EXTERNAL_PREFIX,
     flashscore_id_from_external_id,
 )
-from backend.services.player_match_stats_ingester import PlayerStatsIngestResult, _apply_stats
 
 REQUEST_SLEEP_SECONDS = 1.0
+
+# Campos numéricos enteros del modelo. El resto son Decimal (xG, rating, etc).
+_INT_FIELDS: frozenset[str] = frozenset({
+    "minutes_played", "shirt_number",
+    "goals", "assists", "shots", "shots_on_target",
+    "shots_off_target", "shots_blocked",
+    "big_chances_created", "big_chances_missed",
+    "touches", "passes_total", "passes_accurate", "key_passes",
+    "crosses_total", "crosses_accurate",
+    "long_balls_total", "long_balls_accurate",
+    "tackles", "interceptions", "clearances", "blocks",
+    "duels_won", "duels_total", "aerial_duels_won",
+    "dribbles_succeeded", "dribbles_attempted",
+    "fouls_committed", "fouls_drawn", "yellow_cards", "red_cards",
+    "offsides", "saves", "goals_conceded",
+})
+
+_DECIMAL_FIELDS: frozenset[str] = frozenset({
+    "expected_goals", "expected_assists", "goals_prevented", "rating",
+})
+
+
+@dataclass
+class PlayerStatsIngestResult:
+    """Resumen de una ejecución del ingester."""
+
+    started_at: datetime
+    finished_at: datetime
+    matches_eligible: int = 0
+    matches_processed: int = 0
+    matches_failed: int = 0
+    players_created: int = 0
+    rows_inserted: int = 0
+    rows_updated: int = 0
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def duration_seconds(self) -> float:
+        return (self.finished_at - self.started_at).total_seconds()
+
+
+def _apply_stats(row: PlayerMatchStats, stats: dict) -> None:
+    """Asigna las claves de ``stats`` a los campos del row.
+
+    Enteros a ``int`` y el resto a ``Decimal``; si un valor no casa, o la clave no es un
+    campo conocido, se ignora.
+    """
+    for key, value in stats.items():
+        if value is None:
+            continue
+        if key in _INT_FIELDS:
+            try:
+                setattr(row, key, int(value))
+            except (TypeError, ValueError):
+                continue
+        elif key in _DECIMAL_FIELDS:
+            try:
+                setattr(row, key, Decimal(str(round(float(value), 4))))
+            except (TypeError, ValueError, ArithmeticError):
+                continue
 
 # Palabra de la posición de Flashscore (es) → código corto G/D/M/F de la columna.
 _POSITION_CODES: tuple[tuple[str, str], ...] = (

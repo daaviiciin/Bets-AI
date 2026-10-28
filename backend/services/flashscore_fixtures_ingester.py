@@ -26,7 +26,6 @@ from backend.models.match import (
     MATCH_STATUS_SCHEDULED,
 )
 from backend.scrapers import flashscore as fs
-from backend.services.odds_processor import LEAGUE_METADATA
 from backend.services.entity_resolver import TeamResolver
 from backend.services.team_crests import set_team_logo
 
@@ -48,6 +47,18 @@ _EXTRA_LEAGUE_NAMES: dict[str, str] = {
     "EUROPE: Champions League": "soccer_uefa_champs_league",
     "EUROPE: Europa League": "soccer_uefa_europa_league",
     "EUROPE: Conference League": "soccer_uefa_europa_conference_league",
+}
+
+# ``sport_key`` → (nombre de la liga, país) al crear la fila de ``leagues``.
+LEAGUE_METADATA: dict[str, tuple[str, str]] = {
+    "soccer_spain_la_liga": ("La Liga", "Spain"),
+    "soccer_epl": ("Premier League", "England"),
+    "soccer_germany_bundesliga": ("Bundesliga", "Germany"),
+    "soccer_italy_serie_a": ("Serie A", "Italy"),
+    "soccer_france_ligue_one": ("Ligue 1", "France"),
+    "soccer_uefa_champs_league": ("UEFA Champions League", "Europe"),
+    "soccer_uefa_europa_league": ("UEFA Europa League", "Europe"),
+    "soccer_uefa_europa_conference_league": ("UEFA Conference League", "Europe"),
 }
 
 _DEDUP_WINDOW = timedelta(hours=4)

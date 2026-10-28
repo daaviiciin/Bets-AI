@@ -7,7 +7,8 @@ emparejamiento es **exacto por id**: no hay que comparar nombres de equipo.
 
 Flujo:
 
-1. Partidos ``scheduled`` con id de Flashscore cuyo inicio ya pasó.
+1. Partidos ``scheduled`` con id de Flashscore que empezaron hace al menos
+   :data:`DURACION_MINIMA_PARTIDO`.
 2. Descarga los feeds ``f_1_{offset}`` de los últimos ``days_back`` días
    (offset 0 = hoy, -1 = ayer…).
 3. Si el feed marca el partido como terminado y trae marcador, se guarda
@@ -19,7 +20,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -34,6 +35,9 @@ from backend.services.match_absences_ingester import (
 
 MAX_DAYS_BACK = 7  # el feed diario no sirve más atrás
 REQUEST_SLEEP_SECONDS = 1.0
+#: Desde el saque hasta dar el partido por terminado (90' + descanso + añadido). Antes de eso no
+#: se cierra aunque el feed lo diga: un marcador en directo guardado como final no se revisa más.
+DURACION_MINIMA_PARTIDO = timedelta(minutes=115)
 
 
 @dataclass(frozen=True)
@@ -73,6 +77,15 @@ def finished_results_by_id(
             continue
         out[fm.match_id] = FinishedResult(fm.score_home, fm.score_away, fm.scheduled_at)
     return out
+
+
+def descargado_en_directo(commence_time: datetime, *descargas: datetime | None) -> bool:
+    """``True`` si alguna descarga de datos del partido fue antes de que pudiera haber acabado.
+
+    Sirve para encontrar partidos que se cerraron con el marcador (y las stats) del directo.
+    """
+    fin = commence_time + DURACION_MINIMA_PARTIDO
+    return any(d is not None and d < fin for d in descargas)
 
 
 class FlashscoreResultsUpdater:
@@ -139,5 +152,5 @@ class FlashscoreResultsUpdater:
             select(Match)
             .where(Match.external_id.like(f"{FLASHSCORE_EXTERNAL_PREFIX}%"))
             .where(Match.status == MATCH_STATUS_SCHEDULED)
-            .where(Match.commence_time <= now)
+            .where(Match.commence_time <= now - DURACION_MINIMA_PARTIDO)
         ).all())

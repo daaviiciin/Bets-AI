@@ -387,8 +387,21 @@ def refresh_grading_for_row(session: Session, row: FeaturedDailyPick) -> None:
     _refresh_one_row(session, row)
 
 
+def partidos_de_picks_recientes(session: Session, ahora: datetime, dias: int = 7) -> set[int]:
+    """Partidos de las patas (simples y combinada) de los picks de los últimos ``dias``."""
+    desde = dia_de_picks(ahora) - timedelta(days=dias)
+    rows = session.scalars(
+        select(FeaturedDailyPick).where(FeaturedDailyPick.pick_date >= desde),
+    ).all()
+    return {
+        int(lg["match_id"])
+        for r in rows
+        for lg in [*r.picks_json, *((r.combo_json or {}).get("legs") or [])]
+    }
+
+
 def refresh_all_grading(session: Session) -> int:
-    """Re-evalúa todas las filas con datos de ``matches`` (p. ej. tras pipeline diario)."""
+    """Re-evalúa todas las filas con datos de ``matches``. Solo desde "Comprobar" (Transparencia)."""
 
     rows = session.scalars(
         select(FeaturedDailyPick).order_by(FeaturedDailyPick.pick_date.desc()),
@@ -497,6 +510,7 @@ __all__ = [
     "dia_de_picks",
     "fila_del_dia",
     "generar_picks_v2",
+    "partidos_de_picks_recientes",
     "refresh_all_grading",
     "refresh_grading_for_row",
     "simples_corregidas",

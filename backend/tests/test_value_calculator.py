@@ -14,8 +14,6 @@ from backend.services.value_calculator import (
     implied_probability,
     is_recommendable_odds,
     kelly_fraction,
-    parlay_odds_and_probability,
-    recommended_stake,
 )
 
 
@@ -144,71 +142,3 @@ class TestKellyFraction:
         assert f == Decimal("0.25")
 
 
-class TestRecommendedStake:
-    def test_sin_valor_devuelve_cero(self):
-        stake = recommended_stake(
-            Decimal("100"), Decimal("1.5"), Decimal("0.5"),
-        )
-        assert stake == Decimal("0")
-
-    def test_kelly_completo(self):
-        # 100 € bankroll, cuota 2.0, prob 0.6 → Kelly 0.2 → stake 20 €
-        stake = recommended_stake(
-            Decimal("100"), Decimal("2.0"), Decimal("0.6"),
-        )
-        assert stake == Decimal("20")
-
-    def test_kelly_fraccional(self):
-        # Mismo escenario con Kelly/4 → stake 5 €
-        stake = recommended_stake(
-            Decimal("100"), Decimal("2.0"), Decimal("0.6"),
-            kelly_modifier=Decimal("0.25"),
-        )
-        assert stake == Decimal("5")
-
-    def test_max_stake_pct_se_respeta(self):
-        # Kelly diría 20 €, pero límite del 5 % → 5 €
-        stake = recommended_stake(
-            Decimal("100"), Decimal("2.0"), Decimal("0.6"),
-            max_stake_pct=Decimal("0.05"),
-        )
-        assert stake == Decimal("5")
-
-    def test_flat_stake_ignora_kelly(self):
-        stake = recommended_stake(
-            Decimal("100"), Decimal("2.0"), Decimal("0.6"),
-            flat_stake=Decimal("3"),
-        )
-        assert stake == Decimal("3")
-
-    def test_flat_stake_no_se_paga_si_no_hay_valor(self):
-        stake = recommended_stake(
-            Decimal("100"), Decimal("1.5"), Decimal("0.5"),
-            flat_stake=Decimal("3"),
-        )
-        assert stake == Decimal("0")
-
-
-class TestParlay:
-    def test_combinada_doble(self):
-        # Madrid 1.55 (P=0.71) + Bayern 1.60 (P=0.65)
-        odds, prob = parlay_odds_and_probability([
-            (Decimal("1.55"), Decimal("0.71")),
-            (Decimal("1.60"), Decimal("0.65")),
-        ])
-        assert odds == Decimal("2.48")
-        # 0.71 * 0.65 = 0.4615
-        assert prob == Decimal("0.4615")
-
-    def test_combinada_triple_multiplica_correctamente(self):
-        odds, prob = parlay_odds_and_probability([
-            (Decimal("2.0"), Decimal("0.5")),
-            (Decimal("2.0"), Decimal("0.5")),
-            (Decimal("2.0"), Decimal("0.5")),
-        ])
-        assert odds == Decimal("8")
-        assert prob == Decimal("0.125")
-
-    def test_combinada_vacia_falla(self):
-        with pytest.raises(ValueError):
-            parlay_odds_and_probability([])

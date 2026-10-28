@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from backend.models import League, Season, TeamSeasonStats
 from backend.scrapers import flashscore as fs
 from backend.services.entity_resolver import TeamResolver
-from backend.services.odds_processor import LEAGUE_METADATA
+from backend.services.flashscore_fixtures_ingester import LEAGUE_METADATA
 
 TOP5_SPORT_KEYS: tuple[str, ...] = (
     "soccer_spain_la_liga",

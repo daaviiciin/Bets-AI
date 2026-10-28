@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import re
 
-from backend.services.match_results_updater import _names_match, _normalize as _nm
+from backend.services.team_name_matching import (
+    basic_names_match as _names_match,
+    basic_normalize_team_name as _nm,
+)
 
 # Mercados Winamax conocidos → clave canónica en tabla ``markets`` / detector.
 CANONICAL_MARKET_KEY: dict[str, str] = {

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session, joinedload
 
 from backend.models import Bookmaker, League, Match, Odds, Season, Snapshot, TeamSeasonStats
@@ -885,42 +885,3 @@ def keep_best_lines(lines: list[GradedOddsLine], max_lines: int) -> list[GradedO
     return [line for i, line in enumerate(lines) if i in keep]
 
 
-def summarize_winamax_odds_coverage(
-    session: Session,
-    *,
-    horizon_hours: int = 52,
-) -> dict[str, float | int]:
-    """Resumen para diagnóstico (endpoint dashboard): ¿hay snapshots / odds / cobertura por partido?"""
-
-    now = datetime.now(timezone.utc)
-    horizon = now + timedelta(hours=horizon_hours)
-    n_snapshots = int(
-        session.scalar(select(func.count()).select_from(Snapshot).where(Snapshot.source == WINAMAX_SOURCE))
-        or 0,
-    )
-    n_odds = int(
-        session.scalar(
-            select(func.count())
-            .select_from(Odds)
-            .join(Snapshot, Snapshot.id == Odds.snapshot_id)
-            .where(Snapshot.source == WINAMAX_SOURCE),
-        )
-        or 0,
-    )
-    mids = set(
-        session.scalars(
-            select(Match.id)
-            .where(Match.commence_time >= now)
-            .where(Match.commence_time <= horizon)
-            .join(Match.league)
-            .where(~League.sport_key.ilike("%basketball%")),
-        ).all(),
-    )
-    with_odds = _best_winamax_snapshot_per_match(session, mids)
-    return {
-        "horizon_hours": horizon_hours,
-        "snapshots_winamax": n_snapshots,
-        "odds_rows_winamax_total": n_odds,
-        "football_matches_in_horizon": len(mids),
-        "matches_with_any_winamax_odds": len(with_odds),
-    }

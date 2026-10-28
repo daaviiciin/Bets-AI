@@ -48,8 +48,11 @@ from backend.models import (
 from backend.models.match import MATCH_STATUS_SCHEDULED
 from backend.scrapers import winamax as wm
 from backend.services.entity_resolver import find_unique_team_player
-from backend.services.team_name_matching import team_side_score
-from backend.services.match_results_updater import _names_match, _normalize
+from backend.services.team_name_matching import (
+    basic_names_match as _names_match,
+    basic_normalize_team_name as _normalize,
+    team_side_score,
+)
 from backend.services.odds_history import LineKey, OddsHistoryRecorder, line_key
 from backend.services.winamax_normalization import (
     TOTALS_MARKETS,

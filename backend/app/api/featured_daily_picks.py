@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -24,9 +24,11 @@ from backend.services.featured_daily_picks import (
     combinada_corregida,
     dia_de_picks,
     fila_del_dia,
+    partidos_de_picks_recientes,
     refresh_all_grading,
     simples_corregidas,
 )
+from backend.services.resultados_bajo_demanda import traer_datos_para_corregir
 
 router = APIRouter(prefix="/featured-picks", tags=["featured-picks"])
 log = logging.getLogger(__name__)
@@ -101,28 +103,12 @@ def get_metrics(db: Session = Depends(get_db)) -> FeaturedPicksMetricsOut:
 
 @router.post("/refresh-grades", dependencies=[Depends(limite_featured_picks)])
 def post_refresh_grades(db: Session = Depends(get_db)) -> dict[str, int]:
-    """Recalifica todas las patas contra marcadores (típico tras pipeline diario)."""
+    """Recalifica todas las patas contra marcadores. Solo se llama desde "Comprobar" (Transparencia).
 
+    Antes trae de Flashscore los marcadores y stats que falten de los picks de la última semana.
+    """
+
+    ids = partidos_de_picks_recientes(db, datetime.now(timezone.utc))
+    traer_datos_para_corregir(db, ids, log=log)
     n = refresh_all_grading(db)
     return {"updated_rows": n}
-
-
-@router.post(
-    "/ensure-date",
-    response_model=FeaturedTodayOut,
-    dependencies=[Depends(limite_featured_picks)],
-)
-def post_ensure_date(
-    pick_date: date | None = Query(default=None, description="Solo hoy (día de Madrid)."),
-    db: Session = Depends(get_db),
-) -> FeaturedTodayOut:
-    """Asegura los picks de hoy sin descargar cuotas. Otra fecha → 422: generar picks de un día
-    pasado con los datos de hoy falsearía el historial."""
-
-    hoy = dia_de_picks(datetime.now(timezone.utc))
-    if pick_date is not None and pick_date != hoy:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Solo se pueden generar los picks de hoy ({hoy.isoformat()}).",
-        )
-    return _today_out(asegurar_picks_de_hoy(db, log=log))

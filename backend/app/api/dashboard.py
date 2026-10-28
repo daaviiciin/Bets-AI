@@ -3,33 +3,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
 from backend.app.schemas.responses import GradedOddsLineOut
-from backend.services.graded_odds_service import list_graded_winamax_odds, summarize_winamax_odds_coverage
+from backend.services.graded_odds_service import list_graded_winamax_odds
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
-
-
-class WinamaxCoverageOut(BaseModel):
-    horizon_hours: int
-    snapshots_winamax: int
-    odds_rows_winamax_total: int
-    football_matches_in_horizon: int
-    matches_with_any_winamax_odds: int
-
-
-@router.get("/winamax-coverage", response_model=WinamaxCoverageOut)
-def get_winamax_odds_coverage(
-    horizon_hours: int = Query(52, ge=1, le=14 * 24),
-    db: Session = Depends(get_db),
-) -> WinamaxCoverageOut:
-    """Diagnóstico rápido: si hay snapshots/cuotas Winamax y cuántos partidos del horizonte tienen líneas."""
-
-    data = summarize_winamax_odds_coverage(db, horizon_hours=horizon_hours)
-    return WinamaxCoverageOut.model_validate(data)
 
 
 @router.get("/graded-odds", response_model=list[GradedOddsLineOut])

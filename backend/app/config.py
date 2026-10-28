@@ -22,12 +22,6 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    odds_api_key: str = Field(
-        default="",
-        description="The Odds API — vacío desactiva el refresco estándar de cuotas.",
-    )
-    odds_api_base_url: str = Field(default="https://api.the-odds-api.com/v4")
-
     postgres_user: str = Field(default="betsai")
     #: Sin valor por defecto a propósito (C-12): si falta y no hay DATABASE_URL, error claro.
     postgres_password: str = Field(default="")
@@ -36,19 +30,10 @@ class Settings(BaseSettings):
     postgres_port: int = Field(default=5432)
     database_url: str | None = Field(default=None)
 
-    llm_provider: str = Field(default="gemini")
-    gemini_api_key: str | None = Field(default=None)
-    groq_api_key: str | None = Field(default=None)
-    openai_api_key: str | None = Field(default=None)
-
     # Pipeline de datos principal: estadísticas tipo Flashscore + Winamax cuotas,
     # sin depender de múltiples bookies para el primer criterio de EV.
     official_data_pipeline: bool = Field(default=False)
     primary_bookmaker_key: str = Field(default="winamax_es")
-    odds_api_refresh_enabled: bool = Field(
-        default=False,
-        description="Si False, POST /refresh no llama a The Odds API (cero créditos).",
-    )
 
     #: Tras ingestar Winamax: cuántos snapshots recientes conservar por liga;
     #: el resto se borran (CASCADE borra odds). Evita crecimiento ilimitado.
@@ -131,20 +116,12 @@ class Settings(BaseSettings):
         return self.environment.strip().lower() == "development"
 
     @property
-    def project_root(self) -> Path:
-        return PROJECT_ROOT
-
-    @property
     def data_dir(self) -> Path:
         return PROJECT_ROOT / "data"
 
     @property
     def raw_data_dir(self) -> Path:
         return self.data_dir / "raw"
-
-    @property
-    def processed_data_dir(self) -> Path:
-        return self.data_dir / "processed"
 
     @property
     def resolved_database_url(self) -> str:

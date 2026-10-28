@@ -186,6 +186,50 @@ class TestTirosAPuertaJugador:
         assert resultado(leg, stats=self.STATS_J) == "needs_review"
 
 
+class TestGoleadorYParadas:
+    STATS_J = StatsPartido(
+        local=STATS.local,
+        visitante=STATS.visitante,
+        jugadores=(
+            StatsJugador("Budimir Ante", goals=1, saves=0, minutes_played=78),
+            StatsJugador("Vlahovic Dusan", goals=0, saves=0, minutes_played=90),
+            StatsJugador("Sanchez Robert", goals=0, saves=3, minutes_played=90),
+            StatsJugador("Herrera Sergio", goals=0, saves=None, minutes_played=0),
+        ),
+    )
+
+    def test_goleador_que_marca_acierta(self) -> None:
+        leg = pata("player_anytime_scorer", "Ante Budimir", None, player_name="Ante Budimir")
+        assert resultado(leg, stats=self.STATS_J) == "hit"
+
+    def test_goleador_que_no_marca_falla(self) -> None:
+        leg = pata("player_anytime_scorer", "Dusan Vlahovic", None, player_name="Dusan Vlahovic")
+        assert resultado(leg, stats=self.STATS_J) == "miss"
+
+    def test_goleador_sin_player_name_usa_el_resultado(self) -> None:
+        assert resultado(pata("player_anytime_scorer", "Ante Budimir", None), stats=self.STATS_J) == "hit"
+
+    def test_dos_o_mas_goles_falla_con_uno(self) -> None:
+        leg = pata("player_to_score_2plus", "Ante Budimir", None, player_name="Ante Budimir")
+        assert resultado(leg, stats=self.STATS_J) == "miss"
+
+    def test_mas_de_2_5_paradas_acierta_con_3(self) -> None:
+        leg = pata("player_saves_alt", "Robert Sanchez over 2.5", "2.5", player_name="Robert Sanchez")
+        assert resultado(leg, stats=self.STATS_J) == "hit"
+
+    def test_mas_de_3_5_paradas_falla_con_3(self) -> None:
+        leg = pata("player_saves_alt", "Robert Sanchez over 3.5", "3.5", player_name="Robert Sanchez")
+        assert resultado(leg, stats=self.STATS_J) == "miss"
+
+    def test_portero_que_no_jugo_va_a_revisar(self) -> None:
+        leg = pata("player_saves_alt", "Sergio Herrera over 0.5", "0.5", player_name="Sergio Herrera")
+        assert resultado(leg, stats=self.STATS_J) == "needs_review"
+
+    def test_goleador_sin_stats_de_jugador_espera(self) -> None:
+        leg = pata("player_anytime_scorer", "Ante Budimir", None, player_name="Ante Budimir")
+        assert resultado(leg, stats=STATS) == "pending_stats"
+
+
 class TestPendienteDeStats:
     def test_sin_stats_queda_pendiente_de_stats(self) -> None:
         assert resultado(pata("match_sot_totals", "Over", "8.5")) == "pending_stats"

@@ -15,10 +15,6 @@ Desde octubre de 2026 **todo sale de Flashscore** (Sofascore responde
    ``rollup_player_season_stats`` recalcula los totales de temporada por jugador.
 6. ``MatchAbsencesIngester`` → bajas y dudas por partido.
 
-Los servicios de Sofascore (``match_results_updater``,
-``player_match_stats_ingester``, ``sofascore_ingester``) siguen en el código por
-si Sofascore vuelve a responder, pero ya no forman parte del pipeline.
-
 El orchestrator es **idempotente**: si no hay nada nuevo, los servicios no
 escriben nada y el resumen lo refleja. Si un paso falla, los siguientes siguen.
 """
@@ -39,7 +35,10 @@ from backend.services.flashscore_fixtures_ingester import (
     FlashscoreFixturesIngester,
     FlashscoreFixturesIngestResult,
 )
-from backend.services.flashscore_player_stats_ingester import FlashscorePlayerStatsIngester
+from backend.services.flashscore_player_stats_ingester import (
+    FlashscorePlayerStatsIngester,
+    PlayerStatsIngestResult,
+)
 from backend.services.flashscore_results_updater import (
     FlashscoreResultsResult,
     FlashscoreResultsUpdater,
@@ -56,8 +55,6 @@ from backend.services.match_absences_ingester import (
     AbsencesIngestResult,
     MatchAbsencesIngester,
 )
-from backend.services.match_results_updater import UpdateSummary
-from backend.services.player_match_stats_ingester import PlayerStatsIngestResult
 from backend.services.player_season_rollup import rollup_player_season_stats
 from backend.services.season_history_ingester import SeasonHistoryIngester
 from backend.services.team_crests import TeamCrestColorizer
@@ -68,8 +65,6 @@ class DailyRefreshSummary:
     """Resumen agregado de un run del pipeline."""
     started_at: datetime
     finished_at: datetime
-    # Resultados vía Sofascore: ya no se ejecuta; se mantiene por compatibilidad de la API.
-    results: UpdateSummary | None = None
     fs_results: FlashscoreResultsResult | None = None
     standings: StandingsIngestResult | None = None
     stats: IngestResult | None = None
@@ -128,7 +123,7 @@ class DailyRefreshOrchestrator:
         self,
         *,
         stats_days_back: int = 120,
-        stats_only_top5: bool = True,
+        stats_only_top5: bool = False,
         stats_limit: int | None = 40,
         fixtures_days_ahead: int = 7,
         results_days_back: int = 3,
@@ -141,8 +136,9 @@ class DailyRefreshOrchestrator:
 
         :param stats_days_back: ventana hacia atrás para buscar partidos sin
             stats post-partido.
-        :param stats_only_top5: si ``True``, calendario y stats solo de las 5
-            grandes ligas; si ``False``, también competiciones UEFA.
+        :param stats_only_top5: si ``True``, el calendario solo importa las 5 grandes ligas;
+            por defecto (``False``) también Champions, Europa y Conference League. Las stats de
+            equipo no filtran por liga: se piden para todo partido de la BD que no las tenga.
         :param stats_limit: máximo de partidos cuyas stats se ingieren por ejecución
             (2 requests por partido). Limita el coste mientras se completa el histórico.
         :param fixtures_days_ahead: días de calendario a recorrer (0..N-1).
@@ -235,9 +231,11 @@ class DailyRefreshOrchestrator:
 
         self._step("paso 4/6: stats post-partido por equipo")
         try:
+            # Sin filtro de liga: aunque el calendario sea solo top 5, los partidos UEFA ya
+            # guardados necesitan stats para liquidar sus patas de córners o tiros.
             stats = self._stats_ingester.ingest_recent(
                 days_back=stats_days_back,
-                only_top5=stats_only_top5,
+                only_top5=False,
                 limit_matches=stats_limit,
             )
             self.session.commit()
@@ -291,14 +289,8 @@ class DailyRefreshOrchestrator:
         except Exception as exc:  # noqa: BLE001
             self._fail(summary, "match_absences_ingester", exc)
 
-        self.log.info("PIPELINE DIARIO  (opcional: recalificar picks destacados)")
-        try:
-            from backend.services.featured_daily_picks import refresh_all_grading
-
-            refresh_all_grading(self.session)
-            self.log.info("Featured daily picks: grading refrescado")
-        except Exception as exc:  # noqa: BLE001
-            self._fail(summary, "featured_daily_picks.refresh_all_grading", exc)
+        # Los picks del día no se corrigen aquí: solo con "Comprobar" en Transparencia
+        # (``POST /featured-picks/refresh-grades``), para no liquidarlos con datos a medias.
 
         summary.finished_at = datetime.now(timezone.utc)
         self.log.info(

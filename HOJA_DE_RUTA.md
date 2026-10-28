@@ -559,11 +559,10 @@ Pendiente de este bloque / siguientes:
     picks de hoy e histórico por día. Las reglas de selección se sustituyen en la fase 3.
   - Beneficio (`beneficio_apuesta`): ganada = importe × (cuota − 1), perdida = −importe, nula = 0 €
     (fuera de lo apostado del ROI); pendientes, "a revisar" y sin importe no cuentan.
-- Páginas sin ruta que siguen ahí: `matches`, `value-bets`, `recommendations`, `analisis`, `calibration`.
+- ~~Páginas sin ruta que siguen ahí~~ ☑ borradas en la depuración del 2026-10-28.
 
 Ya detectado:
 - Nombres de jugadores nuevos de Flashscore vienen como "Apellido Nombre" ("Undav Deniz").
-- 6 páginas existen en `frontend/src/app/pages/` pero no tienen ruta (`analisis`, `calibration`, `match-detail`, `matches`, `recommendations`, `value-bets`).
 - Dos estilos de color mezclados: los tokens `brand-*` de `styles.scss` y las clases `slate-*`/`emerald-*` directas.
 - Skills previstas: `impeccable`, `make-interfaces-feel-better`, `emil-design-eng`, `dataviz`, `break-ui`.
 
@@ -572,6 +571,91 @@ Ya detectado:
 Ya detectado:
 - Base actual: Poisson / Dixon–Coles (`poisson_model.py`), con calibración y backtest ya implementados.
 - La evaluación del modelo de apuestas dependerá del historial de cuotas de cierre (fase 1, bloque 2).
+
+### Depuración de archivos y código (2026-10-28)
+
+Análisis de alcanzabilidad (imports con `ast` desde `main.py`, `tools/` y tests; rutas de Angular)
+y borrado de lo que nada usa. 84 archivos fuera (~11.300 líneas) y recortes en otros 40. Tests: 672 backend, 30 frontend.
+
+- **Sofascore y The Odds API retirados del código:** scrapers, `match_results_updater`,
+  `player_match_stats_ingester`, `sofascore_ingester`, `refresh_service`, `odds_processor`, claves
+  `ODDS_API_*` y `LLM_*`. Lo que se reutilizaba se movió: `basic_normalize_team_name` /
+  `basic_names_match` → `team_name_matching.py`; `LEAGUE_METADATA` → `flashscore_fixtures_ingester.py`;
+  `PlayerStatsIngestResult` → `flashscore_player_stats_ingester.py`. Las columnas de BD se quedan.
+- **API:** solo lo que llama el frontend. Fuera los routers `value_bets`, `calibration`, `analysis`,
+  `players`; `POST /refresh`, `/refresh/results`, `/refresh/daily`, `/refresh/official`;
+  `/matches/{id}` (+ `/odds`, `/stats`, `/player-props`, `/analysis`); `/dashboard/winamax-coverage`;
+  `/me/parlays/{id}/refresh-grade`; `/featured-picks/ensure-date`. 25 schemas de respuesta sin uso.
+- **Servicios sin uso:** `recommender`, `seed_profiles`, `team_merger`, `player_merger`,
+  `parlay_builder`, `poisson_backtest`, `poisson_calibration` (v1, ya sustituida por el v2),
+  `bet_assessment_service`, `busqueda_texto`, `match_analysis_service`.
+- **Scripts:** quedan los 3 de la tarea programada y 4 manuales (ver CLAUDE.md). Fuera 14, entre
+  ellos `calibrate_poisson`, `backtest_poisson`, `scheduler`, `import_flashscore_stats` (lo hace el
+  refresh) y `backfill_team_crests` (también).
+- **Frontend:** 5 páginas sin ruta, 17 métodos de `api.service.ts`, 35 tipos de `models.ts` y 13
+  helpers de `format.ts`.
+- **Otros:** `.playwright-mcp/` (ahora en `.gitignore`), `.impeccable/review/`, `portada.ts` vacío
+  de la raíz, `frontend/README.md` de Angular CLI y 7 paquetes de `requirements.txt`.
+
+### "Comprobar" trae resultados (2026-10-27)
+
+Los picks del 26/10 no se corrigieron: la última tanda fue a las 20:00 (antes de los partidos de
+las 21:00) y la de las 08:43 del 27/10 se cortó (`0xC000013A`, sin log). El botón "Comprobar"
+solo recorregía con lo que hubiera en BD. Ahora, antes de corregir, los dos "Comprobar"
+(Transparencia y Mis apuestas) piden a Flashscore el marcador de los partidos de las patas que ya
+deberían haber acabado y las stats de jugador/equipo que falten
+(`services/resultados_bajo_demanda.py`, enfriamiento de 10 min). El usuario no quiere tanda
+nocturna: basta con "Comprobar".
+
+### Partidos cerrados en directo (2026-10-28)
+
+El parser del feed diario daba por terminado un partido con `AI÷y`, que también sale en partidos
+en juego: un refresh durante el partido guardaba el marcador del momento como final (y luego
+bajaba stats parciales), y como solo se revisan los `scheduled`, quedaba congelado. 26 partidos
+afectados (p. ej. Lecce–Juventus 0-0 en el minuto 30) y patas falladas dadas por acertadas.
+Arreglo: solo `AB == "3"` cuenta como terminado y no se cierra nada antes de 115 min desde el
+saque (`DURACION_MINIMA_PARTIDO`). Reparación: `python -m backend.tools.reparar_partidos_en_directo
+--aplicar` + un `daily_refresh` (aplicado el 28/10: 26 partidos reabiertos y recuperados).
+Además, por decisión del usuario, el refresh **ya no corrige los picks del día**: solo el botón
+"Comprobar" de Transparencia (normalmente al día siguiente), para no liquidarlos con datos a medias.
+
+### Calendario y stats UEFA en el refresh (2026-10-28)
+
+El refresh se lanzaba con `only_top5=True` por defecto: el calendario no importaba UEFA (todos los
+partidos UEFA de la BD son de una ejecución puntual del 14-15/10) y el paso de stats de equipo
+descartaba los UEFA ya guardados (47 sin stats, ver B0). Ahora, por defecto, calendario de top 5 +
+UEFA (mismas peticiones: el feed diario trae todas las ligas) y stats de equipo sin filtro de liga
+(+2 peticiones por partido UEFA; el atraso se vacía en ~2 tandas con `stats_limit=40`). Para
+volver al top 5: `daily_refresh --solo-top5` o `stats_all_leagues=false`. Los picks siguen sin
+UEFA (`UEFA_SPORT_KEYS` en `featured_daily_picks`).
+
+### B14. Combinada del partido con props (decidido 2026-10-27)
+
+Decisiones del usuario: un **pick extra aparte**, "Combinada del partido" (2–3 selecciones de un
+mismo partido, estilo MyMatch), medido por separado en Transparencia. Además de los mercados del
+marcador, puede llevar props de jugador: **tiros a puerta de jugador** (preferente), **goleador**
+y **paradas del portero**. Esto cambia la regla del plan "picks sin props de jugador": entran como
+**experimentales** hasta validarlos (B14c). **Cuota total 2,5–5.** No tiene que llevar prop
+obligatoriamente: si el modelo los ve con valor, compiten con los mercados del marcador. Motivo
+del usuario: con las stats que tenemos, los props (sobre todo tiros a puerta) parecen un mercado
+explotable. Ejemplo del 26/10: Budimir ≥ 1 tiro a puerta a 1,86 (≈ 54 %) cuando lo había hecho
+en 8 de sus 10 partidos (hizo 3 remates y 1 a puerta en un mal partido de Osasuna).
+
+- [x] **B14a** Liquidar goleador (`player_anytime_scorer`, `player_to_score_2plus`) y paradas
+  (`player_saves_alt`) con `player_match_stats` (antes quedaban "a revisar").
+- [~] **B14b** (módulo puro `player_props_model.py` hecho; minutos: media de las 6 últimas con minutos, semivida 3, mínimo 15; falta enchufarlo en `graded_odds_service`) Modelo de props ajustado al rival: hoy goleador y tiros a puerta usan solo el
+  ritmo de temporada del jugador y no hay modelo de paradas. Goleador por *thinning*: P = 1 −
+  exp(−q·λ_equipo), con q = parte de los goles del equipo que marca el jugador; tiros a puerta
+  escalados por λ_equipo del partido / media; paradas con los tiros a puerta esperados del rival.
+- [ ] **B14c** Backtest walk-forward de props con `player_match_stats` (492 partidos): log-loss,
+  Brier y ECE por familia frente a la cuota de Winamax sin margen, y calibración como en B7.
+- [ ] **B14d** P conjunta en el mismo partido: rejilla de marcadores ampliada con los props
+  (goleador exacto por *thinning* sobre la rejilla; tiros a puerta y paradas condicionados a los
+  goles de su equipo o del rival).
+- [ ] **B14e** Selección de la combinada del partido (función pura en `daily_picks_v2.py`).
+- [ ] **B14f** Columna nueva en `featured_daily_picks` + migración (y el trigger de congelado),
+  corrección y métricas propias.
+- [ ] **B14g** Frontend: tarjeta en la portada y sección en Transparencia.
 
 ### Modelo v2 en producción (2026-10-25, noche)
 

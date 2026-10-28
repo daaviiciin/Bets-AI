@@ -16,9 +16,10 @@ cd frontend; npm start                                  # Angular en :4200 (prox
 cd frontend; npm test                                   # Vitest
 ```
 
-Scripts CLI: `python -m backend.tools.<nombre>` desde la raíz (`daily_refresh`, `import_flashscore_stats`,
-`generar_picks_del_dia`, `backtest_modelo` (backtest + calibración + `--promover` del modelo v2),
-`diagnostico_modelo`, `calibrate_poisson`, `backtest_poisson`…).
+Scripts CLI: `python -m backend.tools.<nombre>` desde la raíz. Los de la tarea programada:
+`daily_refresh`, `import_winamax_props`, `generar_picks_del_dia`. Manuales: `backtest_modelo`
+(backtest + calibración + `--promover` del modelo v2), `diagnostico_modelo`, `set_password`,
+`reparar_partidos_en_directo`.
 
 **Python:** el `.venv` usa 3.10 y `start_bets_ai.bat` arranca la API con él (antes usaba `py -3.10`
 global, al que le faltaban paquetes); el README dice 3.12+. Usa siempre el `.venv`. No cambies la
@@ -30,8 +31,8 @@ versión del `.bat` ni del README sin preguntar.
 backend/
   app/        FastAPI: main.py registra routers de app/api/*, schemas/ (Pydantic v2), deps/ (auth JWT)
   models/     SQLAlchemy 2 (un modelo por archivo, exportados en models/__init__.py)
-  services/   Lógica de negocio: ingesta, modelo Poisson, EV, graded odds, combinadas, refresh
-  scrapers/   winamax (curl_cffi + PRELOADED_STATE), flashscore (feeds df_st/df_su), sofascore, odds_api
+  services/   Lógica de negocio: ingesta, modelo Poisson/v2, EV, graded odds, combinadas, picks
+  scrapers/   winamax (curl_cffi + PRELOADED_STATE + WebSocket), flashscore (feeds df_st/df_su)
   tools/      Scripts CLI
   tests/      pytest, sin conftest ni BD: prueban funciones puras de services/scrapers
 frontend/src/app/
@@ -40,10 +41,12 @@ frontend/src/app/
 migrations/   Alembic
 ```
 
-Flujo de datos: `POST /refresh/official` → Flashscore (calendario, resultados, clasificación, stats de
-equipo/jugador, bajas: `services/daily_refresh.py`) → Winamax (cuotas; los props se enlazan con los
-jugadores de Flashscore) → `graded_odds_service` calcula P(modelo) y EV → `GET /dashboard/graded-odds`.
-**Sofascore ya no se usa** (responde `403` desde 2026-10); su código sigue en `scrapers/` y `services/`.
+Flujo de datos: `tools/daily_refresh` → Flashscore (calendario, resultados, clasificación, stats de
+equipo/jugador, bajas: `services/daily_refresh.py`) → `tools/import_winamax_props` (cuotas; los props
+se enlazan con los jugadores de Flashscore) → `graded_odds_service` calcula P(modelo) y EV →
+`GET /dashboard/graded-odds`. Desde la app solo se refrescan cuotas (`POST /refresh/odds`, botón del
+dashboard). Sofascore (`403` desde 2026-10) y The Odds API se retiraron del código el 2026-10-28; las
+columnas que dejaron en BD (`sofascore_event_id`, `snapshots.source`…) siguen ahí.
 Refresh automático: tarea de Windows → `refresh_programado.ps1` (hora fijada en UTC: 09/15/21 h en
 verano, 08/14/20 h en invierno; log en `logs/`). Con el portátil en suspensión se pierden tandas:
 ver HOJA_DE_RUTA. Al final genera los **picks del día** si faltan; la portada también los genera
@@ -73,13 +76,11 @@ al abrirse (`POST /featured-picks/today`). Una vez guardados no cambian (trigger
 ## Cuidado con
 
 - **No leas ni muestres `.env`** (contiene claves). Para ver qué variables existen usa `.env.example`.
-- **No actives `ODDS_API_REFRESH_ENABLED`** ni llames a `POST /refresh` con la Odds API activa: gasta créditos de pago.
-- No lances scrapers contra Winamax/Flashscore/Sofascore en bucle ni para probar: usa los tests con
+- No lances scrapers contra Winamax/Flashscore en bucle ni para probar: usa los tests con
   HTML/JSON de ejemplo. Los feeds son internos y pueden bloquear por IP.
-- Hay páginas en `pages/` sin ruta en `app.routes.ts` (`analisis`, `calibration`, `match-detail`,
-  `matches`, `recommendations`, `value-bets`). Pregunta antes de borrarlas o enrutarlas.
-- El README está parcialmente desactualizado (solo describe 3 páginas y no menciona baloncesto).
-  El código manda.
+- El README está desactualizado (endpoints retirados, solo 3 páginas, sin baloncesto). El código manda.
+- La API solo expone lo que usa el frontend (depuración del 2026-10-28). Antes de añadir un endpoint,
+  un servicio o un script, comprueba que algo lo va a llamar.
 - Existe soporte inicial de **baloncesto** (`basketball_model.py`, migración `f8a2c1eeb9aa`).
 
 ## Skills para este proyecto

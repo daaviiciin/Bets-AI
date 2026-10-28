@@ -39,8 +39,11 @@ from backend.models.match import (
     MATCH_STATUS_POSTPONED,
     Match,
 )
-from backend.services.match_results_updater import _names_match, _normalize as _norm_team
-from backend.services.team_name_matching import player_names_match
+from backend.services.team_name_matching import (
+    basic_names_match as _names_match,
+    basic_normalize_team_name as _norm_team,
+    player_names_match,
+)
 from backend.services.winamax_normalization import (
     canonical_market_key,
     highest_scoring_half_side,
@@ -80,7 +83,15 @@ _TIROS_PUERTA: dict[str, str | None] = {
     "team_away_sot_totals": "away",
 }
 
-_TIROS_PUERTA_JUGADOR = frozenset({"player_sot", "player_sot_alt"})
+# Props de jugador con línea (más/menos de X): clave → campo de :class:`StatsJugador`.
+_PROPS_JUGADOR_LINEA: dict[str, str] = {
+    "player_sot": "shots_on_target",
+    "player_sot_alt": "shots_on_target",
+    "player_saves": "saves",
+    "player_saves_alt": "saves",
+}
+# Goleador: goles que tiene que marcar el jugador (en propia no cuentan, no están en ``goals``).
+_GOLEADOR: dict[str, int] = {"player_anytime_scorer": 1, "player_to_score_2plus": 2}
 
 _RE_OVER = re.compile(r"\b(over|m[áa]s)\b", re.I)
 _RE_UNDER = re.compile(r"\b(under|menos)\b", re.I)
@@ -102,6 +113,8 @@ class StatsJugador:
     nombre: str
     shots_on_target: int | None = None
     minutes_played: int | None = None
+    goals: int | None = None
+    saves: int | None = None
 
 
 @dataclass(frozen=True)
@@ -264,16 +277,21 @@ def grade_single_leg(
     nk = _norm(canonical_market_key(raw_mk) if raw_mk else raw_mk)
     outcome = str(leg.get("outcome_name", ""))
 
-    if nk in _TIROS_PUERTA_JUGADOR:
+    if nk in _PROPS_JUGADOR_LINEA or nk in _GOLEADOR:
         if stats is None or stats.jugadores is None:
             return sin_stats()
-        nombre = str(leg.get("player_name") or "").strip()
+        # En goleador el resultado es el propio nombre del jugador.
+        nombre = str(leg.get("player_name") or (outcome if nk in _GOLEADOR else "")).strip()
         jugador = _jugador_unico(nombre, stats.jugadores) if nombre else None
+        campo = _PROPS_JUGADOR_LINEA.get(nk, "goals")
+        valor = getattr(jugador, campo) if jugador is not None else None
         # Sin jugador claro, o que no jugó (las casas suelen anular): a revisar.
-        if jugador is None or jugador.shots_on_target is None or jugador.minutes_played == 0:
+        if jugador is None or valor is None or jugador.minutes_played == 0:
             return out("needs_review")
+        if nk in _GOLEADOR:
+            return out("hit" if valor >= _GOLEADOR[nk] else "miss")
         side = _lado_de_outcome(outcome)
-        return out(_over_under(jugador.shots_on_target, _to_float(leg.get("outcome_point")), side))
+        return out(_over_under(valor, _to_float(leg.get("outcome_point")), side))
 
     if nk.startswith("player_"):
         return out("needs_review")
@@ -396,6 +414,8 @@ def stats_partido_desde_filas(
                 nombre=nombre,
                 shots_on_target=pms.shots_on_target,
                 minutes_played=pms.minutes_played,
+                goals=pms.goals,
+                saves=pms.saves,
             )
             for nombre, pms in filas_jugador
         )

@@ -17,7 +17,7 @@ from backend.services.flashscore_results_updater import FlashscoreResultsResult
 from backend.services.flashscore_standings_ingester import StandingsIngestResult
 from backend.services.flashscore_stats_ingester import IngestResult
 from backend.services.match_absences_ingester import AbsencesIngestResult
-from backend.services.player_match_stats_ingester import PlayerStatsIngestResult
+from backend.services.flashscore_player_stats_ingester import PlayerStatsIngestResult
 
 NOW = datetime.now(timezone.utc)
 
@@ -111,26 +111,27 @@ class TestHappyPath:
         )
         summary = orchestrator.run(stats_days_back=10)
 
-        fixtures.ingest.assert_called_once_with(days_ahead=7, only_top5=True)
+        # Por defecto, calendario de top 5 + UEFA.
+        fixtures.ingest.assert_called_once_with(days_ahead=7, only_top5=False)
         standings.ingest.assert_called_once_with()
         stats.ingest_recent.assert_called_once_with(
-            days_back=10, only_top5=True, limit_matches=40,
+            days_back=10, only_top5=False, limit_matches=40,
         )
         session.rollback.assert_not_called()
         assert summary.ok is True
         assert summary.fixtures is not None and summary.fs_results is not None
         assert summary.standings is not None and summary.standings.teams_upserted == 20
         assert summary.stats is not None and summary.stats.stats_inserted == 6
-        assert summary.results is None  # Sofascore ya no se ejecuta
 
-    def test_pasa_filtros_de_ligas_al_calendario_y_stats(self) -> None:
+    def test_solo_top5_filtra_el_calendario_pero_no_las_stats(self) -> None:
+        # Los partidos UEFA ya guardados siguen recibiendo stats aunque no se importen nuevos.
         fixtures = _make_fixtures_ingester()
         stats = _make_stats_ingester()
         orchestrator = _orchestrator(
             _make_session(), fixtures_ingester=fixtures, stats_ingester=stats,
         )
-        orchestrator.run(stats_only_top5=False, stats_limit=5)
-        fixtures.ingest.assert_called_once_with(days_ahead=7, only_top5=False)
+        orchestrator.run(stats_only_top5=True, stats_limit=5)
+        fixtures.ingest.assert_called_once_with(days_ahead=7, only_top5=True)
         stats.ingest_recent.assert_called_once_with(
             days_back=120, only_top5=False, limit_matches=5,
         )

@@ -78,6 +78,16 @@ def refresh_one_parlay(session: Session, row: SavedParlay) -> None:
     row.last_graded_at = datetime.now(timezone.utc)
 
 
+def partidos_sin_liquidar(session: Session, user_id: int) -> set[int]:
+    """Partidos de las patas de las apuestas del usuario que aún no están liquidadas."""
+    rows = session.scalars(
+        select(SavedParlay)
+        .where(SavedParlay.user_id == user_id)
+        .where(SavedParlay.overall_result.in_(("pending", "pending_stats"))),
+    ).all()
+    return {int(lg["match_id"]) for r in rows for lg in r.legs_snapshot if lg.get("match_id")}
+
+
 def refresh_all_parlays_for_user(session: Session, user_id: int) -> int:
     rows = session.scalars(
         select(SavedParlay).where(SavedParlay.user_id == user_id).order_by(SavedParlay.id),

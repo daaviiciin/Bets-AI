@@ -30,7 +30,10 @@ from backend.models import Match, MatchStats
 from backend.models.match import MATCH_STATUS_FINISHED
 from backend.scrapers import flashscore as fs
 from backend.services.match_absences_ingester import flashscore_id_from_external_id
-from backend.services.match_results_updater import _names_match, _normalize
+from backend.services.team_name_matching import (
+    basic_names_match as _names_match,
+    basic_normalize_team_name as _normalize,
+)
 
 TOP5_SPORT_KEYS = frozenset({
     "soccer_epl",

@@ -19,11 +19,13 @@ from backend.models import AppUser, SavedParlay
 from backend.services.saved_parlays import (
     beneficio_apuesta,
     combine_products,
+    partidos_sin_liquidar,
     refresh_one_parlay,
     refresh_all_parlays_for_user,
     resumen_apuestas,
     snapshots_from_payload,
 )
+from backend.services.resultados_bajo_demanda import traer_datos_para_corregir
 
 router = APIRouter(prefix="/me/parlays", tags=["mis-apuestas"])
 
@@ -136,22 +138,11 @@ def refresh_all_grades(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Recalcula todas las combinadas desde las tablas ``matches``."""
+    """Recalcula todas las combinadas desde las tablas ``matches``.
 
+    Antes trae de Flashscore los marcadores y stats que falten de las apuestas sin liquidar.
+    """
+
+    traer_datos_para_corregir(db, partidos_sin_liquidar(db, user.id))
     count = refresh_all_parlays_for_user(db, user.id)
     return {"updated_parlays": count}
-
-
-@router.post("/{parlay_id}/refresh-grade", response_model=SavedParlayOut)
-def refresh_one_grade(
-    parlay_id: int,
-    user: AppUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> SavedParlayOut:
-    """Recalcula el resultado de una combinada desde las tablas ``matches``."""
-
-    row = _own_parlay(db, user, parlay_id)
-    refresh_one_parlay(db, row)
-    db.commit()
-    db.refresh(row)
-    return _serialize(row)

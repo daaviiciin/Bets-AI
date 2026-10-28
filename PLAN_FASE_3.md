@@ -32,6 +32,10 @@ se guarda aquí para no perderlo. El estado de cada bloque se lleva en
   Regla de elección (`puntuar_combinada`): con valor → partidos distintos → mayor P conjunta →
   menos patas (no el mayor EV: con un modelo sin calibrar, eso elige sus mayores errores).
   Donde abajo pone "4–6", léase 3–6.
+- **2026-10-27:** nuevo bloque **B14, "Combinada del partido"**: un pick extra aparte con 2–3
+  selecciones de un mismo partido, que puede llevar props de jugador (tiros a puerta preferente,
+  goleador, paradas del portero) como **experimentales**. Cambia la regla "picks globales sin
+  props de jugador" solo para este pick. Detalle y estado en HOJA_DE_RUTA.
 - **2026-10-25 (noche):** B3, B4, B5 (parcial), B7, B8 y B9 hechos; versión v2 activa. Cambios
   respecto al plan: ρ se estima aparte con las λ fijas; la mezcla con el mercado (prevista para
   v3) entra ya, con el peso elegido por el backtest (60 %), porque el cierre de Winamax ganaba al

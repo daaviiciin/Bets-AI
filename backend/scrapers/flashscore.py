@@ -198,8 +198,10 @@ def fetch_fixtures_feed(
         # Flashscore status codes (campo AB):
         #   1 = scheduled, 2 = live (1st half), 3 = finished, 4 = HT,
         #   5 = live (2nd half), 6 = ET, 7 = penalties, 8 = postponed, ...
+        # Solo ``AB``: ``AI÷y`` también sale en partidos en juego, y tomarlo por "terminado"
+        # guardaba marcadores del descanso como finales.
         status_code = rec.get("AB")
-        is_finished = status_code == "3" or rec.get("AI") in {"1", "y"}
+        is_finished = status_code == "3"
         matches.append(FlashscoreMatch(
             match_id=rec["AA"],
             league_full_name=league_context.get("league_full_name"),

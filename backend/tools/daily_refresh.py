@@ -13,7 +13,7 @@ Uso típico (local manual o vía cron / Task Scheduler de Windows)::
 
     python -m backend.tools.daily_refresh
     python -m backend.tools.daily_refresh --stats-days-back 120
-    python -m backend.tools.daily_refresh --stats-limit 10 --stats-all-leagues
+    python -m backend.tools.daily_refresh --stats-limit 10 --solo-top5
 """
 
 from __future__ import annotations
@@ -49,8 +49,8 @@ def main(argv: list[str] | None = None) -> int:
         help="Antigüedad máxima de partidos para el histórico Flashscore (default 120).",
     )
     parser.add_argument(
-        "--stats-all-leagues", action="store_true",
-        help="No filtrar por top-5 al ingerir stats (incluye competiciones europeas).",
+        "--solo-top5", action="store_true",
+        help="Calendario solo de las 5 grandes ligas (por defecto también UEFA).",
     )
     parser.add_argument(
         "--fixtures-days-ahead", type=int, default=7,
@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         summary = orchestrator.run(
             results_days_back=args.results_days_back,
             stats_days_back=args.stats_days_back,
-            stats_only_top5=not args.stats_all_leagues,
+            stats_only_top5=args.solo_top5,
             stats_limit=args.stats_limit,
             fixtures_days_ahead=args.fixtures_days_ahead,
         )

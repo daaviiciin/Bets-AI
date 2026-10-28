@@ -26,10 +26,6 @@ class BasketballRollupSummary:
     team_rows_upserted: int = 0
 
 
-def is_basketball_league(league: League) -> bool:
-    return "basketball" in (league.sport_key or "").lower()
-
-
 def rollup_basketball_team_season_stats(session: Session) -> BasketballRollupSummary:
     """Suma ``bb_points_for/against`` y ``matches_played`` desde marcadores BD.
 

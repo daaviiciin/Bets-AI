@@ -5,7 +5,6 @@ Val# =========================================================
 
 # ---------- Núcleo ----------
 python-dotenv==1.2.4
-requests==2.34.2
 
 # ---------- Backend API (Fase 4) ----------
 fastapi==0.149.0  # trae starlette >= 1.3.1 (CVE multipart/Range/Host corregidos)
@@ -21,23 +20,13 @@ PyJWT==2.15.1
 limits==5.8.0  # rate limiting de la API (backend/app/deps/rate_limit.py)
 
 # ---------- Análisis y modelo (Fase 3) ----------
-pandas==2.2.3
 numpy==2.1.3
 scipy==1.14.1
 
 # ---------- Scraping (Fase 2) ----------
-beautifulsoup4==4.12.3
-lxml==6.1.3
-playwright==1.49.0
 curl_cffi==0.16.3
 websockets==16.1.1  # Socket.IO de Winamax (catálogo completo de partidos)
 pillow==12.3.0  # colores dominantes de los escudos (services/team_crests.py)
-
-# ---------- Automatización (Fase 6) ----------
-apscheduler==3.11.0
-
-# ---------- LLM para explicaciones (Fase 7) ----------
-google-generativeai==0.8.3
 
 # ---------- Calidad de código y tests ----------
 pytest==9.1.1

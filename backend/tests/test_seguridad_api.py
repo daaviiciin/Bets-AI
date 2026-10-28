@@ -116,7 +116,7 @@ class TestArranqueConfig:
 class TestLoginObligatorio:
     @pytest.mark.parametrize(
         "ruta",
-        ["/matches", "/dashboard/graded-odds", "/players?q=ab", "/value-bets",
+        ["/matches", "/matches/1/preview", "/dashboard/graded-odds",
          "/featured-picks/today", "/me/parlays", "/auth/me"],
     )
     def test_sin_token_401(self, crear_cliente, ruta: str) -> None:
@@ -127,8 +127,8 @@ class TestLoginObligatorio:
         # Fase 3: el modelo no sugiere importes (Kelly), así que /profiles ya no existe.
         assert crear_cliente().get("/profiles").status_code == 404
 
-    @pytest.mark.parametrize("ruta", ["/refresh/odds", "/refresh/official", "/refresh",
-                                      "/featured-picks/refresh-grades"])
+    @pytest.mark.parametrize("ruta", ["/refresh/odds", "/featured-picks/refresh-grades",
+                                      "/me/parlays/refresh-grades"])
     def test_post_de_refresh_sin_token_401(self, crear_cliente, ruta: str) -> None:
         assert crear_cliente().post(ruta).status_code == 401
 
@@ -208,6 +208,8 @@ class TestLimiteRefresh:
         from backend.app.api import featured_daily_picks as fp
 
         monkeypatch.setattr(fp, "refresh_all_grading", lambda _db: 0)
+        monkeypatch.setattr(fp, "partidos_de_picks_recientes", lambda _db, _ahora: set())
+        monkeypatch.setattr(fp, "traer_datos_para_corregir", lambda *_a, **_k: False)
         cliente = crear_cliente()
         primero = cliente.post("/featured-picks/refresh-grades", headers=_auth())
         segundo = cliente.post("/featured-picks/refresh-grades", headers=_auth())

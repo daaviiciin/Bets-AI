@@ -8,6 +8,8 @@ from __future__ import annotations
 import pytest
 
 from backend.services.team_name_matching import (
+    basic_names_match,
+    basic_normalize_team_name,
     find_matching_team_id,
     normalize_team_name,
     player_names_match,
@@ -115,3 +117,41 @@ class TestNormalize:
 
     def test_vacio(self):
         assert normalize_team_name(None) == ""
+
+
+class TestBasicNormalizeTeamName:
+    def test_lowercase(self) -> None:
+        assert basic_normalize_team_name("Real Madrid") == "real madrid"
+
+    def test_strips_diacritics(self) -> None:
+        assert basic_normalize_team_name("Atlético") == "atletico"
+
+    def test_drops_common_suffixes(self) -> None:
+        assert basic_normalize_team_name("Barcelona FC") == "barcelona"
+        assert basic_normalize_team_name("Hoffenheim 1899") == "hoffenheim 1899"
+        assert basic_normalize_team_name("SV 07 Elversberg") == "elversberg"
+        assert basic_normalize_team_name("Bayer 04 Leverkusen") == "bayer leverkusen"
+        assert basic_normalize_team_name("AC Milan") == "milan"
+
+    def test_compresses_whitespace(self) -> None:
+        assert basic_normalize_team_name("  PSG   FC  ") == "psg"
+
+    def test_empty_string(self) -> None:
+        assert basic_normalize_team_name("") == ""
+
+
+class TestBasicNamesMatch:
+    def test_exact(self) -> None:
+        assert basic_names_match("real madrid", "real madrid") is True
+
+    def test_substring_either_way(self) -> None:
+        # "Real Madrid CF" en BD vs "Real Madrid" en Winamax
+        assert basic_names_match("real madrid", "real madrid cf") is True
+        assert basic_names_match("real madrid cf", "real madrid") is True
+
+    def test_unrelated(self) -> None:
+        assert basic_names_match("real madrid", "barcelona") is False
+
+    def test_empty_inputs(self) -> None:
+        assert basic_names_match("", "barcelona") is False
+        assert basic_names_match("barcelona", "") is False
