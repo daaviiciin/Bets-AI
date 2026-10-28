@@ -5,6 +5,7 @@ import { finalize } from 'rxjs/operators';
 
 import { destinoSeguro, PARAM_VOLVER } from '../../core/auth.guard';
 import { AuthService } from '../../core/auth.service';
+import { TvLogoRoto } from '../../shared/fx/logo-roto';
 
 /**
  * Entrar. Misma voz que la portada: el rótulo "Bets [AI]" entra en antena (barre con su filete
@@ -12,6 +13,7 @@ import { AuthService } from '../../core/auth.service';
  */
 @Component({
   selector: 'app-login',
+  imports: [TvLogoRoto],
   templateUrl: './login.html',
   styles: `
     .titulo {

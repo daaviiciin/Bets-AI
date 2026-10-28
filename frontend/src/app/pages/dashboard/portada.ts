@@ -11,6 +11,8 @@ import {
   viewChild,
 } from '@angular/core';
 
+import { TvLogoRoto } from '../../shared/fx/logo-roto';
+import { Movimiento } from '../../shared/fx/movimiento';
 import { Icon } from '../../shared/icon';
 import { movimientoReducido } from '../../shared/tv-motion';
 
@@ -118,7 +120,7 @@ const BALON = guionBalon();
  */
 @Component({
   selector: 'app-portada',
-  imports: [Icon],
+  imports: [Icon, TvLogoRoto],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block', '[class.sin-entrada]': '!anima' },
   styles: `
@@ -541,7 +543,7 @@ const BALON = guionBalon();
       <div
         class="relative mx-auto flex h-full max-w-[1440px] flex-col px-4 pb-8 pt-[14svh] sm:px-8 sm:pt-[16svh]"
       >
-        <p class="titulo rotulo flex items-center gap-[0.12em]">
+        <p tvLogoRoto class="titulo rotulo flex w-fit cursor-pointer items-center gap-[0.12em]">
           <span class="tv-guia inline-block" style="--tv-t: 560ms">Bets</span>
           <span
             class="tv-placa skew inline-block bg-tv-ink px-[0.14em] text-tv-night"
@@ -619,6 +621,7 @@ export class Portada {
 
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
+  private readonly movimiento = inject(Movimiento);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private visible = true;
   private siguiente: ReturnType<typeof setTimeout> | null = null;
@@ -702,9 +705,7 @@ export class Portada {
   }
 
   protected bajar(): void {
-    this.destino()?.scrollIntoView({
-      behavior: movimientoReducido() ? 'auto' : 'smooth',
-      block: 'start',
-    });
+    const destino = this.destino();
+    if (destino) this.movimiento.irA(destino);
   }
 }

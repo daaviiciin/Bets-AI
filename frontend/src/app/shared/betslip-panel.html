@@ -20,7 +20,7 @@
     </button>
   </header>
 
-  <div class="flex-1 overflow-y-auto px-5 py-4">
+  <div class="flex-1 overflow-y-auto px-5 py-4" data-lenis-prevent>
     @if (saved() && !slip.count()) {
       <div class="py-10 text-center">
         <app-icon name="check" [size]="32" class="tv-dibuja mx-auto text-tv-go" />

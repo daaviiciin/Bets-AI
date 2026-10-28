@@ -57,6 +57,7 @@ from backend.services.match_absences_ingester import (
 )
 from backend.services.player_season_rollup import rollup_player_season_stats
 from backend.services.season_history_ingester import SeasonHistoryIngester
+from backend.services.escudos_hd import BuscadorEscudosHD
 from backend.services.team_crests import TeamCrestColorizer
 
 
@@ -98,6 +99,7 @@ class DailyRefreshOrchestrator:
         absences_ingester: MatchAbsencesIngester | None = None,
         history_ingester: SeasonHistoryIngester | None = None,
         crest_colorizer: TeamCrestColorizer | None = None,
+        escudos_hd: BuscadorEscudosHD | None = None,
     ) -> None:
         self.session = session
         self.log = log or logging.getLogger(__name__)
@@ -118,6 +120,7 @@ class DailyRefreshOrchestrator:
         )
         self._history_ingester = history_ingester or SeasonHistoryIngester(session, log=self.log)
         self._crest_colorizer = crest_colorizer or TeamCrestColorizer(session, log=self.log)
+        self._escudos_hd = escudos_hd or BuscadorEscudosHD(session, log=self.log)
 
     def run(
         self,
@@ -178,6 +181,11 @@ class DailyRefreshOrchestrator:
             self._crest_colorizer.run(limit=200)
         except Exception as exc:  # noqa: BLE001
             self._fail(summary, "team_crest_colorizer", exc)
+        # Y se busca su escudo HD en Wikipedia (una consulta por equipo nuevo).
+        try:
+            self._escudos_hd.run(limit=200)
+        except Exception as exc:  # noqa: BLE001
+            self._fail(summary, "escudos_hd", exc)
 
         self._step("paso 2/6: resultados Flashscore")
         try:

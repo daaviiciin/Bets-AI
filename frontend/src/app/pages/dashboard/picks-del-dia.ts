@@ -8,7 +8,7 @@ import { BetslipService, type SlipLeg, legKey } from '../../core/betslip.service
 import { fmtCuota, fmtEv, fmtProb, fmtTime } from '../../core/format';
 import { marketLabel, selectionLabel } from '../../core/markets';
 import type { FeaturedDailyPickRow, FeaturedToday, PickLeg } from '../../core/models';
-import { TvEntra } from '../../shared/tv-motion';
+import { TvNiebla } from '../../shared/fx/niebla';
 
 type Estado = 'cargando' | 'preparando' | 'listo' | 'sin_partidos' | 'error';
 
@@ -21,7 +21,7 @@ type Estado = 'cargando' | 'preparando' | 'listo' | 'sin_partidos' | 'error';
  */
 @Component({
   selector: 'app-picks-del-dia',
-  imports: [RouterLink, TvEntra],
+  imports: [RouterLink, TvNiebla],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   styles: `
@@ -98,18 +98,19 @@ type Estado = 'cargando' | 'preparando' | 'listo' | 'sin_partidos' | 'error';
             </p>
           }
 
-          <div class="mt-4 grid gap-6 xl:grid-cols-[1fr_24rem]">
+          <!-- Los picks emergen de la niebla (TvNiebla): cada [data-niebla] se condensa del humo. -->
+          <div tvNiebla class="mt-4 grid gap-6 xl:grid-cols-[1fr_24rem]">
             <div>
               @if (p.legs.length) {
                 <ul class="grid gap-2 sm:grid-cols-2">
                   @for (l of p.legs; track key(l)) {
-                    <li tvEntra="pick" [tvPaso]="40">
+                    <li data-niebla>
                       <button
                         #b
                         type="button"
                         (click)="toggle(l, b)"
                         [attr.aria-pressed]="slip.has(key(l))"
-                        class="linea tv-barrido h-full"
+                        class="linea h-full"
                         [class.con-valor]="!l.sin_valor"
                         [class.linea-on]="slip.has(key(l))"
                       >
@@ -147,7 +148,7 @@ type Estado = 'cargando' | 'preparando' | 'listo' | 'sin_partidos' | 'error';
               }
             </div>
 
-            <aside class="h-fit border border-tv-line bg-tv-panel p-4" aria-labelledby="combo-titulo">
+            <aside data-niebla class="h-fit border border-tv-line bg-tv-panel p-4" aria-labelledby="combo-titulo">
               @if (p.combo; as c) {
                 <div class="flex items-baseline justify-between gap-4">
                   <h3 id="combo-titulo" class="font-display text-base font-bold uppercase tracking-wide">

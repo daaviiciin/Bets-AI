@@ -318,7 +318,7 @@ class MatchPreviewService:
         return TeamPreview(
             team_id=team.id,
             name=team.name,
-            logo_url=team.logo_url,
+            logo_url=team.escudo_url,
             primary_color=team.primary_color,
             secondary_color=team.secondary_color,
             overall=average(samples),

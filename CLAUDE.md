@@ -78,7 +78,7 @@ al abrirse (`POST /featured-picks/today`). Una vez guardados no cambian (trigger
 - **No leas ni muestres `.env`** (contiene claves). Para ver qué variables existen usa `.env.example`.
 - No lances scrapers contra Winamax/Flashscore en bucle ni para probar: usa los tests con
   HTML/JSON de ejemplo. Los feeds son internos y pueden bloquear por IP.
-- El README está desactualizado (endpoints retirados, solo 3 páginas, sin baloncesto). El código manda.
+- El README se puso al día el 2026-10-28; si no cuadra con el código, el código manda.
 - La API solo expone lo que usa el frontend (depuración del 2026-10-28). Antes de añadir un endpoint,
   un servicio o un script, comprueba que algo lo va a llamar.
 - Existe soporte inicial de **baloncesto** (`basketball_model.py`, migración `f8a2c1eeb9aa`).

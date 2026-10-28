@@ -6,7 +6,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class LeagueOut(BaseModel):
@@ -23,7 +23,8 @@ class TeamOut(BaseModel):
 
     id: int
     name: str
-    logo_url: str | None = None
+    # Desde el ORM se lee ``Team.escudo_url`` (el HD de Wikipedia si lo hay; si no, Flashscore).
+    logo_url: str | None = Field(None, validation_alias=AliasChoices("escudo_url", "logo_url"))
     primary_color: str | None = None
     secondary_color: str | None = None
 

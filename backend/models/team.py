@@ -6,9 +6,10 @@ competiciones (LaLiga, Champions...), por eso no atamos Team a una sola League.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, UniqueConstraint
+from sqlalchemy import DateTime, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.models.base import Base, TimestampMixin
@@ -35,6 +36,13 @@ class Team(Base, TimestampMixin):
     # Escudo de Flashscore (``OA``/``OB`` del calendario) y sus dos colores dominantes
     # (``#rrggbb``), calculados una vez a partir de la imagen (``services/team_crests.py``).
     logo_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Escudo en alta calidad (Wikipedia, casi siempre SVG; ``services/escudos_hd.py``). El de
+    # Flashscore mide 30×30 px: la API sirve este si existe. ``logo_hd_checked_at`` marca que
+    # ya se buscó (aunque no se encontrara) para no repetir la consulta en cada refresco.
+    logo_hd_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    logo_hd_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
     primary_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
     secondary_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
 
@@ -46,6 +54,11 @@ class Team(Base, TimestampMixin):
         back_populates="away_team",
         foreign_keys="Match.away_team_id",
     )
+
+    @property
+    def escudo_url(self) -> str | None:
+        """El escudo que se enseña: el HD si lo hay; si no, el de Flashscore."""
+        return self.logo_hd_url or self.logo_url
 
     def __repr__(self) -> str:
         return f"<Team id={self.id} name={self.name!r}>"
