@@ -1,10 +1,11 @@
-Val# =========================================================
+# =========================================================
 #  Bets AI - Dependencias Python
 #  Instalar con: pip install -r requirements.txt
 # =========================================================
 
 # ---------- Núcleo ----------
 python-dotenv==1.2.4
+tzdata==2026.6  # zoneinfo en Windows no trae la base IANA (Europe/Madrid)
 
 # ---------- Backend API (Fase 4) ----------
 fastapi==0.149.0  # trae starlette >= 1.3.1 (CVE multipart/Range/Host corregidos)

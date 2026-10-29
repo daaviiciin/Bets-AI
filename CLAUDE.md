@@ -21,8 +21,9 @@ Scripts CLI: `python -m backend.tools.<nombre>` desde la raíz. Los de la tarea 
 (backtest + calibración + `--promover` del modelo v2), `diagnostico_modelo`, `set_password`,
 `reparar_partidos_en_directo`.
 
-**Python:** el `.venv` usa 3.10 y `start_bets_ai.bat` arranca la API con él (antes usaba `py -3.10`
-global, al que le faltaban paquetes); el README dice 3.12+. Usa siempre el `.venv`. No cambies la
+**Python:** el `.venv` usa **3.13** (cambio de PC del 2026-10-29) y `start_bets_ai.bat` arranca la API
+con él; si falta el `.venv` lo crea con `py -3.13` e instala `requirements.txt`. `tzdata` es
+obligatorio en Windows (`zoneinfo` no trae la base IANA). Usa siempre el `.venv`. No cambies la
 versión del `.bat` ni del README sin preguntar.
 
 ## Arquitectura

@@ -105,7 +105,7 @@ alembic upgrade head
 ### Arrancar en desarrollo (3 terminales)
 
 Como alternativa, en Windows puedes ejecutar `start_bets_ai.bat` desde la raiz
-del proyecto. El script usa Python 3.10, comprueba Docker, levanta PostgreSQL, aplica las
+del proyecto. El script usa Python 3.13 (crea el `.venv` si falta), comprueba Docker, levanta PostgreSQL, aplica las
 migraciones y abre el backend y el frontend en terminales separadas.
 
 ```powershell

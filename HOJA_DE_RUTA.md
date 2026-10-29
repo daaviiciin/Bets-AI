@@ -770,6 +770,8 @@ Partidos terminados (15-ago → 20-oct-2026) y cobertura de `match_stats` (los d
 
 ## Otros avisos
 
-- Python: el `.venv` se recreó con **3.10** el 2026-10-14 (el anterior era 3.14 con paquetes de 3.12
-  y no arrancaba). Coincide con `start_bets_ai.bat`. El README sigue diciendo 3.12+.
+- Python: el `.venv` se recreó con **3.13** el 2026-10-29 al cambiar de PC (antes 3.10). Coincide con
+  `start_bets_ai.bat`, que ahora crea el `.venv`, instala dependencias, arranca Docker Desktop y
+  espera al healthcheck de Postgres. Se añadió `tzdata` a `requirements.txt` (sin él, `zoneinfo`
+  falla en Windows).
 - La carpeta `2 DAM/Bets-AI` (con guion) solo contiene una carpeta `.git` vacía; el proyecto es `2 DAM/Bets AI`.
