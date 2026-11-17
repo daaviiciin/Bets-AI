@@ -21,10 +21,13 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from datetime import datetime, timezone
 
 from backend.app.cli_utils import force_utf8_stdio
 from backend.app.config import get_settings
 from backend.app.database import get_session_factory
+from backend.models import RefreshRun
+from backend.models.refresh_run import REFRESH_ORIGEN_CLI
 from backend.services.daily_refresh import DailyRefreshOrchestrator
 
 
@@ -70,6 +73,10 @@ def main(argv: list[str] | None = None) -> int:
 
     SessionLocal = get_session_factory()
     with SessionLocal() as session:
+        # Se apunta en refresh_runs: así la app sabe que no hace falta otro al abrirse.
+        run = RefreshRun(origen=REFRESH_ORIGEN_CLI, started_at=datetime.now(timezone.utc))
+        session.add(run)
+        session.commit()
         orchestrator = DailyRefreshOrchestrator(session, log=log)
         summary = orchestrator.run(
             results_days_back=args.results_days_back,
@@ -78,6 +85,10 @@ def main(argv: list[str] | None = None) -> int:
             stats_limit=args.stats_limit,
             fixtures_days_ahead=args.fixtures_days_ahead,
         )
+        run.finished_at = summary.finished_at
+        run.ok = summary.ok
+        run.errores = summary.errors or None
+        session.commit()
 
     log.info("=" * 90)
     log.info("PIPELINE DIARIO — RESUMEN FINAL")

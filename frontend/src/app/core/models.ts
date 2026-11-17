@@ -280,6 +280,17 @@ export interface FeaturedDailyPickRow {
   created_at: string;
 }
 
+/** `GET/POST /refresh/auto`: pipeline completo (Flashscore + Winamax + picks) al abrir la app. */
+export interface RefreshAuto {
+  en_curso: boolean;
+  /** Solo en el POST que acaba de lanzarlo. */
+  lanzado: boolean;
+  ultimo_inicio: string | null;
+  ultimo_fin: string | null;
+  ultimo_ok: boolean | null;
+  ultimo_errores: string[];
+}
+
 /** `GET/POST /featured-picks/today`. */
 export interface FeaturedToday {
   estado: 'listo' | 'pendiente' | 'sin_partidos';

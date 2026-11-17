@@ -15,9 +15,12 @@ class FeaturedDailyPick(Base, TimestampMixin):
     """Una fila por día civil: snapshot de picks y corrección posterior.
 
     ``rules_version`` ``v1``: filas antiguas (día UTC, hasta 3 simples de confianza alta).
-    ``v2``: día de Madrid, simples con cuota 1,30–1,70 y una combinada 3–6. En las ``v2`` un
-    trigger de PostgreSQL impide cambiar los picks una vez guardados: solo cambia su corrección
-    (``grading_snapshot`` y ``last_graded_at``).
+    ``v2``: día de Madrid, simples con cuota 1,30–1,70 y una combinada 3–6.
+    ``v3`` (2026-11-05): las mismas simples con como mucho dos del mismo grupo de mercado, y una
+    combinada 4–6 de 3 a 5 patas de 1,18 a 1,60 con alguna doble oportunidad (el perfil del
+    usuario); sin "menos goles", "ambos marcan: No" ni mitad con más goles.
+    Desde la ``v2`` un trigger de PostgreSQL impide cambiar los picks una vez guardados: solo
+    cambia su corrección (``grading_snapshot`` y ``last_graded_at``).
     """
 
     __tablename__ = "featured_daily_picks"
@@ -29,6 +32,9 @@ class FeaturedDailyPick(Base, TimestampMixin):
     picks_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
     #: Combinada del día (``{"legs": [...], "combined_odds", "joint_probability", ...}``) o null.
     combo_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    #: Combinada del partido (B14, desde 2026-11-13): 2–3 selecciones de un mismo partido con
+    #: cuota 2,5–5, que puede llevar props experimentales. Aparte de simples y combinada.
+    match_combo_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     grading_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     last_graded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -38,5 +44,5 @@ class FeaturedDailyPick(Base, TimestampMixin):
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: Motivos y recuentos de la selección (cuántos candidatos, por qué hay menos de 3…).
     selection_meta: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    #: SHA-256 del JSON canónico de simples + combinada, para comprobar que no se tocaron.
+    #: SHA-256 del JSON canónico de simples + combinada (+ combinada del partido si la hay).
     picks_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)

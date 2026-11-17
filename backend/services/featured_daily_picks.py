@@ -7,6 +7,11 @@ actualizan antes (~30 s). Una vez guardados, un trigger de PostgreSQL impide cam
 cambia su corrección (``grading_snapshot``).
 
 La selección (bandas de cuota, combinada…) es pura y está en ``daily_picks_v2``.
+
+Desde el 2026-11-13 (reglas ``v4``) hay además una **combinada del partido** (B14): 2–3
+selecciones de un mismo partido con cuota 2,5–5, que puede llevar props de jugador
+**experimentales** (solo de las familias que el backtest de props no deja peor que la tasa base).
+Es un pick aparte: no cambia las simples ni la combinada, y se mide por separado.
 """
 
 from __future__ import annotations
@@ -33,7 +38,8 @@ from backend.services.graded_odds_service import (
     list_graded_winamax_odds,
 )
 from backend.services.model_calibration_v2 import familia as familia_de_mercado
-from backend.services.model_dataset import UEFA_SPORT_KEYS
+from backend.services.model_dataset import puede_ir_a_prorroga
+from backend.services.player_props_model import MERCADOS_PROPS, familia_prop, lado_prop
 from backend.services.model_registry import MIN_PARTIDOS_PICK, ModeloActivo, modelo_activo
 from backend.services.saved_parlay_grading import (
     cargar_stats_partidos,
@@ -42,7 +48,7 @@ from backend.services.saved_parlay_grading import (
 )
 
 MADRID = ZoneInfo("Europe/Madrid")
-RULES_VERSION = "v2"
+RULES_VERSION = "v4"
 #: Sin versión v2 activa, las P salen del Poisson actual.
 MODEL_VERSION_LEGACY = "legacy-v1"
 # Alguien espera delante de la pantalla: descargas en paralelo, como el botón "Actualizar cuotas".
@@ -105,7 +111,8 @@ def candidatas_desde_lineas(
     """Líneas que pueden competir: con P del modelo, sin props de jugador, dentro de la ventana.
 
     Con el modelo v2, además: solo sus líneas, de familias habilitadas, con los dos equipos con
-    bastantes partidos, mezcladas con el mercado y de ligas domésticas (UEFA tiene pocos datos).
+    bastantes partidos y mezcladas con el mercado. UEFA entra (decisión del 2026-11-04) salvo los
+    partidos que pueden ir a prórroga: el marcador guardado la incluiría y el modelo es a 90'.
     """
     r = reglas or ReglasModelo()
     out: list[dp.Candidata] = []
@@ -115,6 +122,8 @@ def candidatas_desde_lineas(
             continue
         if ln.player_name or ln.market_key not in dp.MERCADOS_PICKS or not ln.recommendable:
             continue
+        if dp.es_menos_goles(ln.market_key, ln.outcome_name):
+            continue
         if not (desde <= _aware(ln.commence_time) < hasta):
             continue
         if ln.model_version != r.model_version:
@@ -123,7 +132,9 @@ def candidatas_desde_lineas(
             fam = familia_de_mercado(ln.market_key)
             if r.familias is not None and fam not in r.familias:
                 continue
-            if (ln.partidos_min or 0) < r.min_partidos or ln.league_sport_key in UEFA_SPORT_KEYS:
+            if (ln.partidos_min or 0) < r.min_partidos:
+                continue
+            if puede_ir_a_prorroga(ln.league_sport_key, _aware(ln.commence_time)):
                 continue
             if r.exigir_mercado and not ln.con_mercado:
                 continue
@@ -141,6 +152,59 @@ def candidatas_desde_lineas(
                 p_model=p,
                 lambda_home=ln.lambda_home,
                 lambda_away=ln.lambda_away,
+            )
+        )
+    return out
+
+
+def candidatas_props_desde_lineas(
+    lineas: list[GradedOddsLine],
+    *,
+    desde: datetime,
+    hasta: datetime,
+    modelo: ModeloActivo | None,
+) -> list[dp.Candidata]:
+    """Props de jugador que pueden entrar (experimentales) en la combinada del partido.
+
+    Solo con el modelo v2: líneas "más de" con P del modelo de props, de familias habilitadas
+    por el backtest (``modelo.familias_props``), con la P condicionada al marcador (B14d), los
+    dos equipos con bastantes partidos y sin partidos que puedan ir a prórroga.
+    """
+    if modelo is None or not modelo.familias_props:
+        return []
+    out: list[dp.Candidata] = []
+    for ln in lineas:
+        p = ln.model_probability
+        if p is None or not (Decimal("0") < p < Decimal("1")) or not ln.recommendable:
+            continue
+        if not ln.player_name or ln.market_key not in MERCADOS_PROPS or ln.prop_condicional is None:
+            continue
+        if familia_prop(ln.market_key) not in modelo.familias_props:
+            continue
+        if lado_prop(ln.market_key, ln.outcome_name) != "over":
+            continue
+        if ln.model_version != modelo.tag or (ln.partidos_min or 0) < MIN_PARTIDOS_PICK:
+            continue
+        if not (desde <= _aware(ln.commence_time) < hasta):
+            continue
+        if puede_ir_a_prorroga(ln.league_sport_key, _aware(ln.commence_time)):
+            continue
+        out.append(
+            dp.Candidata(
+                match_id=ln.match_id,
+                home_team=ln.home_team,
+                away_team=ln.away_team,
+                league=ln.league,
+                commence_time=_aware(ln.commence_time),
+                market_key=ln.market_key,
+                outcome_name=ln.outcome_name,
+                outcome_point=ln.outcome_point,
+                offered_odds=ln.offered_odds,
+                p_model=p,
+                lambda_home=ln.lambda_home,
+                lambda_away=ln.lambda_away,
+                player_name=ln.player_name,
+                prop_condicional=ln.prop_condicional,
             )
         )
     return out
@@ -254,7 +318,7 @@ def generar_picks_v2(
 
     combo_json: dict[str, Any] | None = None
     combo = dp.elegir_combinada(
-        cands,
+        dp.sin_selecciones(cands, (s.candidata for s in simples)),
         total_min=Decimal(str(cfg.picks_combo_odds_min)),
         total_max=Decimal(str(cfg.picks_combo_odds_max)),
     )
@@ -271,15 +335,34 @@ def generar_picks_v2(
             f"{cfg.picks_combo_odds_max:g} ni juntando selecciones de un mismo partido"
         )
 
+    # Combinada del partido (pick aparte): marcador + props experimentales; sin repetir ninguna
+    # selección de las simples (la misma regla que la combinada normal).
+    partido_json: dict[str, Any] | None = None
+    props = candidatas_props_desde_lineas(lineas, desde=desde, hasta=hasta, modelo=modelo)
+    meta["candidatas_props"] = len(props)
+    partido = dp.elegir_combinada_del_partido(
+        dp.sin_selecciones([*cands, *props], (s.candidata for s in simples)),
+    )
+    if partido is not None:
+        partido_json = dp.combinada_del_partido_a_dict(
+            partido, model_version=version, odds_captured_at=tomas.get(partido.patas[0].match_id),
+        )
+    else:
+        meta["motivo_combinada_partido"] = (
+            f"Ningún partido llega a una cuota de {_fmt_cuota(dp.PARTIDO_TOTAL_MIN)} a "
+            f"{_fmt_cuota(dp.PARTIDO_TOTAL_MAX)} con 2–3 selecciones"
+        )
+
     fila = FeaturedDailyPick(
         pick_date=dia_de_picks(ahora),
         picks_json=picks_json,
         combo_json=combo_json,
+        match_combo_json=partido_json,
         rules_version=RULES_VERSION,
         model_version=version,
         generated_at=ahora,
         selection_meta=meta,
-        picks_sha256=dp.huella_picks(picks_json, combo_json),
+        picks_sha256=dp.huella_picks(picks_json, combo_json, partido_json),
         grading_snapshot=None,
         last_graded_at=None,
     )
@@ -289,12 +372,36 @@ def generar_picks_v2(
     return fila
 
 
+def _fmt_cuota(d: Decimal) -> str:
+    return format(d.quantize(Decimal("0.01")), "f").replace(".", ",")
+
+
 @dataclass(frozen=True)
 class PicksDeHoy:
     estado: Literal["listo", "sin_partidos"]
     fila: FeaturedDailyPick | None = None
     motivo: str | None = None
     cuotas_actualizadas: bool = False
+
+
+MOTIVO_SIN_PARTIDOS = "Hoy no quedan partidos por empezar"
+
+
+def consultar_picks_de_hoy(session: Session, ahora: datetime | None = None) -> PicksDeHoy | None:
+    """Lo que se sabe de los picks de hoy sin generar nada (``GET /today``).
+
+    ``None`` = hay partidos y aún no hay picks: toca ``asegurar_picks_de_hoy``. Sin partidos se
+    responde aquí mismo para que la portada no gaste en balde el cupo del ``POST`` (1 cada 3 min)
+    y la siguiente apertura no acabe en 429.
+    """
+    ahora = ahora or datetime.now(timezone.utc)
+    fila = fila_del_dia(session, dia_de_picks(ahora))
+    if fila is not None:
+        return PicksDeHoy("listo", fila)
+    desde, hasta = ventana_del_dia(ahora, get_settings().picks_kickoff_margin_minutes)
+    if not partidos_del_dia(session, desde, hasta):
+        return PicksDeHoy("sin_partidos", motivo=MOTIVO_SIN_PARTIDOS)
+    return None
 
 
 def asegurar_picks_de_hoy(
@@ -320,7 +427,7 @@ def asegurar_picks_de_hoy(
     desde, hasta = ventana_del_dia(ahora, cfg.picks_kickoff_margin_minutes)
     ids = partidos_del_dia(session, desde, hasta)
     if not ids:
-        return PicksDeHoy("sin_partidos", motivo="Hoy no quedan partidos por empezar")
+        return PicksDeHoy("sin_partidos", motivo=MOTIVO_SIN_PARTIDOS)
 
     actualizadas = False
     if actualizar_cuotas and cuotas_viejas(
@@ -358,12 +465,13 @@ def _grade_legs(
 def _refresh_one_row(session: Session, row: FeaturedDailyPick) -> None:
     """Liquida simples y combinada con los marcadores; solo toca ``grading_snapshot``."""
     combo_legs = list((row.combo_json or {}).get("legs") or [])
-    if not row.picks_json and not combo_legs:
+    partido_legs = list((row.match_combo_json or {}).get("legs") or [])
+    if not row.picks_json and not combo_legs and not partido_legs:
         row.grading_snapshot = None
         row.last_graded_at = datetime.now(timezone.utc)
         return
 
-    mids = sorted({int(lg["match_id"]) for lg in [*row.picks_json, *combo_legs]})
+    mids = sorted({int(lg["match_id"]) for lg in [*row.picks_json, *combo_legs, *partido_legs]})
     stmt = (
         select(Match)
         .where(Match.id.in_(mids))
@@ -378,6 +486,12 @@ def _refresh_one_row(session: Session, row: FeaturedDailyPick) -> None:
         snapshot["combo"] = {
             "legs": graded_combo,
             "result": overall_from_leg_results([lg["result"] for lg in graded_combo]),
+        }
+    if partido_legs:
+        graded_partido = _grade_legs(partido_legs, by_mid, stats)
+        snapshot["match_combo"] = {
+            "legs": graded_partido,
+            "result": overall_from_leg_results([lg["result"] for lg in graded_partido]),
         }
     row.grading_snapshot = snapshot
     row.last_graded_at = datetime.now(timezone.utc)
@@ -396,7 +510,11 @@ def partidos_de_picks_recientes(session: Session, ahora: datetime, dias: int = 7
     return {
         int(lg["match_id"])
         for r in rows
-        for lg in [*r.picks_json, *((r.combo_json or {}).get("legs") or [])]
+        for lg in [
+            *r.picks_json,
+            *((r.combo_json or {}).get("legs") or []),
+            *((r.match_combo_json or {}).get("legs") or []),
+        ]
     }
 
 
@@ -427,6 +545,40 @@ def combinada_corregida(row: FeaturedDailyPick) -> dict[str, Any] | None:
     if not graded:
         return {**row.combo_json, "result": "pending"}
     return {**row.combo_json, "legs": graded["legs"], "result": graded["result"]}
+
+
+def combinada_del_partido_corregida(row: FeaturedDailyPick) -> dict[str, Any] | None:
+    """Combinada del partido guardada con sus patas liquidadas y ``result``."""
+    if not row.match_combo_json:
+        return None
+    graded = (row.grading_snapshot or {}).get("match_combo")
+    if not graded:
+        return {**row.match_combo_json, "result": "pending"}
+    return {**row.match_combo_json, "legs": graded["legs"], "result": graded["result"]}
+
+
+def metricas_combinada_del_partido(combos: list[dict[str, Any]]) -> dict[str, Any]:
+    """Acierto de las combinadas del partido (todas, con y sin props) y de sus patas de props,
+    por familia. Se mide aparte del resto de picks: los props son experimentales."""
+    def resumen(resultados: list[str]) -> dict[str, Any]:
+        c = _cuenta(resultados)
+        return {**c, "rate_pct": _tasa(c["hits"], c["misses"])}
+
+    con_props = [c for c in combos if c.get("experimental")]
+    sin_props = [c for c in combos if not c.get("experimental")]
+    patas_props: dict[str, list[str]] = {}
+    for c in combos:
+        for lg in c.get("legs") or []:
+            if lg.get("experimental"):
+                fam = familia_prop(str(lg.get("market_key") or "")) or "otros"
+                patas_props.setdefault(fam, []).append(str(lg.get("result") or "pending"))
+    return {
+        "total": len(combos),
+        **resumen([str(c.get("result") or "pending") for c in combos]),
+        "con_props": resumen([str(c.get("result") or "pending") for c in con_props]),
+        "sin_props": resumen([str(c.get("result") or "pending") for c in sin_props]),
+        "patas_props": {fam: resumen(res) for fam, res in sorted(patas_props.items())},
+    }
 
 
 def _cuenta(resultados: list[str]) -> dict[str, int]:
@@ -493,6 +645,9 @@ def aggregate_leg_metrics(session: Session) -> dict[str, Any]:
         "combo_pending": combo["pending"],
         "combo_rate_pct": _tasa(combo["hits"], combo["misses"]),
         "por_modelo": resumen_modelos,
+        "combinada_partido": metricas_combinada_del_partido(
+            [c for c in (combinada_del_partido_corregida(row) for row in rows) if c is not None],
+        ),
     }
 
 
@@ -505,7 +660,11 @@ __all__ = [
     "aggregate_leg_metrics",
     "asegurar_picks_de_hoy",
     "candidatas_desde_lineas",
+    "candidatas_props_desde_lineas",
     "combinada_corregida",
+    "combinada_del_partido_corregida",
+    "metricas_combinada_del_partido",
+    "consultar_picks_de_hoy",
     "cuotas_viejas",
     "dia_de_picks",
     "fila_del_dia",

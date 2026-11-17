@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "bets-ai": {
+      "type": "stdio",
+      "command": ".venv/Scripts/python.exe",
+      "args": ["-m", "backend.mcp_server"],
+      "env": {
+        "PYTHONPATH": "${CLAUDE_PROJECT_DIR:-.}"
+      }
+    }
+  }
+}

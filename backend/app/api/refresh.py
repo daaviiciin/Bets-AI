@@ -1,7 +1,7 @@
 """Endpoint del botón "Actualizar cuotas" del dashboard (solo Winamax).
 
-El resto del refresco (calendario, resultados, stats, bajas) lo hace la tarea programada con
-``python -m backend.tools.daily_refresh``, no la API.
+El resto del refresco (calendario, resultados, stats, bajas) lo hace el pipeline completo: al
+abrir la app si los datos están viejos (``refresh_auto.py``) o la tarea programada.
 """
 
 from __future__ import annotations
@@ -9,12 +9,13 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.app.config import get_settings
 from backend.app.database import get_db
+from backend.services.refresco_auto import refresco_auto
 from backend.services.winamax_odds_ingester import WinamaxIngestResult, WinamaxOddsIngester
 
 router = APIRouter(prefix="/refresh", tags=["refresh"])
@@ -63,8 +64,13 @@ def refresh_odds(
 
     Es lo que usa el botón del dashboard. Pulsaciones seguidas no repiten los partidos que se
     acaban de leer (``skip_fresh_minutes``). Stats, resultados, clasificación y bajas los trae
-    la tarea programada (09/15/21 h).
+    el pipeline completo (al abrir la app o la tarea programada).
     """
+    if refresco_auto.en_curso:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Se están actualizando todos los datos (las cuotas van incluidas).",
+        )
     ingester = WinamaxOddsIngester(
         db, log=log, settings=get_settings(), fetch_workers=INTERACTIVE_FETCH_WORKERS,
     )

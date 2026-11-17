@@ -45,8 +45,9 @@ migrations/   Alembic
 Flujo de datos: `tools/daily_refresh` → Flashscore (calendario, resultados, clasificación, stats de
 equipo/jugador, bajas: `services/daily_refresh.py`) → `tools/import_winamax_props` (cuotas; los props
 se enlazan con los jugadores de Flashscore) → `graded_odds_service` calcula P(modelo) y EV →
-`GET /dashboard/graded-odds`. Desde la app solo se refrescan cuotas (`POST /refresh/odds`, botón del
-dashboard). Sofascore (`403` desde 2026-10) y The Odds API se retiraron del código el 2026-10-28; las
+`GET /dashboard/graded-odds`. Desde la app: el botón del dashboard refresca solo cuotas
+(`POST /refresh/odds`) y, al abrirla con sesión, `POST /refresh/auto` lanza en segundo plano el
+pipeline completo si los datos están viejos (`services/refresco_auto.py`, tabla `refresh_runs`). Sofascore (`403` desde 2026-10) y The Odds API se retiraron del código el 2026-10-28; las
 columnas que dejaron en BD (`sofascore_event_id`, `snapshots.source`…) siguen ahí.
 Refresh automático: tarea de Windows → `refresh_programado.ps1` (hora fijada en UTC: 09/15/21 h en
 verano, 08/14/20 h en invierno; log en `logs/`). Con el portátil en suspensión se pierden tandas:
@@ -83,6 +84,21 @@ al abrirse (`POST /featured-picks/today`). Una vez guardados no cambian (trigger
 - La API solo expone lo que usa el frontend (depuración del 2026-10-28). Antes de añadir un endpoint,
   un servicio o un script, comprueba que algo lo va a llamar.
 - Existe soporte inicial de **baloncesto** (`basketball_model.py`, migración `f8a2c1eeb9aa`).
+
+## Chat con los datos (MCP)
+
+`backend/mcp_server/` es un servidor MCP local por **stdio y de solo lectura** (SDK `mcp` 2.3.0)
+que Claude Code arranca solo a partir de `.mcp.json` (`.venv/Scripts/python.exe -m backend.mcp_server`).
+Solo necesita PostgreSQL levantado (no hace falta uvicorn). Al abrir Claude Code en el repo, aprueba
+el servidor `bets-ai` cuando lo pida (o en `/mcp`); `/mcp` muestra su estado y sus 17 herramientas
+(búsqueda de equipo/jugador/partido, stats de equipo, jugador y partido, clasificación, bajas,
+enfrentamientos, cuotas con valor, previa, picks, transparencia y mis apuestas).
+- Nada a stdout: logging a stderr y **nunca** `force_utf8_stdio()` ni `print` en ese paquete.
+- Sin red ni escritura: sesiones con `postgresql_readonly`; la previa usa un `fetch_players` que
+  falla; no se llama a `asegurar_picks_de_hoy` ni a nada que haga `commit`.
+- `CHAT_MIS_APUESTAS_ENABLED=false` quita «Mis apuestas»; `CHAT_USUARIO` elige el usuario.
+- Probarlo a mano: `npx @modelcontextprotocol/inspector .venv/Scripts/python.exe -m backend.mcp_server`
+  o un cliente stdio del SDK. Tests: `backend/tests/test_mcp_server.py`.
 
 ## Skills para este proyecto
 

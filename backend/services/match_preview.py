@@ -211,6 +211,51 @@ def _num(v) -> float | None:
     return float(v) if v is not None else None
 
 
+def partidos_con_stats(
+    session: Session, team_id: int, *, desde: datetime, hasta: datetime,
+) -> list[tuple[Match, MatchStats | None]]:
+    """Partidos terminados del equipo en ``[desde, hasta)``, del más nuevo al más viejo, con sus
+    stats (``None`` si Flashscore no las dio). Rivales cargados (``home_team``/``away_team``)."""
+    return [
+        (m, st)
+        for m, st in session.execute(
+            select(Match, MatchStats)
+            .outerjoin(
+                MatchStats,
+                (MatchStats.match_id == Match.id) & (MatchStats.team_id == team_id),
+            )
+            .where(or_(Match.home_team_id == team_id, Match.away_team_id == team_id))
+            .where(Match.status == MATCH_STATUS_FINISHED)
+            .where(Match.home_score.is_not(None))
+            .where(Match.commence_time >= desde)
+            .where(Match.commence_time < hasta)
+            .options(joinedload(Match.home_team), joinedload(Match.away_team))
+            .order_by(Match.commence_time.desc())
+        ).all()
+    ]
+
+
+def muestra_de_partido(m: Match, st: MatchStats | None, team_id: int) -> TeamSample:
+    """Un partido jugado reducido a la muestra del equipo ``team_id`` (para :func:`average`)."""
+    at_home = m.home_team_id == team_id
+    return TeamSample(
+        is_home=at_home,
+        goals_for=m.home_score if at_home else m.away_score,
+        goals_against=m.away_score if at_home else m.home_score,
+        xg=_num(st.xg) if st else None,
+        shots=_num(st.shots_total) if st else None,
+        shots_on_target=_num(st.shots_on_target) if st else None,
+        corners=_num(st.corners) if st else None,
+        yellow_cards=_num(st.yellow_cards) if st else None,
+        goals_1h=_num(st.goals_1h) if st else None,
+        goals_2h=_num(st.goals_2h) if st else None,
+        corners_1h=_num(st.corners_1h) if st else None,
+        corners_2h=_num(st.corners_2h) if st else None,
+        cards_1h=_num(st.yellow_cards_1h) if st else None,
+        cards_2h=_num(st.yellow_cards_2h) if st else None,
+    )
+
+
 class MatchPreviewService:
     def __init__(self, session: Session, *, lineups: MatchLineupService | None = None) -> None:
         self.session = session
@@ -245,20 +290,7 @@ class MatchPreviewService:
 
     def _team(self, match: Match, team: Team, *, is_home: bool, lineup: TeamLineup) -> TeamPreview:
         since = season_start(match.commence_time)
-        rows = self.session.execute(
-            select(Match, MatchStats)
-            .outerjoin(
-                MatchStats,
-                (MatchStats.match_id == Match.id) & (MatchStats.team_id == team.id),
-            )
-            .where(or_(Match.home_team_id == team.id, Match.away_team_id == team.id))
-            .where(Match.status == MATCH_STATUS_FINISHED)
-            .where(Match.home_score.is_not(None))
-            .where(Match.commence_time >= since)
-            .where(Match.commence_time < match.commence_time)
-            .options(joinedload(Match.home_team), joinedload(Match.away_team))
-            .order_by(Match.commence_time.desc())
-        ).all()
+        rows = partidos_con_stats(self.session, team.id, desde=since, hasta=match.commence_time)
 
         samples: list[TeamSample] = []
         form: list[FormMatch] = []
@@ -266,20 +298,7 @@ class MatchPreviewService:
             at_home = m.home_team_id == team.id
             gf = m.home_score if at_home else m.away_score
             ga = m.away_score if at_home else m.home_score
-            samples.append(TeamSample(
-                is_home=at_home, goals_for=gf, goals_against=ga,
-                xg=_num(st.xg) if st else None,
-                shots=_num(st.shots_total) if st else None,
-                shots_on_target=_num(st.shots_on_target) if st else None,
-                corners=_num(st.corners) if st else None,
-                yellow_cards=_num(st.yellow_cards) if st else None,
-                goals_1h=_num(st.goals_1h) if st else None,
-                goals_2h=_num(st.goals_2h) if st else None,
-                corners_1h=_num(st.corners_1h) if st else None,
-                corners_2h=_num(st.corners_2h) if st else None,
-                cards_1h=_num(st.yellow_cards_1h) if st else None,
-                cards_2h=_num(st.yellow_cards_2h) if st else None,
-            ))
+            samples.append(muestra_de_partido(m, st, team.id))
             if len(form) < FORM_MATCHES:
                 rival = m.away_team if at_home else m.home_team
                 form.append(FormMatch(
@@ -342,6 +361,8 @@ __all__ = [
     "TeamSample",
     "aggregate_players",
     "average",
+    "muestra_de_partido",
+    "partidos_con_stats",
     "result_letter",
     "season_start",
 ]

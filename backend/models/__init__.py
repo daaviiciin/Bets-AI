@@ -8,6 +8,7 @@ from backend.models.app_user import AppUser
 from backend.models.base import Base, TimestampMixin
 from backend.models.bookmaker import Bookmaker
 from backend.models.calibration_report import CalibrationReport
+from backend.models.comparador_cuota import ComparadorCuota
 from backend.models.featured_daily_pick import FeaturedDailyPick
 from backend.models.league import League
 from backend.models.market import Market
@@ -20,6 +21,7 @@ from backend.models.odds_history import OddsHistory
 from backend.models.player import Player
 from backend.models.player_match_stats import PlayerMatchStats
 from backend.models.player_stats import PlayerSeasonStats
+from backend.models.refresh_run import RefreshRun
 from backend.models.saved_parlay import SavedParlay
 from backend.models.season import Season
 from backend.models.model_version import ModelVersion
@@ -34,6 +36,7 @@ __all__ = [
     "AppUser",
     "Bookmaker",
     "CalibrationReport",
+    "ComparadorCuota",
     "FeaturedDailyPick",
     "League",
     "Market",
@@ -47,6 +50,7 @@ __all__ = [
     "Player",
     "PlayerMatchStats",
     "PlayerSeasonStats",
+    "RefreshRun",
     "SavedParlay",
     "Season",
     "Snapshot",

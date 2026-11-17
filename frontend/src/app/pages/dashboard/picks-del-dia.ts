@@ -1,5 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { of, switchMap } from 'rxjs';
 
@@ -8,13 +16,15 @@ import { BetslipService, type SlipLeg, legKey } from '../../core/betslip.service
 import { fmtCuota, fmtEv, fmtProb, fmtTime } from '../../core/format';
 import { marketLabel, selectionLabel } from '../../core/markets';
 import type { FeaturedDailyPickRow, FeaturedToday, PickLeg } from '../../core/models';
+import { RefrescoService } from '../../core/refresco.service';
 import { TvNiebla } from '../../shared/fx/niebla';
 
 type Estado = 'cargando' | 'preparando' | 'listo' | 'sin_partidos' | 'error';
 
 /**
- * Picks del día del modelo: simples de cuota 1,30–1,70 con la mayor probabilidad y una
- * combinada de cuota total 3–6 (de varios partidos o, si no hay bastantes, con selecciones de un
+ * Picks del día del modelo: simples de cuota 1,30–1,70 con la mayor probabilidad (como mucho
+ * dos del mismo tipo de mercado) y una combinada de cuota total 4–6, de 3 a 5 patas y con alguna
+ * doble oportunidad (de varios partidos o, si no hay bastantes, con selecciones de un
  * mismo partido, que en Winamax van por MyMatch). La primera vez que se abre la app cada día se generan (si el
  * refresh programado no lo hizo antes) y quedan congelados; su acierto se mide en Transparencia.
  * Cada pick se lleva al boletín con un clic; la combinada, entera.
@@ -47,7 +57,7 @@ type Estado = 'cargando' | 'preparando' | 'listo' | 'sin_partidos' | 'error';
         </a>
       </div>
 
-      @switch (estado()) {
+      @switch (vista()) {
         @case ('cargando') {
           <div class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Cargando los picks">
             @for (i of [0, 1, 2]; track i) {
@@ -57,8 +67,12 @@ type Estado = 'cargando' | 'preparando' | 'listo' | 'sin_partidos' | 'error';
         }
         @case ('preparando') {
           <p class="mt-3 text-sm text-tv-muted" aria-live="polite">
-            Preparando los picks de hoy: si las cuotas tienen más de 2 horas, se actualizan antes
-            (hasta un minuto)…
+            @if (refresco.enCurso()) {
+              Actualizando los datos: los picks de hoy salen al terminar (unos minutos)…
+            } @else {
+              Preparando los picks de hoy: si las cuotas tienen más de 2 horas, se actualizan antes
+              (hasta un minuto)…
+            }
           </p>
           <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
             @for (i of [0, 1, 2]; track i) {
@@ -216,8 +230,13 @@ type Estado = 'cargando' | 'preparando' | 'listo' | 'sin_partidos' | 'error';
 export class PicksDelDia {
   private readonly api = inject(ApiService);
   protected readonly slip = inject(BetslipService);
+  protected readonly refresco = inject(RefrescoService);
 
   protected readonly estado = signal<Estado>('cargando');
+  /** Sin partidos con el refresh en curso es que aún no ha llegado el calendario nuevo. */
+  protected readonly vista = computed<Estado>(() =>
+    this.estado() === 'sin_partidos' && this.refresco.enCurso() ? 'preparando' : this.estado(),
+  );
   protected readonly pick = signal<FeaturedDailyPickRow | null>(null);
   protected readonly motivo = signal<string | null>(null);
 
@@ -233,16 +252,24 @@ export class PicksDelDia {
 
   constructor() {
     this.cargar();
+    // El refresh completo genera los picks al terminar: entonces se vuelven a pedir.
+    const vistos = this.refresco.terminados();
+    effect(() => {
+      if (this.refresco.terminados() !== vistos) untracked(() => this.cargar());
+    });
   }
 
-  /** Si los picks de hoy aún no existen, se piden al backend (que los genera y congela). */
+  /**
+   * Si los picks de hoy aún no existen, se piden al backend (que los genera y congela). Con el
+   * refresh completo en curso no: los genera él al terminar, con las stats ya al día.
+   */
   protected cargar(): void {
     this.estado.set('cargando');
     this.api
       .getFeaturedPicksToday()
       .pipe(
         switchMap((hoy) => {
-          if (hoy.estado !== 'pendiente') return of(hoy);
+          if (hoy.estado !== 'pendiente' || this.refresco.enCurso()) return of(hoy);
           this.estado.set('preparando');
           return this.api.ensureFeaturedPicksToday();
         }),
@@ -296,6 +323,9 @@ export class PicksDelDia {
     } else if (hoy.estado === 'sin_partidos') {
       this.motivo.set(hoy.motivo ?? 'Hoy no quedan partidos por empezar');
       this.estado.set('sin_partidos');
+    } else if (hoy.estado === 'pendiente') {
+      // Solo pasa con el refresh completo en curso (el POST no los genera): al acabar, `cargar`.
+      this.estado.set('preparando');
     } else {
       this.motivo.set('Los picks de hoy aún no están listos.');
       this.estado.set('error');

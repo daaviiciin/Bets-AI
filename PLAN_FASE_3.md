@@ -324,7 +324,7 @@ La promoción es un CLI (`promover_modelo`) con la puerta automática: si no pas
 | **EV inflado** | EV con p calibrada. "Sin valor" visible. `MAX_RECOMMENDABLE_ODDS`. La combinada usa la P conjunta real, sin bonificaciones. Picks globales sin props de jugador hasta que pasen la validación. |
 | **Correlación en la combinada** | Solo partidos distintos. Nunca dos patas del mismo partido (por ejemplo, doble oportunidad con más de 1,5 goles). |
 | **Faltan stats** (45 de 400 partidos sin `match_stats`, xG nulo) | Los modelos de tiros a puerta y xG se entrenan con lo que hay. Equipo con < 3 observaciones → sin P en esa familia. xG solo si la cobertura es ≥ 80 %. Liquidación `pending_stats` → `needs_review`. |
-| **UEFA** (pocos datos, rivales de ligas no importadas con solo ~3 partidos) | Fortalezas compartidas con la liga, previo en el desplazamiento de liga, exigir ≥ 5 partidos por equipo. UEFA fuera de los picks hasta que el backtest UEFA tenga n ≥ 100. |
+| **UEFA** (pocos datos, rivales de ligas no importadas con solo ~3 partidos) | Fortalezas compartidas con la liga, previo en el desplazamiento de liga, exigir ≥ 5 partidos por equipo. ~~UEFA fuera de los picks hasta que el backtest UEFA tenga n ≥ 100.~~ **Decisión del usuario (2026-11-04):** UEFA entra en los picks con el mismo mínimo de 5 partidos por equipo; quedan fuera solo los partidos que pueden ir a prórroga (`puede_ir_a_prorroga`). |
 | **Picks manipulables** | Generación solo hoy y solo partidos que aún no han empezado, trigger de inmutabilidad, hash, `model_fit_id`, y adiós a la generación perezosa en GET. |
 | **Mercados sin cuota** (2ª parte) | El modelo existe, pero la familia queda fuera de los picks hasta tener el betType (pregunta 1). |
 

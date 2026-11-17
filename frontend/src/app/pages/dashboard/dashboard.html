@@ -21,7 +21,7 @@
     <button
       type="button"
       (click)="refreshOdds()"
-      [disabled]="refreshingOdds()"
+      [disabled]="refreshingOdds() || refresco.enCurso()"
       style="--tv-t: 300ms"
       class="tv-barrido ml-auto flex items-center gap-2 border border-tv-line bg-tv-panel px-4 py-2 transition-[border-color,scale] duration-150 hover:border-tv-muted active:scale-[0.97] disabled:opacity-60 sm:ml-0"
     >
@@ -47,7 +47,10 @@
       [class.text-tv-alert]="oddsStatus()?.ok === false"
       aria-live="polite"
     >
-      @if (refreshingOdds()) {
+      @if (refresco.enCurso()) {
+        Los datos tenían horas: actualizando calendario, resultados, estadísticas y cuotas (unos
+        minutos)…
+      } @else if (refreshingOdds()) {
         Descargando cuotas de Winamax de los próximos 5 días (hasta un minuto)…
       } @else if (oddsStatus(); as status) {
         {{ status.text }}

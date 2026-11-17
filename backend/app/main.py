@@ -11,6 +11,7 @@ Endpoints disponibles
 * ``/featured-picks/*``               — picks del día, historial y métricas
 * ``/me/parlays*``                    — combinadas guardadas del usuario
 * ``POST /refresh/odds``              — botón "Actualizar cuotas" (solo Winamax)
+* ``GET|POST /refresh/auto``          — refresh completo al abrir la app si los datos están viejos
 
 Todo salvo ``/`` y ``/auth/login`` exige ``Authorization: Bearer <token>``: la dependencia
 ``get_current_user`` se añade al registrar cada router, sin tocar su lógica. ``POST
@@ -37,6 +38,7 @@ from backend.app.api import (
     matches,
     me_parlays,
     refresh,
+    refresh_auto,
 )
 from backend.app.config import Settings, comprobar_config_api, get_settings
 from backend.app.deps.auth_user import get_current_user
@@ -49,6 +51,8 @@ _ROUTERS_PROTEGIDOS = (
     featured_daily_picks.router,
     me_parlays.router,
     matches.router,
+    # Sin ``limite_refresh``: se pide en cada apertura de la app (ver refresh_auto.py).
+    refresh_auto.router,
 )
 
 

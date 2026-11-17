@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from backend.models import Bookmaker, League, Match, Odds, Season, Snapshot, TeamSeasonStats
 from backend.services import market_probabilities as mp
+from backend.services import player_props_model as ppm
 from backend.services import poisson_model as pm
 from backend.services import value_calculator as vc
 from backend.services.value_detector import ValueDetector
@@ -538,6 +539,9 @@ class GradedOddsLine:
     con_mercado: bool = False
     #: v2: partidos del equipo con menos partidos en los datos del modelo.
     partidos_min: int | None = None
+    player_id: int | None = None
+    #: Props v2 (B14d): ``(lado cuyos goles condicionan, P(gana | k goles) para k = 0..10)``.
+    prop_condicional: tuple[str, tuple[float, ...]] | None = None
 
 
 def confidence_from_model_ev(model_ev: Decimal | None) -> str:
@@ -748,6 +752,29 @@ def list_graded_winamax_odds(
             sin_margen_cache[m.id] = mp.probabilidades_sin_margen(lineas, m.home_team.name, m.away_team.name)
         return sin_margen_cache[m.id]
 
+    def probabilidad_prop(o: Odds, m: Match, mk: str) -> tuple[Decimal, tuple[str, tuple[float, ...]] | None] | None:
+        """``(P calibrada, vector condicionado)`` del modelo de props (B14b), o ``None``."""
+        if modelo is None or modelo.props is None or o.player_id is None or mk not in ppm.MERCADOS_PROPS:
+            return None
+        if prediccion_v2(m) is None:
+            return None
+        lado = modelo.props.lado(o.player_id, m.home_team_id, m.away_team_id)
+        if lado is None:
+            return None
+        partido = modelo.partido_props(m.league.sport_key or "", m.home_team_id, m.away_team_id, lado)
+        punto = float(o.outcome_point) if o.outcome_point is not None else None
+        p = modelo.props.probabilidad(o.player_id, mk, o.outcome_name, punto, partido)
+        if p is None:
+            return None
+        p = modelo.calibracion_props.aplicar(ppm.familia_prop(mk) or "", p)
+        cond = modelo.props.vector_condicional(o.player_id, mk, o.outcome_name, punto, partido)
+        condicional = None
+        if cond is not None:
+            quien, v = cond
+            rival = "away" if lado == "home" else "home"
+            condicional = (lado if quien == "equipo" else rival, v)
+        return Decimal(str(round(min(max(p, 1e-6), 1 - 1e-6), 6))), condicional
+
     def probabilidad_v2(o: Odds, m: Match, mk: str) -> tuple[Decimal, bool] | None:
         """``(P, con_mercado)`` del v2 para la línea, o ``None`` si no la cubre."""
         if modelo is None or o.player_id is not None or mk not in mp.MERCADOS_V2:
@@ -790,6 +817,11 @@ def list_graded_winamax_odds(
         mk = o.market.key if o.market else ""
         pn = o.player.name if o.player else None
         v2 = probabilidad_v2(o, m, mk)
+        prop = probabilidad_prop(o, m, mk) if v2 is None else None
+        condicional = None
+        if prop is not None:
+            model_prob, condicional = prop
+            v2 = (model_prob, False)
         if v2 is not None:
             model_prob, con_mercado = v2
         else:
@@ -856,6 +888,8 @@ def list_graded_winamax_odds(
                     modelo.partidos_min(m.home_team_id, m.away_team_id)
                     if (v2 is not None and modelo is not None) else None
                 ),
+                player_id=o.player_id,
+                prop_condicional=condicional,
             )
         )
 

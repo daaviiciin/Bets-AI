@@ -6,8 +6,8 @@ exagerarla: es la protección principal contra el EV inflado. Se ajusta con pred
 muestra del backtest y solo si hay al menos :data:`MIN_EVENTOS` sucesos de esa familia; si no, la
 familia queda sin calibrar (identidad).
 
-Familias: ``1x2`` (también da la doble oportunidad), ``totals``, ``team_totals``, ``btts`` y
-``highest_half``. En las de tres resultados se calibra cada uno y se renormaliza.
+Familias: ``1x2`` (también da la doble oportunidad), ``totals``, ``team_totals``, ``btts``,
+``highest_half`` y ``sot`` (tiros a puerta, B6; sin calibrar hasta que haya backtest). En las de tres resultados se calibra cada uno y se renormaliza.
 """
 
 from __future__ import annotations
@@ -33,6 +33,9 @@ FAMILIA_DE_MERCADO: dict[str, str] = {
     "team_away_totals_goals": "team_totals",
     "btts": "btts",
     "match_highest_scoring_half": "highest_half",
+    "match_sot_totals": "sot",
+    "team_home_sot_totals": "sot",
+    "team_away_sot_totals": "sot",
 }
 
 

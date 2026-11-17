@@ -10,6 +10,7 @@ import {
   Match,
   MatchPreview,
   OddsRefreshSummary,
+  RefreshAuto,
   FeaturedDailyPickRow,
   FeaturedPicksMetrics,
   FeaturedToday,
@@ -69,9 +70,19 @@ export class ApiService {
     return this.http.get<GradedOddsLine[]>(`${this.base}/dashboard/graded-odds`, { params });
   }
 
-  /** Solo cuotas Winamax de los próximos 5 días (~1 min). Las stats las trae la tarea programada. */
+  /** Solo cuotas Winamax de los próximos 5 días (~1 min). Las stats las trae el refresh completo. */
   refreshOdds(): Observable<OddsRefreshSummary> {
     return this.http.post<OddsRefreshSummary>(`${this.base}/refresh/odds`, null);
+  }
+
+  /** Estado del refresh completo (se consulta mientras corre). */
+  getRefreshAuto(): Observable<RefreshAuto> {
+    return this.http.get<RefreshAuto>(`${this.base}/refresh/auto`);
+  }
+
+  /** Al abrir la app: si los datos están viejos, el backend lanza el refresh completo. */
+  ensureRefreshAuto(): Observable<RefreshAuto> {
+    return this.http.post<RefreshAuto>(`${this.base}/refresh/auto`, {});
   }
 
   login(username: string, password: string): Observable<AuthTokenResponse> {

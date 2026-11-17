@@ -13,7 +13,11 @@ Bases de comparación, siempre sobre los mismos sucesos:
 - ``mercado``: la última cuota de Winamax antes del saque (``odds_history``), sin margen (método
   "power"). Solo hay en los partidos con historial de cuotas.
 
-Todo es puro salvo :func:`cargar_cierres`.
+Props de jugador (B14c, :func:`walk_forward_props`): el mismo walk-forward con
+``player_match_stats``; cada aparición da sucesos por familia (``player_sot``, ``goleador``,
+``paradas``) frente a la tasa base de su posición y a la cuota de cierre de Winamax.
+
+Todo es puro salvo :func:`cargar_cierres` y :func:`cargar_cierres_props`.
 """
 
 from __future__ import annotations
@@ -35,6 +39,15 @@ from backend.services.model_calibration_v2 import (
     log_loss,
 )
 from backend.services.model_dataset import UEFA_SPORT_KEYS, TrainingMatch
+from backend.services.player_props_model import (
+    FAMILIA_PROP,
+    FilaJugador,
+    PartidoProps,
+    construir_contexto,
+    familia_prop,
+    linea_prop,
+)
+from backend.services.sot_model import SotHyper
 from backend.services.team_ratings_model import RatingsHyper, fit_ratings
 
 if TYPE_CHECKING:
@@ -369,6 +382,190 @@ def cargar_cierres(session: Session, match_ids: Sequence[int]) -> dict[tuple[int
 
 
 # ---------------------------------------------------------------------------
+# Props de jugador (B14c)
+# ---------------------------------------------------------------------------
+
+#: Líneas que se evalúan en cada familia de props (las que Winamax ofrece casi siempre).
+LINEAS_PROPS: dict[str, tuple[float, ...]] = {
+    "player_sot": (0.5, 1.5, 2.5),
+    "goleador": (0.5, 1.5),
+    "paradas": (0.5, 1.5, 2.5, 3.5, 4.5),
+}
+#: Mercado de Winamax que representa a cada familia en el walk-forward.
+_MERCADO_DE_FAMILIA = {
+    "player_sot": "player_sot_alt",
+    "goleador": "player_anytime_scorer",
+    "paradas": "player_saves_alt",
+}
+_ESTADISTICA_DE_FAMILIA = {"player_sot": "tiros_puerta", "goleador": "goles", "paradas": "paradas"}
+
+
+def clave_prop(familia: str, player_id: int, linea: float) -> str:
+    """Suceso de props: ``"player_sot:123:0.5"`` (el jugador hace más de 0,5 tiros a puerta)."""
+    return f"{familia}:{player_id}:{linea}"
+
+
+def _valor_fila(fila: FilaJugador, est: str) -> int | None:
+    return {"tiros_puerta": fila.tiros_puerta, "goles": fila.goles, "paradas": fila.paradas}[est]
+
+
+def walk_forward_props(
+    matches: Sequence[TrainingMatch],
+    filas: Sequence[FilaJugador],
+    hyper: RatingsHyper,
+    *,
+    desde: datetime,
+    sot_hyper: SotHyper | None = None,
+    min_partidos: int = 3,
+) -> tuple[list[Evento], list[Evento]]:
+    """Sucesos de props predichos cada día con lo anterior a las 00:00 UTC (``(modelo, base)``).
+
+    Solo cuentan los jugadores que jugaron (las casas anulan el prop si no): el modelo va
+    condicionado a que juegue, con los minutos esperados de sus partidos anteriores, nunca con
+    los reales. La tasa base es la frecuencia del suceso en las apariciones anteriores de los
+    jugadores de su misma posición (Laplace +1/+2).
+    """
+    from backend.services.sot_model import fit_sot
+
+    modelo: list[Evento] = []
+    base: list[Evento] = []
+    for dia in _dias(matches, desde):
+        cutoff = _corte(dia)
+        train = [m for m in matches if m.commence_time < cutoff]
+        hoy = [f for f in filas if f.fecha.date() == dia and f.minutos > 0]
+        if len(train) < 50 or not hoy:
+            continue
+        fit = fit_ratings(train, cutoff, hyper)
+        sot = fit_sot(train, cutoff, sot_hyper)
+        previas = [f for f in filas if f.fecha < cutoff]
+        ctx = construir_contexto(previas, fit.lambdas, sot.medias if sot else None, cutoff=cutoff)
+        frecuencias: dict[tuple[str | None, str, float], list[int]] = defaultdict(lambda: [0, 0])
+        for f in previas:
+            if f.minutos <= 0:
+                continue
+            j = ctx.jugadores.get(f.player_id)
+            pos = j.posicion if j else None
+            for fam, lineas in LINEAS_PROPS.items():
+                v = _valor_fila(f, _ESTADISTICA_DE_FAMILIA[fam])
+                if v is None:
+                    continue
+                for linea in lineas:
+                    acc = frecuencias[(pos, fam, linea)]
+                    acc[0] += int(v > linea)
+                    acc[1] += 1
+        for f in hoy:
+            if fit.partidos(f.home_id) < min_partidos or fit.partidos(f.away_id) < min_partidos:
+                continue
+            lado = "home" if f.is_home else "away"
+            lh, la = fit.lambdas(f.sport_key, f.home_id, f.away_id)
+            sh, sa = sot.medias(f.sport_key, f.home_id, f.away_id) if sot else (None, None)
+            partido = PartidoProps(
+                lambda_equipo=lh if lado == "home" else la, lambda_rival=la if lado == "home" else lh,
+                sot_equipo=sh if lado == "home" else sa, sot_rival=sa if lado == "home" else sh,
+                r_sot=sot.r if sot else None,
+            )
+            j = ctx.jugadores.get(f.player_id)
+            for fam, lineas in LINEAS_PROPS.items():
+                v = _valor_fila(f, _ESTADISTICA_DE_FAMILIA[fam])
+                if v is None:
+                    continue
+                for linea in lineas:
+                    mk = "player_to_score_2plus" if fam == "goleador" and linea > 1 else _MERCADO_DE_FAMILIA[fam]
+                    p = ctx.probabilidad(f.player_id, mk, "over", linea, partido)
+                    if p is None:
+                        continue
+                    clave = clave_prop(fam, f.player_id, linea)
+                    ev = Evento(fam, clave, f.match_id, dia, p, int(v > linea))
+                    hits, n = frecuencias.get((j.posicion if j else None, fam, linea), (0, 0))
+                    modelo.append(ev)
+                    base.append(replace(ev, p=(hits + 1) / (n + 2)))
+    return modelo, base
+
+
+def familias_props_habilitadas(
+    modelo: dict[str, Metricas], base: dict[str, Metricas], *, min_n: int = MIN_EVENTOS_FAMILIA,
+) -> list[str]:
+    """Familias de props que pueden ir (experimentales) en la combinada del partido: bastantes
+    sucesos y no peores que la tasa base en log-loss. El ECE no se exige: son experimentales y
+    el criterio del usuario es "no peor que la tasa base"."""
+    return sorted(
+        fam for fam, m in modelo.items()
+        if m.n >= min_n and fam in base and m.log_loss <= base[fam].log_loss
+    )
+
+
+def cierres_props_desde_filas(
+    filas: Iterable[tuple[int, int, str, float | None, float, datetime, datetime]],
+    margen_partido: dict[int, float] | None = None,
+) -> tuple[dict[tuple[int, str], float], dict[tuple[int, str], float]]:
+    """Cuota de cierre de los props: ``(P bruta = 1/cuota, P sin margen)`` por (partido, suceso).
+
+    ``filas`` = ``(match_id, player_id, market_key, punto, cuota, first_seen_at, saque)``. Winamax
+    solo ofrece el lado "más de", así que el margen no se puede quitar con las dos selecciones:
+    se divide por ``1 + margen`` del 1X2 de ese partido (``margen_partido``; sin él, la bruta).
+    Es una aproximación: el margen de los props suele ser mayor que el del 1X2.
+    """
+    ultima: dict[tuple[int, str], tuple[datetime, float]] = {}
+    for mid, pid, mk, pt, price, first_seen, saque in filas:
+        if first_seen >= saque or price <= 1:
+            continue
+        fam = familia_prop(mk)
+        linea = linea_prop(mk, pt)
+        if fam is None or linea is None:
+            continue
+        k = (mid, clave_prop(fam, pid, linea))
+        if k not in ultima or first_seen > ultima[k][0]:
+            ultima[k] = (first_seen, float(price))
+    bruta = {k: 1.0 / price for k, (_, price) in ultima.items()}
+    margen_partido = margen_partido or {}
+    limpia = {k: p / (1.0 + max(margen_partido.get(k[0], 0.0), 0.0)) for k, p in bruta.items()}
+    return bruta, limpia
+
+
+def cargar_cierres_props(
+    session: Session, match_ids: Sequence[int],
+) -> tuple[dict[tuple[int, str], float], dict[tuple[int, str], float]]:
+    """Cierres de los props (``odds_history``) y margen del 1X2 de cada partido (solo lectura)."""
+    from sqlalchemy import select
+
+    from backend.models import Market, Match, OddsHistory
+
+    if not match_ids:
+        return {}, {}
+    filas = session.execute(
+        select(
+            OddsHistory.match_id, OddsHistory.player_id, Market.key, OddsHistory.outcome_point,
+            OddsHistory.price, OddsHistory.first_seen_at, Match.commence_time,
+        )
+        .join(Market, Market.id == OddsHistory.market_id)
+        .join(Match, Match.id == OddsHistory.match_id)
+        .where(OddsHistory.match_id.in_(list(match_ids)))
+        .where(Market.key.in_(list(FAMILIA_PROP)))
+        .where(OddsHistory.player_id.is_not(None)),
+    ).all()
+    h2h = session.execute(
+        select(OddsHistory.match_id, OddsHistory.outcome_name, OddsHistory.price, OddsHistory.first_seen_at)
+        .join(Market, Market.id == OddsHistory.market_id)
+        .join(Match, Match.id == OddsHistory.match_id)
+        .where(OddsHistory.match_id.in_(list(match_ids)), Market.key == "h2h")
+        .where(OddsHistory.first_seen_at < Match.commence_time),
+    ).all()
+    ultima_h2h: dict[tuple[int, str], tuple[datetime, float]] = {}
+    for mid, oc, price, first_seen in h2h:
+        if (mid, oc) not in ultima_h2h or first_seen > ultima_h2h[(mid, oc)][0]:
+            ultima_h2h[(mid, oc)] = (first_seen, float(price))
+    por_partido: dict[int, list[float]] = defaultdict(list)
+    for (mid, _), (_, price) in ultima_h2h.items():
+        por_partido[mid].append(price)
+    margen = {mid: sum(1 / q for q in qs) - 1 for mid, qs in por_partido.items() if len(qs) == 3}
+    return cierres_props_desde_filas(
+        [(mid, pid, mk, float(pt) if pt is not None else None, float(price), fs, saque)
+         for mid, pid, mk, pt, price, fs, saque in filas],
+        margen,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Búsqueda de hiperparámetros
 # ---------------------------------------------------------------------------
 
@@ -400,6 +597,12 @@ def buscar_hiper(
 
 
 __all__ = [
+    "LINEAS_PROPS",
+    "cargar_cierres_props",
+    "cierres_props_desde_filas",
+    "clave_prop",
+    "familias_props_habilitadas",
+    "walk_forward_props",
     "Evento",
     "FAMILIAS_PRINCIPALES",
     "Metricas",

@@ -20,6 +20,9 @@ alembic==1.14.0
 PyJWT==2.15.1
 limits==5.8.0  # rate limiting de la API (backend/app/deps/rate_limit.py)
 
+# ---------- Chat por MCP (backend/mcp_server/) ----------
+mcp==2.3.0  # SDK oficial; servidor stdio para Claude Code
+
 # ---------- Análisis y modelo (Fase 3) ----------
 numpy==2.1.3
 scipy==1.14.1

@@ -22,12 +22,13 @@ from backend.services.featured_daily_picks import (
     aggregate_leg_metrics,
     asegurar_picks_de_hoy,
     combinada_corregida,
-    dia_de_picks,
-    fila_del_dia,
+    combinada_del_partido_corregida,
+    consultar_picks_de_hoy,
     partidos_de_picks_recientes,
     refresh_all_grading,
     simples_corregidas,
 )
+from backend.services.refresco_auto import refresco_auto
 from backend.services.resultados_bajo_demanda import traer_datos_para_corregir
 
 router = APIRouter(prefix="/featured-picks", tags=["featured-picks"])
@@ -39,6 +40,7 @@ def _serialize(row: FeaturedDailyPick) -> FeaturedDailyPickOut:
         pick_date=row.pick_date,
         legs=simples_corregidas(row),
         combo=combinada_corregida(row),
+        match_combo=combinada_del_partido_corregida(row),
         rules_version=row.rules_version,
         model_version=row.model_version,
         generated_at=row.generated_at,
@@ -59,22 +61,27 @@ def _today_out(res: PicksDeHoy) -> FeaturedTodayOut:
 
 @router.get("/today", response_model=FeaturedTodayOut)
 def get_today(db: Session = Depends(get_db)) -> FeaturedTodayOut:
-    """Picks de hoy (día de Madrid) si ya se generaron; si no, ``estado="pendiente"``.
+    """Picks de hoy (día de Madrid) si ya se generaron, ``sin_partidos`` si no queda ninguno por
+    empezar y, si no, ``estado="pendiente"``.
 
     No genera nada: para eso está ``POST /featured-picks/today`` (lo llama la portada).
     """
-    row = fila_del_dia(db, dia_de_picks(datetime.now(timezone.utc)))
-    if row is None:
+    res = consultar_picks_de_hoy(db)
+    if res is None:
         return FeaturedTodayOut(estado="pendiente")
-    return FeaturedTodayOut(estado="listo", pick=_serialize(row))
+    return _today_out(res)
 
 
 @router.post("/today", response_model=FeaturedTodayOut, dependencies=[Depends(limite_picks_hoy)])
 def post_today(db: Session = Depends(get_db)) -> FeaturedTodayOut:
     """Genera y congela los picks de hoy si aún no existen (primera apertura del día).
 
-    Si las cuotas de hoy están viejas, antes las descarga de Winamax (~30 s).
+    Si las cuotas de hoy están viejas, antes las descarga de Winamax (~30 s). Con el refresh
+    automático en curso no se generan: se congelarían con datos a medias y el propio pipeline
+    los genera al terminar.
     """
+    if refresco_auto.en_curso:
+        return FeaturedTodayOut(estado="pendiente", motivo="Se están actualizando los datos")
     return _today_out(asegurar_picks_de_hoy(db, actualizar_cuotas=True, log=log))
 
 

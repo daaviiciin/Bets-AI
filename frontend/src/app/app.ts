@@ -4,6 +4,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from './core/auth.service';
 import { BetslipService } from './core/betslip.service';
 import { fmtCuota } from './core/format';
+import { RefrescoService } from './core/refresco.service';
 import { BetslipPanel } from './shared/betslip-panel';
 import { FondoEstadio } from './shared/fx/fondo-estadio';
 import { Movimiento } from './shared/fx/movimiento';
@@ -40,6 +41,8 @@ export class App {
 
   constructor() {
     this.auth.hydrateFromStorage();
+    // Con sesión, comprueba si toca el refresh completo (y lo sigue mientras corre).
+    inject(RefrescoService);
     const movimiento = inject(Movimiento);
     afterNextRender(() => movimiento.iniciar());
   }

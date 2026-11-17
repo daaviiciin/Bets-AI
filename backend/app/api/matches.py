@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
 from backend.app.schemas.responses import (
@@ -14,22 +11,10 @@ from backend.app.schemas.responses import (
     MatchPreviewOut,
     Odds1x2Out,
 )
-from backend.models import League, Match
-from backend.services.match_listing import latest_1x2_by_match
+from backend.services.match_listing import latest_1x2_by_match, listar_partidos
 from backend.services.match_preview import MatchPreviewService
 
 router = APIRouter(prefix="/matches", tags=["matches"])
-
-TARGET_JORNADA_LEAGUES = frozenset({
-    "soccer_epl",
-    "soccer_italy_serie_a",
-    "soccer_germany_bundesliga",
-    "soccer_spain_la_liga",
-    "soccer_france_ligue_one",
-    "soccer_uefa_champs_league",
-    "soccer_uefa_europa_league",
-    "soccer_uefa_europa_conference_league",
-})
 
 
 @router.get("", response_model=list[MatchOut])
@@ -55,28 +40,9 @@ def list_matches(
       (útiles para mostrar resultados recientes con ``status='finished'``).
     * ``with_odds``: portada del dashboard, con el 1X2 en cada fila.
     """
-    now = datetime.now(timezone.utc)
-    since = now - timedelta(days=days_back)
-    until = now + timedelta(days=days_ahead)
-
-    stmt = (
-        select(Match)
-        .where(Match.commence_time >= since)
-        .where(Match.commence_time <= until)
-        .options(
-            joinedload(Match.league),
-            joinedload(Match.home_team),
-            joinedload(Match.away_team),
-        )
-        .order_by(Match.commence_time)
-        .limit(limit)
+    matches = listar_partidos(
+        db, league=league, days_ahead=days_ahead, days_back=days_back, scope=scope, limit=limit,
     )
-    if league:
-        stmt = stmt.join(Match.league).where(League.sport_key == league)
-    elif scope == "target":
-        stmt = stmt.join(Match.league).where(League.sport_key.in_(TARGET_JORNADA_LEAGUES))
-
-    matches = list(db.scalars(stmt).all())
     out = [MatchOut.model_validate(m) for m in matches]
     if with_odds:
         odds = latest_1x2_by_match(db, matches)

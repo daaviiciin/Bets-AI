@@ -157,6 +157,9 @@ class FeaturedDailyPickOut(BaseModel):
     legs: list[dict[str, Any]]
     #: Combinada del día con sus patas y ``result``; null si no hubo (motivo en ``selection_meta``).
     combo: dict[str, Any] | None = None
+    #: Combinada del partido (desde 2026-11-13): 2–3 selecciones de un partido, props marcados
+    #: ``experimental``; null si no hubo (motivo en ``selection_meta``).
+    match_combo: dict[str, Any] | None = None
     rules_version: str = "v1"
     model_version: str | None = None
     generated_at: datetime | None = None
@@ -173,6 +176,18 @@ class FeaturedTodayOut(BaseModel):
     #: ``True`` si al generarlos hubo que descargar antes las cuotas de Winamax.
     cuotas_actualizadas: bool = False
     pick: FeaturedDailyPickOut | None = None
+
+
+class RefreshAutoOut(BaseModel):
+    """``/refresh/auto``: si el pipeline completo está corriendo y cómo acabó el último."""
+
+    en_curso: bool
+    #: ``True`` solo en el ``POST`` que acaba de lanzarlo.
+    lanzado: bool = False
+    ultimo_inicio: datetime | None = None
+    ultimo_fin: datetime | None = None
+    ultimo_ok: bool | None = None
+    ultimo_errores: list[str] = Field(default_factory=list)
 
 
 class FeaturedPicksMetricsOut(BaseModel):
@@ -200,6 +215,9 @@ class FeaturedPicksMetricsOut(BaseModel):
     combo_rate_pct: float | None = None
     #: Por versión del modelo: ``{"simples": {hits, misses, …, rate_pct}, "combinadas": {…}}``.
     por_modelo: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    #: Combinada del partido, aparte: ``{total, hits, …, rate_pct, con_props, sin_props,
+    #: patas_props: {familia: {hits, misses, …}}}``.
+    combinada_partido: dict[str, Any] = Field(default_factory=dict)
 
 
 class UserParlayMetricsOut(BaseModel):

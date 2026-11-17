@@ -7,6 +7,23 @@ import { destinoSeguro, PARAM_VOLVER } from '../../core/auth.guard';
 import { AuthService } from '../../core/auth.service';
 import { TvLogoRoto } from '../../shared/fx/logo-roto';
 
+/** Un mensaje por causa: antes todo era "credenciales incorrectas" aunque la API estuviera caída. */
+function mensajeErrorLogin(err: unknown): string {
+  if (!(err instanceof HttpErrorResponse)) return 'Error inesperado al iniciar sesión.';
+  switch (err.status) {
+    case 401:
+      return 'Usuario o contraseña incorrectos.';
+    case 429:
+      return 'Demasiados intentos. Espera un minuto y vuelve a probar.';
+    case 0:
+    case 502:
+    case 504:
+      return 'No hay conexión con la API. ¿Está arrancada en el puerto 8000?';
+    default:
+      return `Error del servidor (${err.status}). Revisa la consola de la API.`;
+  }
+}
+
 /**
  * Entrar. Misma voz que la portada: el rótulo "Bets [AI]" entra en antena (barre con su filete
  * guía y la placa AI barre detrás), un cabezal de escaneo cruza una vez y el formulario barre.
@@ -81,11 +98,7 @@ export class LoginPage {
         next: () => void this.router.navigateByUrl(volver),
         error: (err: unknown) => {
           this.password.set('');
-          this.error.set(
-            err instanceof HttpErrorResponse && err.status === 429
-              ? 'Demasiados intentos. Espera un minuto y vuelve a probar.'
-              : 'Credenciales incorrectas o error de red.',
-          );
+          this.error.set(mensajeErrorLogin(err));
         },
       });
   }

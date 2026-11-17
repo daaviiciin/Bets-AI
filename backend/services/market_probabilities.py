@@ -7,8 +7,10 @@ la corrección de Dixon–Coles aplicada a **todos** los mercados (el modelo act
 al suceso canónico de cada familia y deriva el resto (1X2 renormalizado, "menos de" = 1 − "más
 de" en líneas .5…), para que las probabilidades sigan siendo coherentes entre sí.
 
-Mercados: 1X2, doble oportunidad, más/menos de goles del partido y de cada equipo, ambos marcan
-y mitad con más goles. El resto devuelve ``None`` (y la línea sigue con el modelo actual).
+Mercados: 1X2, doble oportunidad, más/menos de goles del partido y de cada equipo, ambos marcan,
+mitad con más goles y, si la predicción trae medias de tiros a puerta (``sot_model``, B6), más/menos
+de tiros a puerta del partido y de cada equipo (binomial negativa). El resto devuelve ``None`` (y
+la línea sigue con el modelo actual).
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from functools import cached_property
 import numpy as np
 
 from backend.services import poisson_model as pm
+from backend.services import sot_model
 from backend.services.model_calibration_v2 import Calibracion
 from backend.services.winamax_normalization import (
     highest_scoring_half_side,
@@ -37,6 +40,12 @@ MERCADOS_V2: frozenset[str] = frozenset({
     "team_home_totals_goals",
     "team_away_totals_goals",
     "match_highest_scoring_half",
+    "match_sot_totals",
+    "team_home_sot_totals",
+    "team_away_sot_totals",
+})
+MERCADOS_SOT: frozenset[str] = frozenset({
+    "match_sot_totals", "team_home_sot_totals", "team_away_sot_totals",
 })
 
 
@@ -46,6 +55,10 @@ class MatchPrediction:
     lambda_away: float
     rho: float = 0.0
     second_half_share: float = pm.SECOND_HALF_GOAL_SHARE
+    #: Tiros a puerta esperados de cada equipo y tamaño de la binomial negativa (B6).
+    sot_home: float | None = None
+    sot_away: float | None = None
+    sot_r: float | None = None
 
     @cached_property
     def rejilla(self) -> np.ndarray:
@@ -130,6 +143,9 @@ def probability_for_line(
         p1, pig, p2 = cal.tres_vias("highest_half", pred.p_mitades)
         return {"1h": p1, "tie": pig, "2h": p2}[mitad]
 
+    if mk in MERCADOS_SOT:
+        return _probabilidad_sot(pred, mk, outcome_name, outcome_point, cal)
+
     g = pred.rejilla
     i, j = np.indices(g.shape)
 
@@ -160,6 +176,31 @@ def probability_for_line(
         return p_menos * (1.0 - p_mas_cal) / resto if resto > 0 else 0.0
 
     return None
+
+
+def _probabilidad_sot(
+    pred: MatchPrediction, mk: str, outcome_name: str, outcome_point: float | None, cal: Calibracion,
+) -> float | None:
+    """Más/menos de tiros a puerta del partido o de un equipo (``None`` sin modelo B6)."""
+    lado = _lado_mas_menos(outcome_name)
+    if lado is None or outcome_point is None or pred.sot_home is None or pred.sot_away is None:
+        return None
+    point = float(outcome_point)
+    if mk == "match_sot_totals":
+        media = pred.sot_home + pred.sot_away
+        r = sot_model.r_suma(pred.sot_r, pred.sot_home, pred.sot_away)
+    else:
+        media = pred.sot_home if mk == "team_home_sot_totals" else pred.sot_away
+        r = pred.sot_r
+    p_mas = sot_model.p_mas_de(media, point, r)
+    p_mas_cal = cal.aplicar("sot", p_mas)
+    if math.isclose(point % 1, 0.5):
+        return p_mas_cal if lado == "over" else 1.0 - p_mas_cal
+    if lado == "over":
+        return p_mas_cal
+    p_menos = 1.0 - p_mas - sot_model.p_igual(media, int(point), r)
+    resto = 1.0 - p_mas
+    return p_menos * (1.0 - p_mas_cal) / resto if resto > 0 else 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -197,8 +238,8 @@ def probabilidades_sin_margen(
     """P sin margen de cada línea de un partido: ``(mercado, selección, línea) → P``.
 
     ``lineas`` = ``(market_key, outcome_name, outcome_point, cuota)``. Solo se calculan los
-    mercados completos: 1X2 (y con él la doble oportunidad), más/menos de goles del partido y de
-    cada equipo, ambos marcan y mitad con más goles.
+    mercados completos: 1X2 (y con él la doble oportunidad), más/menos de goles y de tiros a puerta
+    del partido y de cada equipo, ambos marcan y mitad con más goles.
     """
     grupos: dict[tuple[str, float | None], dict[str, float]] = {}
     for mk, oc, pt, cuota in lineas:
@@ -223,7 +264,7 @@ def probabilidades_sin_margen(
                 out[("double_chance", oc, None)] = sum(ps[s] for s in lados)
 
     for (mk, pt), sel in grupos.items():
-        if mk in {"totals", "team_home_totals_goals", "team_away_totals_goals"} and pt is not None:
+        if mk in {"totals", "team_home_totals_goals", "team_away_totals_goals"} | MERCADOS_SOT and pt is not None:
             mas = [oc for oc in sel if _lado_mas_menos(oc) == "over"]
             menos = [oc for oc in sel if _lado_mas_menos(oc) == "under"]
             if len(mas) == 1 and len(menos) == 1 and math.isclose(pt % 1, 0.5):
@@ -253,6 +294,7 @@ def mezclar(p_modelo: float, p_mercado: float | None, peso_mercado: float) -> fl
 
 
 __all__ = [
+    "MERCADOS_SOT",
     "MERCADOS_V2",
     "MatchPrediction",
     "mezclar",

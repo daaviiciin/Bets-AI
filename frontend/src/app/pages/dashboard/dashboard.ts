@@ -3,8 +3,10 @@ import {
   Component,
   DestroyRef,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -15,6 +17,7 @@ import { competitionName, competitionOrder } from '../../core/competitions';
 import { dayKey, fmtCuota, fmtDayName, fmtNum, fmtTime } from '../../core/format';
 import { marketLabel, selectionLabel } from '../../core/markets';
 import type { Match, OddsRefreshSummary } from '../../core/models';
+import { RefrescoService } from '../../core/refresco.service';
 import { type TeamPaint, isLight, matchPaint } from '../../core/team-colors';
 import { Icon } from '../../shared/icon';
 import { TeamCrest } from '../../shared/team-crest';
@@ -54,6 +57,7 @@ interface DayGroup {
 export class Dashboard {
   private readonly api = inject(ApiService);
   protected readonly slip = inject(BetslipService);
+  protected readonly refresco = inject(RefrescoService);
 
   protected readonly matches = signal<Match[]>([]);
   protected readonly loading = signal(true);
@@ -145,6 +149,15 @@ export class Dashboard {
   constructor() {
     inject(DestroyRef).onDestroy(() => clearTimeout(this.firstLoadTimer));
     this.load();
+    // Al terminar el refresh completo (lanzado al abrir la app) llegan partidos y cuotas nuevos.
+    const vistos = this.refresco.terminados();
+    effect(() => {
+      if (this.refresco.terminados() === vistos) return;
+      untracked(() => {
+        this.oddsStatus.set(this.refrescoStatus());
+        this.load(true);
+      });
+    });
   }
 
   protected load(silent = false): void {
@@ -257,6 +270,8 @@ export class Dashboard {
         next: (res) => {
           this.oddsStatus.set({ ok: res.ok, text: this.oddsStatusText(res) });
           this.load(true);
+          // Sin partidos en BD no hay a qué enlazar cuotas: hace falta el refresh completo.
+          if (res.winamax.matches_in_db === 0) this.refresco.comprobar();
         },
         error: (err) =>
           this.oddsStatus.set({
@@ -266,9 +281,21 @@ export class Dashboard {
       });
   }
 
+  private refrescoStatus(): { ok: boolean; text: string } {
+    const e = this.refresco.estado();
+    const hora = e?.ultimo_fin ? fmtTime(e.ultimo_fin) : '';
+    const errores = e?.ultimo_errores.length ?? 0;
+    const conErrores = errores ? ` · ${errores} pasos con error (detalle en logs/)` : '';
+    return { ok: true, text: `Datos y cuotas actualizados a las ${hora}${conErrores}` };
+  }
+
   private oddsStatusText(res: OddsRefreshSummary): string {
     const w = res.winamax;
     const fresh = w.matches_skipped_fresh ?? 0;
+    // Sin partidos en BD no hay a qué enlazar las cuotas: falta el calendario, no Winamax.
+    if (w.matches_in_db === 0) {
+      return `${fmtTime(res.finished_at)} · No hay partidos de los próximos ${DAYS_AHEAD} días en la base de datos: falta actualizar el calendario de Flashscore`;
+    }
     if (w.matches_matched === 0) {
       return fresh
         ? `${fmtTime(res.finished_at)} · Las cuotas ya estaban al día (${fresh} partidos)`

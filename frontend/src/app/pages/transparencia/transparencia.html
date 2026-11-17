@@ -272,7 +272,7 @@
         }
       </p>
     </div>
-  } @else if (row.rules_version === 'v2' && row.selection_meta?.motivo_combinada) {
+  } @else if (row.rules_version !== 'v1' && row.selection_meta?.motivo_combinada) {
     <p class="mt-3 text-sm text-tv-muted">Sin combinada: {{ row.selection_meta.motivo_combinada }}.</p>
   }
 </ng-template>

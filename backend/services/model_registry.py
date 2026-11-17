@@ -25,6 +25,13 @@ from backend.models.model_version import (
 from backend.services.market_probabilities import MatchPrediction
 from backend.services.model_calibration_v2 import Calibracion
 from backend.services.model_dataset import load_training_matches
+from backend.services.player_props_model import (
+    ContextoProps,
+    PartidoProps,
+    cargar_filas_jugador,
+    construir_contexto,
+)
+from backend.services.sot_model import FittedSot, SotHyper, fit_sot
 from backend.services.team_ratings_model import FittedRatings, RatingsHyper, fit_ratings
 
 #: Partidos mínimos de cada equipo para que el v2 dé probabilidades (si no, modelo actual).
@@ -34,6 +41,18 @@ MIN_PARTIDOS_PICK = 5
 
 _log = logging.getLogger(__name__)
 
+#: Props de jugador (B14c) para las versiones guardadas antes de que el backtest los midiera
+#: (sin ``backtest_metrics["props"]``): familias que no salieron peor que la tasa base y su
+#: calibración, del backtest del 2026-11-13. Solo entran en la combinada del partido.
+PROPS_POR_DEFECTO: dict = {
+    "habilitadas": ["goleador", "player_sot"],
+    "calibracion": {
+        "player_sot": {"a": -0.378, "b": 0.741, "n": 23934},
+        "goleador": {"a": -0.444, "b": 0.819, "n": 15956},
+        "paradas": {"a": 0.08, "b": 0.711, "n": 2900},
+    },
+}
+
 
 @dataclass(frozen=True)
 class ModeloActivo:
@@ -42,10 +61,37 @@ class ModeloActivo:
     calibracion: Calibracion
     peso_mercado: float
     familias: frozenset[str]
+    #: Tiros a puerta (B6) con los mismos partidos; ``None`` si está desactivado o faltan datos.
+    sot: FittedSot | None = None
+    #: Props de jugador (B14b): apariciones de cada jugador con los λ de este ajuste.
+    props: ContextoProps | None = None
+    #: Familias de props que pueden ir (como experimentales) en la combinada del partido.
+    familias_props: frozenset[str] = frozenset()
+    calibracion_props: Calibracion = Calibracion()
+
+    def partido_props(
+        self, sport_key: str, home_id: int, away_id: int, lado: str,
+    ) -> PartidoProps:
+        """Expectativas del partido desde el lado (``home``/``away``) del jugador."""
+        pred = self.prediccion(sport_key, home_id, away_id)
+        local = lado == "home"
+        return PartidoProps(
+            lambda_equipo=pred.lambda_home if local else pred.lambda_away,
+            lambda_rival=pred.lambda_away if local else pred.lambda_home,
+            sot_equipo=pred.sot_home if local else pred.sot_away,
+            sot_rival=pred.sot_away if local else pred.sot_home,
+            r_sot=pred.sot_r,
+        )
 
     def prediccion(self, sport_key: str, home_id: int, away_id: int) -> MatchPrediction:
         lh, la = self.fit.lambdas(sport_key, home_id, away_id)
-        return MatchPrediction(lh, la, self.fit.rho, self.fit.share_2a_parte(sport_key))
+        sh = sa = None
+        if self.sot is not None:
+            sh, sa = self.sot.medias(sport_key, home_id, away_id)
+        return MatchPrediction(
+            lh, la, self.fit.rho, self.fit.share_2a_parte(sport_key),
+            sot_home=sh, sot_away=sa, sot_r=self.sot.r if self.sot is not None else None,
+        )
 
     def partidos_min(self, home_id: int, away_id: int) -> int:
         return min(self.fit.partidos(home_id), self.fit.partidos(away_id))
@@ -80,13 +126,24 @@ def modelo_activo(session: Session, ahora: datetime | None = None) -> ModeloActi
     matches = load_training_matches(session, ahora)
     if len(matches) < 50:
         return None
-    fit = fit_ratings(matches, ahora, RatingsHyper(**version.hyperparams))
+    fit = fit_ratings(
+        matches, ahora, RatingsHyper(**{k: v for k, v in version.hyperparams.items() if k != "sot"}),
+    )
+    sot = fit_sot(matches, ahora, SotHyper(**(version.hyperparams or {}).get("sot", {})))
+    props_cfg = (version.backtest_metrics or {}).get("props") or PROPS_POR_DEFECTO
     modelo = ModeloActivo(
         tag=version.tag,
         fit=fit,
         calibracion=Calibracion.from_dict(version.calibration),
         peso_mercado=float(version.market_weight),
         familias=frozenset(version.enabled_families or []),
+        sot=sot,
+        props=construir_contexto(
+            cargar_filas_jugador(session, ahora), fit.lambdas,
+            sot.medias if sot is not None else None, cutoff=ahora,
+        ),
+        familias_props=frozenset(props_cfg.get("habilitadas") or []),
+        calibracion_props=Calibracion.from_dict(props_cfg.get("calibracion")),
     )
     _CACHE.clear()
     _CACHE[firma] = modelo
@@ -108,6 +165,7 @@ __all__ = [
     "MIN_PARTIDOS_PICK",
     "MIN_PARTIDOS_PREDICCION",
     "ModeloActivo",
+    "PROPS_POR_DEFECTO",
     "modelo_activo",
     "promover",
     "version_activa",

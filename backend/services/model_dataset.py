@@ -158,6 +158,9 @@ class TrainingMatch:
     #: Goles del partido en cada mitad (``None`` si falta el dato de algún equipo).
     goals_1h: int | None = None
     goals_2h: int | None = None
+    #: Tiros a puerta de cada equipo (``None`` si falta en alguno de los dos). Modelo B6.
+    home_sot: int | None = None
+    away_sot: int | None = None
 
 
 def assert_sin_fuga(matches: Iterable[TrainingMatch], cutoff: datetime) -> None:
@@ -208,6 +211,10 @@ def load_training_matches(session: Session, cutoff: datetime) -> list[TrainingMa
     for f in filas:
         local, visitante = stats[f.id].get(True), stats[f.id].get(False)
         xg_ok = local is not None and visitante is not None and local.xg is not None and visitante.xg is not None
+        sot_ok = (
+            local is not None and visitante is not None
+            and local.shots_on_target is not None and visitante.shots_on_target is not None
+        )
         mitades_ok = (
             local is not None and visitante is not None
             and None not in (local.goals_1h, local.goals_2h, visitante.goals_1h, visitante.goals_2h)
@@ -224,6 +231,8 @@ def load_training_matches(session: Session, cutoff: datetime) -> list[TrainingMa
             away_xg=float(visitante.xg) if xg_ok else None,
             goals_1h=(local.goals_1h + visitante.goals_1h) if mitades_ok else None,
             goals_2h=(local.goals_2h + visitante.goals_2h) if mitades_ok else None,
+            home_sot=int(local.shots_on_target) if sot_ok else None,
+            away_sot=int(visitante.shots_on_target) if sot_ok else None,
         ))
     assert_sin_fuga(out, cutoff)
     return out

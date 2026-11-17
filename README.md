@@ -132,6 +132,10 @@ npm start
 - Calendario, resultados y stats: `.\.venv\Scripts\python.exe -m backend.tools.daily_refresh` desde la raíz.
 - Cuotas: `.\.venv\Scripts\python.exe -m backend.tools.import_winamax_props --days-ahead 5 --all-leagues`, o el botón «Actualizar cuotas» del dashboard.
 - Usuario de la app: `.\.venv\Scripts\python.exe -m backend.tools.set_password <usuario> --crear`.
+- **Refresh al abrir la app:** con sesión, la app pide `POST /refresh/auto`; si los datos están
+  viejos (`necesita_refresh` en `services/refresco_auto.py`), la API lanza en segundo plano el
+  mismo pipeline que la tarea programada (unos minutos) y la portada se recarga al terminar. Cada
+  ejecución, de la app o de `daily_refresh`, queda en la tabla `refresh_runs` y en el log del día.
 - **Refresh programado (Windows):** la tarea "Bets AI - Refresh Flashscore" lanza
   `refresh_programado.ps1` a las 09:00, 15:00 y 21:00. Si Docker Desktop está cerrado lo abre,
   y deja un log por día en `logs/refresh_AAAA-MM-DD.log`. Quitarla:

@@ -1,0 +1,3003 @@
+{
+ "data": {
+  "findOddsByEventId": {
+   "__typename": "OddsComparison",
+   "eventId": "A9JgHzZA",
+   "settings": {
+    "__typename": "ProjectBookmakerGroup",
+    "clickable": 1,
+    "clickableBookmakerLogoOddsComparison": 1,
+    "logoToTextOddsComparison": 0,
+    "showBookmakerLogoOddsComparison": 1,
+    "detailBonusCountOddsComparison": 6,
+    "bookmakers": [
+     {
+      "__typename": "ProjectBookmaker",
+      "bookmaker": {
+       "__typename": "Bookmaker",
+       "id": 16,
+       "name": "bet365",
+       "bonusTextColor": "FFFFFF",
+       "bonusBackgroundColor": "017B5B",
+       "bonusButtonTextColor": "000000",
+       "bonusButtonBackgroundColor": "FBE144"
+      },
+      "numOrder": 1,
+      "premiumStatusId": 1,
+      "betslipPrematchOddsStatusId": 2,
+      "linkPrematchOddsType": 2
+     },
+     {
+      "__typename": "ProjectBookmaker",
+      "bookmaker": {
+       "__typename": "Bookmaker",
+       "id": 406,
+       "name": "Sportium.es",
+       "bonusTextColor": "FFFFFF",
+       "bonusBackgroundColor": "CD2019",
+       "bonusButtonTextColor": "FFFFFF",
+       "bonusButtonBackgroundColor": "AFE00D"
+      },
+      "numOrder": 2,
+      "premiumStatusId": 1,
+      "betslipPrematchOddsStatusId": 2,
+      "linkPrematchOddsType": 2
+     },
+     {
+      "__typename": "ProjectBookmaker",
+      "bookmaker": {
+       "__typename": "Bookmaker",
+       "id": 883,
+       "name": "Winamax.es",
+       "bonusTextColor": "000000",
+       "bonusBackgroundColor": "DBDBDB",
+       "bonusButtonTextColor": "FFFFFF",
+       "bonusButtonBackgroundColor": "E4131A"
+      },
+      "numOrder": 3,
+      "premiumStatusId": 1,
+      "betslipPrematchOddsStatusId": 2,
+      "linkPrematchOddsType": 2
+     },
+     {
+      "__typename": "ProjectBookmaker",
+      "bookmaker": {
+       "__typename": "Bookmaker",
+       "id": 1,
+       "name": "Interwetten",
+       "bonusTextColor": "000000",
+       "bonusBackgroundColor": "FFD300",
+       "bonusButtonTextColor": "222222",
+       "bonusButtonBackgroundColor": "FFFFFF"
+      },
+      "numOrder": 9,
+      "premiumStatusId": 1,
+      "betslipPrematchOddsStatusId": 2,
+      "linkPrematchOddsType": 2
+     }
+    ]
+   },
+   "odds": [
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 406,
+     "bettingType": "HOME_DRAW_AWAY",
+     "bettingScope": "FIRST_HALF",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "3.7",
+       "opening": "3.8",
+       "active": false,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "2.2",
+       "opening": "2.25",
+       "active": false,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "2.75",
+       "opening": "2.65",
+       "active": false,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 406,
+     "bettingType": "HOME_DRAW_AWAY",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "3.55",
+       "opening": "3.75",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.87",
+       "opening": "1.78",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "4.5",
+       "opening": "4.2",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 406,
+     "bettingType": "DRAW_NO_BET",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "2.75",
+       "opening": "2.95",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.45",
+       "opening": "1.4",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 406,
+     "bettingType": "OVER_UNDER",
+     "bettingScope": "FIRST_HALF",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.17",
+       "opening": "1.2",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "3.75",
+       "opening": "4.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "4.75",
+       "opening": "4.33",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.25",
+       "opening": "1.22",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 406,
+     "bettingType": "OVER_UNDER",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.3",
+       "opening": "1.35",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "3.25",
+       "opening": "3.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 406,
+     "bettingType": "ASIAN_HANDICAP",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.95",
+       "opening": "2.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.3",
+       "opening": "1.25",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "3.25",
+       "opening": "3.75",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.8",
+       "opening": "1.75",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.14",
+       "opening": "1.14",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 406,
+     "bettingType": "EUROPEAN_HANDICAP",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.95",
+       "opening": "2.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.3",
+       "opening": "1.27",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "7.0",
+       "opening": "8.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "3.05",
+       "opening": "2.95",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "4.0",
+       "opening": "3.9",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "5.5",
+       "opening": "5.75",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 406,
+     "bettingType": "DOUBLE_CHANCE",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.2",
+       "opening": "1.22",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.9",
+       "opening": "2.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.3",
+       "opening": "1.28",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 406,
+     "bettingType": "HALF_FULL_TIME",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "5.0",
+       "opening": "5.5",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "1/1",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "9.0",
+       "opening": "9.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "X/1",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "23.0",
+       "opening": "25.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "2/1",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "13.0",
+       "opening": "13.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "1/X",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "7.5",
+       "opening": "7.5",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "X/X",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "13.0",
+       "opening": "13.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "2/X",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "15.0",
+       "opening": "16.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "1/2",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "5.5",
+       "opening": "5.25",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "X/2",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "2.65",
+       "opening": "2.55",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "2/2",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 406,
+     "bettingType": "CORRECT_SCORE",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "20.0",
+       "opening": "15.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "1:0",
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "9.0",
+       "opening": "9.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "1:1",
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "13.0",
+       "opening": "13.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "0:1",
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "11.0",
+       "opening": "11.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "2:1",
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "8.0",
+       "opening": "7.5",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "1:2",
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 406,
+     "bettingType": "ODD_OR_EVEN",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.9",
+       "opening": "1.91",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": "ODD",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.9",
+       "opening": "1.83",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": "EVEN",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "HOME_DRAW_AWAY",
+     "bettingScope": "FIRST_HALF",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "3.6",
+       "opening": "4.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "2.3",
+       "opening": "2.25",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "2.75",
+       "opening": "2.6",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "HOME_DRAW_AWAY",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "3.6",
+       "opening": "3.8",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.8",
+       "opening": "1.75",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "4.5",
+       "opening": "4.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "DRAW_NO_BET",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "2.63",
+       "opening": "3.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.44",
+       "opening": "1.36",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "OVER_UNDER",
+     "bettingScope": "FIRST_HALF",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.2",
+       "opening": "1.22",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.35",
+       "opening": "1.43",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "3.45",
+       "opening": "3.9",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.25",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "RETURN50LOST50"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "4.0",
+       "opening": "4.33",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "4.33",
+       "opening": "4.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "3.1",
+       "opening": "2.75",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.3",
+       "opening": "1.24",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.25",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "RETURN50WON50"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.22",
+       "opening": "1.2",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "OVER_UNDER",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.01",
+       "opening": "1.01",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.23",
+       "opening": "1.3",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.25",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.36",
+       "opening": "1.44",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "23.0",
+       "opening": "21.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "4.0",
+       "opening": "3.45",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.25",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "3.2",
+       "opening": "2.75",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "ASIAN_HANDICAP",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "2.6",
+       "opening": "3.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.48",
+       "opening": "1.38",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.98",
+       "opening": "2.05",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.33",
+       "opening": "1.26",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "3.3",
+       "opening": "3.7",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.88",
+       "opening": "1.75",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.55",
+       "opening": "1.6",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "RETURN"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.14",
+       "opening": "1.1",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "5.75",
+       "opening": "7.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "2.38",
+       "opening": "2.3",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "RETURN"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.16",
+       "opening": "1.17",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.25",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.14",
+       "opening": "1.15",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "EUROPEAN_HANDICAP",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.83",
+       "opening": "2.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.3",
+       "opening": "1.25",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "6.5",
+       "opening": "8.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "3.0",
+       "opening": "2.75",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "4.33",
+       "opening": "4.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "5.5",
+       "opening": "6.0",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "DOUBLE_CHANCE",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.18",
+       "opening": "1.22",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.95",
+       "opening": "2.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.29",
+       "opening": "1.25",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "HALF_FULL_TIME",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "5.5",
+       "opening": "6.5",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "1/1",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "8.5",
+       "opening": "9.5",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "X/1",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "23.0",
+       "opening": "26.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "2/1",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "13.0",
+       "opening": "15.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "1/X",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "8.0",
+       "opening": "7.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "X/X",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "13.0",
+       "opening": "13.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "2/X",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "17.0",
+       "opening": "19.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "1/2",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "5.5",
+       "opening": "5.5",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "X/2",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "2.88",
+       "opening": "2.75",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "2/2",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "CORRECT_SCORE",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "21.0",
+       "opening": "19.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "1:0",
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "10.0",
+       "opening": "8.5",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "1:1",
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "15.0",
+       "opening": "12.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "0:1",
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "13.0",
+       "opening": "13.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "2:1",
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "9.5",
+       "opening": "9.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "1:2",
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "ODD_OR_EVEN",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.93",
+       "opening": "1.98",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": "ODD",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.93",
+       "opening": "1.88",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": "EVEN",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "BOTH_TEAMS_TO_SCORE",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.36",
+       "opening": "1.44",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": true,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "3.0",
+       "opening": "2.63",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": false,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 1,
+     "bettingType": "HOME_DRAW_AWAY",
+     "bettingScope": "FIRST_HALF",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "3.7",
+       "opening": "3.75",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "2.25",
+       "opening": "2.3",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "2.65",
+       "opening": "2.6",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 1,
+     "bettingType": "HOME_DRAW_AWAY",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "3.55",
+       "opening": "3.65",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.85",
+       "opening": "1.85",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "4.3",
+       "opening": "4.2",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 1,
+     "bettingType": "DRAW_NO_BET",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "2.65",
+       "opening": "2.7",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.43",
+       "opening": "1.43",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 1,
+     "bettingType": "OVER_UNDER",
+     "bettingScope": "FIRST_HALF",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.17",
+       "opening": "1.2",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "3.55",
+       "opening": "3.65",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "4.8",
+       "opening": "4.6",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.27",
+       "opening": "1.25",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 1,
+     "bettingType": "OVER_UNDER",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.33",
+       "opening": "1.35",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "3.3",
+       "opening": "3.1",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 1,
+     "bettingType": "ASIAN_HANDICAP",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "2.65",
+       "opening": "2.7",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.43",
+       "opening": "1.43",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.95",
+       "opening": "1.95",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.33",
+       "opening": "1.35",
+       "active": false,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "3.3",
+       "opening": "3.2",
+       "active": false,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.85",
+       "opening": "1.85",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-0.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.55",
+       "opening": "1.53",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "RETURN"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "2.35",
+       "opening": "2.4",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "RETURN"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 1,
+     "bettingType": "EUROPEAN_HANDICAP",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.95",
+       "opening": "1.95",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.3",
+       "opening": "1.3",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "7.25",
+       "opening": "7.5",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "2.95",
+       "opening": "3.05",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "4.2",
+       "opening": "4.1",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "5.75",
+       "opening": "5.75",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "-1.0",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 1,
+     "bettingType": "DOUBLE_CHANCE",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.22",
+       "opening": "1.22",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "1.95",
+       "opening": "1.95",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.3",
+       "opening": "1.3",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 1,
+     "bettingType": "HALF_FULL_TIME",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "5.25",
+       "opening": "5.5",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "1/1",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "8.75",
+       "opening": "8.75",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "X/1",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "33.0",
+       "opening": "33.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "2/1",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "14.0",
+       "opening": "14.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "1/X",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "7.25",
+       "opening": "7.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "X/X",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "14.0",
+       "opening": "14.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "2/X",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "20.0",
+       "opening": "20.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "1/2",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "5.25",
+       "opening": "5.25",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "X/2",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "2.5",
+       "opening": "2.55",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": "2/2",
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 1,
+     "bettingType": "CORRECT_SCORE",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "22.0",
+       "opening": "21.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "1:0",
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "8.5",
+       "opening": "8.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "1:1",
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "15.0",
+       "opening": "14.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "0:1",
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "12.0",
+       "opening": "12.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "2:1",
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "8.0",
+       "opening": "7.75",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": "1:2",
+       "bothTeamsToScore": null,
+       "result": "WON"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 1,
+     "bettingType": "ODD_OR_EVEN",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.9",
+       "opening": "1.9",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": "ODD",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.85",
+       "opening": "1.85",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": "EVEN",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 1,
+     "bettingType": "BOTH_TEAMS_TO_SCORE",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.35",
+       "opening": "1.35",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": true,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "3.0",
+       "opening": "2.95",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": false,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 883,
+     "bettingType": "HOME_DRAW_AWAY",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "3.4",
+       "opening": "3.7",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.82",
+       "opening": "1.74",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "4.3",
+       "opening": "4.1",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 883,
+     "bettingType": "OVER_UNDER",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "1.35",
+       "opening": "1.45",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "OVER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "WON"
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": null,
+       "value": "3.2",
+       "opening": "2.7",
+       "active": true,
+       "handicap": {
+        "__typename": "EventOddsItemHandicap",
+        "value": "2.5",
+        "type": "UNKNOWN"
+       },
+       "position": null,
+       "selection": "UNDER",
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": "LOST"
+      }
+     ]
+    },
+    {
+     "__typename": "EventOdds",
+     "bookmakerId": 16,
+     "bettingType": "TO_QUALIFY",
+     "bettingScope": "FULL_TIME",
+     "hasLiveBettingOffers": false,
+     "bookmakerDetailBonusId": 0,
+     "odds": [
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "fBvd4ctg",
+       "value": "2.1",
+       "opening": "2.0",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": null
+      },
+      {
+       "__typename": "EventOddsItem",
+       "eventParticipantId": "SOx42yB5",
+       "value": "1.0",
+       "opening": "1.7",
+       "active": true,
+       "handicap": null,
+       "position": null,
+       "selection": null,
+       "winner": null,
+       "score": null,
+       "bothTeamsToScore": null,
+       "result": null
+      }
+     ]
+    }
+   ],
+   "bonuses": []
+  }
+ }
+}

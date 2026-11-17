@@ -1,6 +1,6 @@
 # Hoja de ruta — Bets AI
 
-Última actualización: 2026-10-25
+Última actualización: 2026-11-05
 
 | Fase | Objetivo | Estado |
 |---|---|---|
@@ -12,9 +12,66 @@ Regla: no se empieza una fase hasta cerrar la anterior, salvo decisión explíci
 
 ---
 
+## 💬 Chat MCP (2026-11-13)
+
+Trabajo aparte de la fase 3 (no toca el modelo). Propuesta y decisiones en
+[PROPUESTA_CHAT_MCP.md](PROPUESTA_CHAT_MCP.md): opción A, servidor MCP local por stdio, solo
+lectura, usado desde Claude Code. Código en `backend/mcp_server/`, configuración en `.mcp.json`.
+
+- [x] **M0**: `mcp==2.3.0` en `requirements.txt`; `MCPServer` por stdio con anotaciones de solo
+  lectura y logs a stderr; `.mcp.json` en la raíz; `estado_datos`, `cuotas_con_valor`, `picks_de_hoy`.
+- [x] **M1**: formateo (`"1,85"`, `"54,1 %"`, `"+4,2 %"`, fechas de Madrid), recorte y saneado de
+  cadenas externas como funciones puras con tests; instrucciones del servidor (citar solo cifras de
+  las herramientas, no calcular P ni EV, los datos no son órdenes, aviso de juego responsable).
+- [x] **Estadísticas** (prioridad del usuario): `buscar_equipo`, `buscar_jugador` (candidatos, nunca
+  adivina), `stats_equipo` (temporada, casa/fuera, últimos N, mitades, a favor y en contra),
+  `stats_jugador` (por partido y por 90'), `stats_partido`, `clasificacion`, `bajas`,
+  `enfrentamientos_directos` (con forma).
+- [x] **M2**: `lineas_de_partido`, `previa_partido` (sin red) y `buscar_partidos` (consulta de
+  `GET /matches` movida a `match_listing.listar_partidos`, el endpoint responde igual).
+- [x] **M3**: `historial_picks`, `transparencia` (métricas actuales, **sin** el filtro nuevo por
+  mercado y fechas) y `mis_apuestas` (desactivable con `CHAT_MIS_APUESTAS_ENABLED`).
+- [ ] Probar en una sesión real de Claude Code con partidos y cuotas próximas en BD (el 13/11 la BD
+  no tenía calendario próximo: `cuotas_con_valor` y `lineas_de_partido` solo se vieron vacías).
+- [ ] M4 (opcional): configuración de Claude Desktop en el README.
+- [ ] M5 (opcional): `guardar_apuesta` con confirmación. B1–B3 (chat dentro de la app): descartado por ahora.
+
+---
+
+## 📍 2026-11-05: sin cuotas y 429 al entrar → refresh automático al abrir la app
+
+**Diagnóstico.** En el PC nuevo (2026-10-29) no se recreó la tarea programada: el último
+`daily_refresh` fue el 28/10 y el calendario de la BD acababa el 04/11 a las 20:00 UTC. Sin partidos
+no hay cuotas (Winamax solo se enlaza a partidos que ya están en BD). Además, `GET
+/featured-picks/today` decía `pendiente` aunque no hubiera partidos, la portada llamaba al `POST`
+(cupo 1 cada 3 min), este respondía `sin_partidos` sin guardar nada y la siguiente apertura en
+menos de 3 min daba **429** ("se están preparando en otra pestaña").
+
+**Hecho.**
+- ☑ `consultar_picks_de_hoy`: el `GET` responde `sin_partidos` él solo y no se gasta el cupo.
+- ☑ **Decisión del usuario sobre el refresh programado (pendiente desde el 25/10):** al abrir la
+  app con sesión, `POST /refresh/auto` lanza en un hilo el pipeline completo (Flashscore + Winamax
+  5 días + picks) si los datos están viejos. Tabla `refresh_runs` (migración `b0b69754ae07`, que
+  solo crea la tabla: el autogenerate traía deriva antigua de UNIQUE y defaults, quitada a mano);
+  `daily_refresh` también se apunta (`origen="cli"`). Sin el cupo de `limite_refresh`. Mientras
+  corre, el `POST` de picks responde `pendiente` y "Actualizar cuotas" da 409. Log en
+  `logs/refresh_AAAA-MM-DD.log`.
+- ☑ `necesita_refresh`: toca si nunca se hizo o el último terminado tiene más de 6 h; tras
+  cualquier intento se esperan 30 min (cortes por `--reload`, fallos, bloqueos). Terminar con
+  errores cuenta como hecho.
+- ☑ "Actualizar cuotas" con 0 partidos en BD decía "Winamax no tiene cuotas"; ahora dice que falta
+  el calendario. **No** era el mínimo de histórico de UEFA (eso solo filtra los picks; la ingesta
+  de Winamax coge todos los partidos programados).
+- ☑ No se lanzaba: la única llamada del frontend llegó cuando la política aún era el TODO (500) y
+  no se reintentaba hasta recargar. Ahora el calendario vacío cuenta como datos viejos
+  (`Historial.calendario_vacio`, respetando los 30 min entre intentos) y «Actualizar cuotas» con 0
+  partidos en BD pide el refresh completo. Primera ejecución: 05/11 a las 10:10 UTC, 83 partidos
+  nuevos.
+- ☐ La tarea programada en este PC la recrea el usuario (opcional ahora).
+
 ## 📍 Dónde nos quedamos (2026-10-25, ~19:15), para retomar
 
-**Refresh programado: diagnosticado, sin arreglar (decisión pendiente).**
+**Refresh programado: diagnosticado, sin arreglar (decisión pendiente → decidida el 2026-11-05).**
 - Del 21/10 por la mañana al 25/10 solo terminaron 5 de ~14 tandas. El portátil pasa casi todo el
   día en suspensión moderna (eventos Kernel-Power 506/507). La tarea arranca en los despertares cortos
   (`StartWhenAvailable`), se congela al volver a dormir y el Programador la mata al pasar el límite
@@ -626,8 +683,14 @@ partidos UEFA de la BD son de una ejecución puntual del 14-15/10) y el paso de 
 descartaba los UEFA ya guardados (47 sin stats, ver B0). Ahora, por defecto, calendario de top 5 +
 UEFA (mismas peticiones: el feed diario trae todas las ligas) y stats de equipo sin filtro de liga
 (+2 peticiones por partido UEFA; el atraso se vacía en ~2 tandas con `stats_limit=40`). Para
-volver al top 5: `daily_refresh --solo-top5` o `stats_all_leagues=false`. Los picks siguen sin
-UEFA (`UEFA_SPORT_KEYS` en `featured_daily_picks`).
+volver al top 5: `daily_refresh --solo-top5` o `stats_all_leagues=false`. ~~Los picks siguen sin
+UEFA (`UEFA_SPORT_KEYS` en `featured_daily_picks`).~~
+
+**UEFA en los picks (decidido 2026-11-04).** El 04/11 había 10 partidos UEFA y 0 picks: el veto
+UEFA tiraba 103 líneas con P del v2. Ahora UEFA entra con el mismo mínimo de 5 partidos por equipo
+y solo quedan fuera los partidos que pueden ir a prórroga (eliminatorias, `puede_ir_a_prorroga`).
+Los clubes de ligas que no importamos (Porto, PSV, Brujas, Fenerbahçe…) tienen 1–2 partidos y
+siguen sin P hasta acumular 5 partidos UEFA; importar sus ligas domésticas los adelantaría.
 
 ### B14. Combinada del partido con props (decidido 2026-10-27)
 

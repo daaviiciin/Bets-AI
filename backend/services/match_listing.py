@@ -10,16 +10,70 @@ también su nombre original, que es el que llevan las cuotas de la página de pa
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session, joinedload
 
-from backend.models import Market, Match, Odds, Snapshot
+from backend.models import League, Market, Match, Odds, Snapshot
 from backend.services.graded_odds_service import WINAMAX_SOURCE
 from backend.services.team_name_matching import team_side_score
+
+
+#: ``scope="target"`` de ``GET /matches``: cinco grandes ligas + Champions, Europa y Conference.
+TARGET_JORNADA_LEAGUES = frozenset({
+    "soccer_epl",
+    "soccer_italy_serie_a",
+    "soccer_germany_bundesliga",
+    "soccer_spain_la_liga",
+    "soccer_france_ligue_one",
+    "soccer_uefa_champs_league",
+    "soccer_uefa_europa_league",
+    "soccer_uefa_europa_conference_league",
+})
+
+
+def listar_partidos(
+    session: Session,
+    *,
+    league: str | None = None,
+    days_ahead: int = 14,
+    days_back: int = 0,
+    scope: str | None = None,
+    limit: int = 100,
+    team_ids: Iterable[int] | None = None,
+    now: datetime | None = None,
+) -> list[Match]:
+    """Partidos entre ``now - days_back`` y ``now + days_ahead``, por fecha de inicio.
+
+    ``league`` es el ``sport_key`` (manda sobre ``scope``); ``scope="target"`` limita a
+    :data:`TARGET_JORNADA_LEAGUES`; ``team_ids`` deja solo los partidos donde juega alguno de
+    esos equipos (lo usa el chat por MCP; el endpoint no lo pasa).
+    """
+    now = now or datetime.now(timezone.utc)
+    stmt = (
+        select(Match)
+        .where(Match.commence_time >= now - timedelta(days=days_back))
+        .where(Match.commence_time <= now + timedelta(days=days_ahead))
+        .options(
+            joinedload(Match.league),
+            joinedload(Match.home_team),
+            joinedload(Match.away_team),
+        )
+        .order_by(Match.commence_time)
+        .limit(limit)
+    )
+    if league:
+        stmt = stmt.join(Match.league).where(League.sport_key == league)
+    elif scope == "target":
+        stmt = stmt.join(Match.league).where(League.sport_key.in_(TARGET_JORNADA_LEAGUES))
+    if team_ids is not None:
+        ids = list(team_ids)
+        stmt = stmt.where(or_(Match.home_team_id.in_(ids), Match.away_team_id.in_(ids)))
+    return list(session.scalars(stmt).all())
 
 
 @dataclass(frozen=True)
@@ -98,4 +152,11 @@ def latest_1x2_by_match(session: Session, matches: list[Match]) -> dict[int, Odd
     return out
 
 
-__all__ = ["Odds1x2", "latest_1x2_by_match", "outcome_side", "pick_1x2"]
+__all__ = [
+    "TARGET_JORNADA_LEAGUES",
+    "Odds1x2",
+    "latest_1x2_by_match",
+    "listar_partidos",
+    "outcome_side",
+    "pick_1x2",
+]
