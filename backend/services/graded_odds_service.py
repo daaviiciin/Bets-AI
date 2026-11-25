@@ -16,6 +16,7 @@ from backend.services import market_probabilities as mp
 from backend.services import player_props_model as ppm
 from backend.services import poisson_model as pm
 from backend.services import value_calculator as vc
+from backend.services import ventaja_mercado as vm
 from backend.services.value_detector import ValueDetector
 from backend.services.winamax_odds_ingester import WINAMAX_TOP5_FOOTBALL_KEYS
 
@@ -542,6 +543,8 @@ class GradedOddsLine:
     player_id: int | None = None
     #: Props v2 (B14d): ``(lado cuyos goles condicionan, P(gana | k goles) para k = 0..10)``.
     prop_condicional: tuple[str, tuple[float, ...]] | None = None
+    #: Ventaja frente al consenso del comparador de Flashscore (``None`` = ruido o sin datos).
+    mercado: vm.VentajaMercado | None = None
 
 
 def confidence_from_model_ev(model_ev: Decimal | None) -> str:
@@ -570,8 +573,11 @@ def grade_line(offered_odds: Decimal, model_ev: Decimal | None) -> tuple[str, bo
     return confidence_from_model_ev(model_ev), True
 
 
-def _best_winamax_snapshot_per_match(session: Session, match_ids: set[int]) -> dict[int, int]:
-    """Por cada ``match_id``, el snapshot Winamax más reciente que ya tiene cuotas guardadas."""
+def _best_winamax_snapshot_and_time(
+    session: Session, match_ids: set[int],
+) -> dict[int, tuple[int, datetime]]:
+    """Por cada ``match_id``, el snapshot Winamax más reciente que ya tiene cuotas guardadas
+    ``(id, hora de la toma)``."""
     if not match_ids:
         return {}
     stmt = (
@@ -585,7 +591,44 @@ def _best_winamax_snapshot_per_match(session: Session, match_ids: set[int]) -> d
         cur = best.get(mid)
         if cur is None or cap > cur[1] or (cap == cur[1] and sid > cur[0]):
             best[mid] = (sid, cap)
-    return {mid: sid for mid, (sid, _) in best.items()}
+    return best
+
+
+def _ventajas_frente_al_mercado(
+    session: Session,
+    filas_por_partido: dict[int, list[Odds]],
+    match_by_id: dict[int, Match],
+    captured_at: dict[int, datetime],
+    now: datetime,
+    log: logging.Logger,
+) -> dict[int, dict[vm.ClaveWinamax, vm.VentajaMercado]]:
+    """Marcas del comparador por partido. Un fallo no tumba el listado de cuotas."""
+    try:
+        otras = vm.cuotas_comparador_vigentes(session, filas_por_partido)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("graded_odds: no se pudo leer el comparador de cuotas: %s", exc)
+        return {}
+    out: dict[int, dict[vm.ClaveWinamax, vm.VentajaMercado]] = {}
+    for mid, filas in filas_por_partido.items():
+        m = match_by_id.get(mid)
+        cap = captured_at.get(mid)
+        if m is None or cap is None or not otras.get(mid):
+            continue
+        lineas = [
+            vm.LineaWinamax(
+                market_key=o.market.key if o.market else "", outcome_name=o.outcome_name or "",
+                outcome_point=o.outcome_point, price=o.price, captured_at=_aware(cap),
+            )
+            for o in filas
+        ]
+        out[mid] = vm.ventajas_del_partido(
+            lineas, otras[mid], home=m.home_team.name, away=m.away_team.name, now=now,
+        )
+    return out
+
+
+def _aware(dt: datetime) -> datetime:
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 def _interleave_odds_rows_for_dashboard(
@@ -680,12 +723,12 @@ def list_graded_winamax_odds(
     match_by_id = {m.id: m for m in matches}
     allowed_match_ids = {m.id for m in matches}
 
-    best_snap = _best_winamax_snapshot_per_match(session, allowed_match_ids)
-    if not best_snap:
+    best_snap_t = _best_winamax_snapshot_and_time(session, allowed_match_ids)
+    if not best_snap_t:
         _log.info("graded_odds: ningún partido del horizonte tiene cuotas Winamax en BD.")
         return []
 
-    pair_list = list(best_snap.items())
+    pair_list = [(mid, sid) for mid, (sid, _) in best_snap_t.items()]
     stmt_o = (
         select(Odds)
         .where(tuple_(Odds.match_id, Odds.snapshot_id).in_(pair_list))
@@ -732,6 +775,10 @@ def list_graded_winamax_odds(
     for o in rows:
         if o.player_id is None:
             filas_por_partido[o.match_id].append(o)
+    ventajas = _ventajas_frente_al_mercado(
+        session, filas_por_partido, match_by_id,
+        {mid: cap for mid, (_, cap) in best_snap_t.items()}, now, _log,
+    )
 
     def prediccion_v2(m: Match) -> mp.MatchPrediction | None:
         if m.id not in prediccion_cache:
@@ -890,6 +937,10 @@ def list_graded_winamax_odds(
                 ),
                 player_id=o.player_id,
                 prop_condicional=condicional,
+                mercado=(
+                    ventajas.get(m.id, {}).get((mk, o.outcome_name, o.outcome_point))
+                    if o.player_id is None else None
+                ),
             )
         )
 

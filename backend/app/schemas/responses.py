@@ -56,6 +56,20 @@ class MatchOut(BaseModel):
     odds_1x2: Odds1x2Out | None = None
 
 
+class VentajaMercadoOut(BaseModel):
+    """Cuota de Winamax por encima del consenso del comparador de Flashscore."""
+
+    #: ``value`` (ventaja de 3 a 15 %), ``surebet``, ``desfasada`` o ``error_probable`` (> 15 %).
+    clase: str
+    #: ``cuota × P_mercado − 1``.
+    ventaja: Decimal
+    #: P sin margen del consenso de las demás casas.
+    p_mercado: Decimal
+    cuota_justa: Decimal
+    casas: int
+    leido_at: datetime
+
+
 class GradedOddsLineOut(BaseModel):
     """Cuota puntual calificada (todas las líneas del libro para el dashboard)."""
 
@@ -82,6 +96,8 @@ class GradedOddsLineOut(BaseModel):
     lambda_away: Decimal | None = None
     implied_probability: Decimal | None = None
     model_summary_lines: list[str] = Field(default_factory=list)
+    #: Solo si Winamax paga más que el resto del mercado (comparador de Flashscore).
+    mercado: VentajaMercadoOut | None = None
 
 
 class AuthUserBriefOut(BaseModel):
@@ -173,6 +189,8 @@ class FeaturedTodayOut(BaseModel):
 
     estado: Literal["listo", "pendiente", "sin_partidos"]
     motivo: str | None = None
+    #: Con ``sin_partidos``: inicio del próximo partido de fútbol programado (``None`` = ninguno).
+    proximo_partido: datetime | None = None
     #: ``True`` si al generarlos hubo que descargar antes las cuotas de Winamax.
     cuotas_actualizadas: bool = False
     pick: FeaturedDailyPickOut | None = None
@@ -208,6 +226,10 @@ class FeaturedPicksMetricsOut(BaseModel):
     novalue_hits: int = 0
     novalue_misses: int = 0
     novalue_rate_pct: float | None = None
+    #: Simples de props de jugador (experimentales, reglas v5) y el resto, por separado:
+    #: ``{hits, misses, pending, needs_review, voids, rate_pct}``.
+    simples_con_props: dict[str, Any] = Field(default_factory=dict)
+    simples_sin_props: dict[str, Any] = Field(default_factory=dict)
     combos_total: int = 0
     combo_hits: int = 0
     combo_misses: int = 0

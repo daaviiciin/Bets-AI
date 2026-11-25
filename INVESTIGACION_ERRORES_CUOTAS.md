@@ -433,6 +433,43 @@ antes) o un WebSocket de pago. Es una decisión del usuario (§7).
 - El motivo exacto por el que se retiró The Odds API (el repo no lo dice).
 - Las cifras de margen típico y de ventaja por estrategia marcadas como [F].
 
+## 9. El comparador de cuotas de Flashscore (reconocimiento del 2026-11-13)
+
+La pestaña «Cuotas» de la página de partido de Flashscore devuelve, con **una sola petición
+GraphQL por partido**, todas las casas y todos los mercados de ese partido. Lo lee
+`backend/scrapers/flashscore_cuotas.py`; lo guarda `backend/services/comparador_cuotas_ingester.py`.
+
+- **URL**: `https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=<id>&projectId=13&geoIpCode=ES&geoIpSubdivisionCode=ESMD`.
+  `projectId=13` es el proyecto que ya usamos para bajas y stats; `eventId` es el id de
+  Flashscore del partido.
+- **Casas** con `geoIpCode=ES`: bet365, Winamax.es, Sportium.es, 1xBet.es, Versus.es, Betway,
+  Retabet, Interwetten, Codere, bwin.es, 888sport, Speedybet.es y William Hill.
+- **Respuesta**: `data.findOddsByEventId.odds` es una lista de
+  `{bookmakerId, bettingType, bettingScope, odds: [item…]}`. Cada `item` trae `value` (cuota
+  actual), `opening` (apertura), `active` y, según el mercado, `eventParticipantId`,
+  `handicap.value`, `selection` (`OVER`/`UNDER`/`ODD`/`EVEN`), `bothTeamsToScore`, `score`
+  (`"2:1"`) o `winner` (`"1/X"`). Tras el partido, `result` (`WON`/`LOST`/…).
+- **No necesita** la cabecera `x-fsign`.
+- **No trae** hora de actualización por casa: la frescura es la de nuestra lectura (todas las
+  casas de una respuesta salen del mismo instante).
+- `eventParticipantId` es el participante del evento, no el id del equipo: el local es el
+  primero de la lista del 1X2 (`[local, visitante, empate]` en todas las casas observadas).
+- El scraper traduce a las mismas claves neutrales que Winamax (`h2h`, `totals`, `btts`,
+  `double_chance`…) y guarda los hándicaps siempre desde el punto de vista del local.
+
+**Estado (2026-11-17):** la ingesta va en el refresh desde el 2026-11-17 (tras las cuotas de
+Winamax y antes de los picks, en la tarea programada y en el refresh al abrir la app).
+
+**Estado (2026-11-18):** el detector está conectado. Decisiones del usuario: se hace ya, con el
+comparador de Flashscore (no OddsPapi), y se marca la ventaja **de 3 a 15 %** frente al consenso
+(«con cantidades pequeñas no es significativa, con grandes sí»); por encima del 15 % es posible
+error (§2.2). `backend/services/ventaja_mercado.py` compara la cuota de Winamax de nuestro scraper
+con la mediana sin margen de ≥ 3 casas del comparador leídas a ≤ 2 h de ella; la página de partido
+lo enseña. Primera medida real (40 partidos, 1.285 líneas): Winamax paga de mediana un 5,8 % menos
+que el consenso y ninguna línea cae en el baremo. **Sigue sin referencia afilada** (§0.4): el
+consenso es de casas blandas, así que una marca dice que Winamax paga más que el resto, no que
+sea *value* de verdad. Falta el registro en seco con CLV (E6–E7) antes de fiarse.
+
 ## Fuentes
 
 **Términos y regulación**

@@ -3,7 +3,8 @@
 Sigue el algoritmo de ``INVESTIGACION_ERRORES_CUOTAS.md`` §6.3, por partido:
 
 1. **Frescura:** fuera las cuotas con más de ``max_antiguedad``; un par bet365/Winamax solo se
-   compara si se leyeron con menos de ``max_desfase_par`` de diferencia.
+   compara si se leyeron con menos de ``max_desfase_par`` de diferencia, y una casa solo entra
+   en el consenso si se leyó a menos de ``max_desfase_consenso`` de la cuota evaluada.
 2. **Quitar el margen** de cada casa en cada mercado completo (método *power*,
    ``sin_margen_power``): 1X2 y hándicap europeo (3 resultados); más/menos, ambos marcan,
    par/impar, empate no válido y hándicap asiático (2). La doble oportunidad se deriva del 1X2
@@ -20,9 +21,13 @@ Sigue el algoritmo de ``INVESTIGACION_ERRORES_CUOTAS.md`` §6.3, por partido:
 
 Las cuotas entran en **claves neutrales** (las de ``comparador_cuotas``: ``home``, ``draw``,
 ``away``, ``over``, ``under``, ``yes``, ``no``, ``1X``, ``12``, ``X2``, ``odd``, ``even``…; la
-línea de los hándicaps, desde el local). Las de Winamax se traducen antes con
-``errores_cuotas.lado_neutral_winamax``. Las cuentas internas van en ``float`` (como
+línea de los hándicaps, desde el local). Las de Winamax (``odds``, con nombres de equipo) se
+traducen antes con :func:`clave_neutral_winamax`. Las cuentas internas van en ``float`` (como
 ``sin_margen_power``) y lo que sale, en ``Decimal``.
+
+**Baremo del usuario (2026-11-18):** se marca como *value* una ventaja de **3 a 15 %** frente a
+la referencia sin margen (:data:`VENTAJA_MIN`, :data:`VENTAJA_MAX`). Por encima del 15 % ya es
+lo que Winamax puede anular por «error manifiesto» (§2.2), así que pasa a error probable.
 """
 
 from __future__ import annotations
@@ -35,10 +40,19 @@ from decimal import Decimal
 from enum import StrEnum
 
 from backend.services.market_probabilities import sin_margen_power
-from backend.services.winamax_normalization import TOTALS_MARKETS
+from backend.services.winamax_normalization import (
+    TOTALS_MARKETS,
+    normalize_double_chance_outcome,
+    normalize_h2h_outcome,
+)
 
 BET365 = "bet365_es"
 WINAMAX = "winamax_es"
+
+#: Ventaja mínima (``cuota × P_ref − 1``) para marcar una cuota como *value*.
+VENTAJA_MIN = 0.03
+#: Ventaja máxima del *value*: por encima, error probable (la casa puede anular la apuesta).
+VENTAJA_MAX = 0.15
 
 ROL_SHARP = "sharp"
 REF_SHARP = "sharp"
@@ -85,6 +99,9 @@ class Parametros:
     casas_objetivo: tuple[str, ...] = (BET365, WINAMAX)
     max_antiguedad: timedelta = timedelta(hours=6)
     max_desfase_par: timedelta = timedelta(minutes=30)
+    #: Una casa del consenso leída mucho antes o después que la cuota evaluada no cuenta: el
+    #: botón «Actualizar cuotas» relee Winamax pero no el comparador.
+    max_desfase_consenso: timedelta = timedelta(hours=2)
     min_casas_consenso: int = 3
     mad_por_defecto: float = 0.04
 
@@ -121,47 +138,50 @@ def clasificar_discrepancia(s: Senales) -> tuple[Clase, Confianza | None]:
 
     Criterios posibles (``INVESTIGACION_ERRORES_CUOTAS.md`` §6.3, tabla del paso 7):
 
-    * **Error probable:** ``ratio_ref ≥ 1,5`` (o ``≤ 0,67``), o ``|z_par| ≥ 6``, o
-      ``lado_cambiado``. Confianza alta si es por lados cambiados; media si solo es por tamaño.
-      Es lo que Winamax anula por «error manifiesto» y bet365 recalcula: no se recomienda.
+    * **Error probable:** ``lado_cambiado``; o ``edge > 15 %`` (:data:`VENTAJA_MAX`); o, sin
+      referencia sin margen, ``ratio_ref ≥ 1,5`` (o ``≤ 0,67``); o ``|z_par| ≥ 6``. Confianza
+      alta si es por lados cambiados; media si solo es por tamaño. Es lo que Winamax anula por
+      «error manifiesto» y bet365 recalcula: no se recomienda.
     * **Surebet:** ``surebet_margen ≥ 1 %`` y no es error probable. Alta si las cuotas se
       leyeron con ≤ 2 min de diferencia, media si ≤ 10, baja si más.
     * **Cuota desfasada:** la referencia se movió ≥ 4 % (``ref_movimiento``), la casa no
       (``casa_sin_cambios``) y ``edge ≥ 2 %``. Alta con referencia ``sharp``, si no media.
-    * **Value:** ``edge ≥ 3 %`` con ``sharp``, ``≥ 5 %`` con consenso, ``≥ 8 %`` con modelo; y,
-      si hay par, ``2 ≤ z < 6``. Confianza alta / media / baja según la referencia.
+    * **Value:** ``3 % ≤ edge ≤ 15 %`` con referencia ``sharp`` o consenso (baremo del usuario
+      del 18/11, el mismo para las dos) y, si hay par, ``2 ≤ z < 6``. Confianza alta con
+      ``sharp``, media con consenso.
     * **Ruido:** todo lo demás (confianza ``None``).
 
-    Otras ideas que se pueden probar: exigir menos ventaja cuanto más fresca sea la cuota
-    (``antiguedad_min``), endurecer los umbrales en cuotas altas (> 5, donde la dispersión
-    entre casas es mayor) o pedir que bet365 y el consenso coincidan antes de marcar a Winamax.
+    Otras ideas que se pueden probar con el registro en seco: exigir menos ventaja cuanto más
+    fresca sea la cuota (``antiguedad_min``), endurecer los umbrales en cuotas altas (> 5,
+    donde la dispersión entre casas es mayor) o pedir que bet365 y el consenso coincidan antes
+    de marcar a Winamax.
     """
-    # TODO(usuario): cuerpo provisional con los umbrales iniciales del documento. Ajústalo
-    # (o cámbialo por otro criterio) cuando el registro en seco diga qué separa el ruido de
-    # las discrepancias que se pagan.
     ratio = s.ratio_ref
     z = s.z_par
+    edge = s.edge
     if s.lado_cambiado:
         return Clase.ERROR_PROBABLE, Confianza.ALTA
-    if (ratio is not None and (ratio >= 1.5 or ratio <= 0.67)) or (z is not None and abs(z) >= 6):
+    if (
+        (edge is not None and edge > VENTAJA_MAX)
+        or (ratio is not None and (ratio >= 1.5 or ratio <= 0.67))
+        or (z is not None and abs(z) >= 6)
+    ):
         return Clase.ERROR_PROBABLE, Confianza.MEDIA
     if s.surebet_margen is not None and s.surebet_margen >= 0.01:
         d = s.desfase_min if s.desfase_min is not None else 0.0
         conf = Confianza.ALTA if d <= 2 else Confianza.MEDIA if d <= 10 else Confianza.BAJA
         return Clase.SUREBET, conf
-    edge = s.edge
     if (
         edge is not None and edge >= 0.02 and s.casa_sin_cambios
         and s.ref_movimiento is not None and s.ref_movimiento >= 0.04
     ):
         return Clase.DESFASADA, Confianza.ALTA if s.ref_kind == REF_SHARP else Confianza.MEDIA
-    umbral = {REF_SHARP: 0.03, REF_CONSENSO: 0.05, "model": 0.08}.get(s.ref_kind)
-    if edge is not None and umbral is not None and edge >= umbral:
-        if z is None or 2 <= z < 6:
-            conf = {REF_SHARP: Confianza.ALTA, REF_CONSENSO: Confianza.MEDIA}.get(
-                s.ref_kind, Confianza.BAJA,
-            )
-            return Clase.VALUE, conf
+    if (
+        edge is not None and s.ref_kind in (REF_SHARP, REF_CONSENSO)
+        and VENTAJA_MIN <= edge <= VENTAJA_MAX
+        and (z is None or 2 <= z < 6)
+    ):
+        return Clase.VALUE, Confianza.ALTA if s.ref_kind == REF_SHARP else Confianza.MEDIA
     return Clase.RUIDO, None
 
 
@@ -243,6 +263,52 @@ _OTRO_LADO = {
 }
 
 
+def _lado_por_nombre(nombre: str, home: str, away: str) -> str | None:
+    canon = normalize_h2h_outcome(nombre, home_team=home, away_team=away)
+    if canon == "Draw":
+        return "draw"
+    if canon == home.strip():
+        return "home"
+    if canon == away.strip():
+        return "away"
+    return None
+
+
+def clave_neutral_winamax(
+    market_key: str, outcome_name: str, outcome_point: Decimal | None, home: str, away: str,
+) -> LineaClave | None:
+    """Línea de Winamax (``odds``, con nombres de equipo) → clave neutral del comparador.
+
+    Solo los mercados que trae el comparador con la misma clave: 1X2, doble oportunidad,
+    empate no válido, más/menos de goles (partido y mitades) y ambos marcan. El resto
+    (props, córners, goles de un equipo…) da ``None``: no hay con qué compararlo.
+    """
+    nombre = (outcome_name or "").strip()
+    if market_key in ("h2h", "draw_no_bet"):
+        lado = _lado_por_nombre(nombre, home, away)
+        if lado is None or (market_key == "draw_no_bet" and lado == "draw"):
+            return None
+        return (market_key, lado, None)
+    if market_key == "double_chance":
+        canon = normalize_double_chance_outcome(nombre, home_team=home, away_team=away)
+        lados = frozenset(_lado_por_nombre(x, home, away) for x in canon.split(" or "))
+        oc = {
+            frozenset({"home", "draw"}): "1X",
+            frozenset({"home", "away"}): "12",
+            frozenset({"draw", "away"}): "X2",
+        }.get(lados)
+        return (market_key, oc, None) if oc else None
+    if market_key in ("totals", "match_first_half_totals", "match_second_half_totals"):
+        lado = {"over": "over", "under": "under"}.get(nombre.lower())
+        if lado is None or outcome_point is None:
+            return None
+        return (market_key, lado, _norm_line(outcome_point))
+    if market_key == "btts":
+        lado = {"yes": "yes", "no": "no"}.get(nombre.lower())
+        return (market_key, lado, None) if lado else None
+    return None
+
+
 def _f(x: Decimal | None) -> float | None:
     return float(x) if x is not None else None
 
@@ -312,6 +378,11 @@ def detectar(
     justas = _justas_por_casa(frescas)
     justas_ant = _justas_por_casa(frescas, usar_anterior=True)
     sharps = {c.casa for c in frescas if c.rol == ROL_SHARP}
+    visto_por_casa: dict[str, datetime] = {}
+    for c in frescas:
+        if c.casa not in visto_por_casa or c.seen_at > visto_por_casa[c.casa]:
+            visto_por_casa[c.casa] = c.seen_at
+    desfase_max_min = p.max_desfase_consenso.total_seconds() / 60
 
     surebets = _surebets(frescas, p)
     res.surebets = [s for s in surebets if any(pt.casa in p.casas_objetivo for pt in s.patas)]
@@ -333,19 +404,28 @@ def detectar(
             if otra is not None and _minutos(x.seen_at, otra.seen_at) > p.max_desfase_par.total_seconds() / 60:
                 otra = None
 
+            def a_tiempo(k: str, _x: CuotaObservada = x) -> bool:
+                """La casa ``k`` se leyó cerca de la cuota evaluada (puede entrar en el consenso)."""
+                return _minutos(visto_por_casa[k], _x.seen_at) <= desfase_max_min
+
             # Referencia
             p_ref: float | None = None
             p_ref_ant: float | None = None
             ref_kind = REF_NINGUNA
             n_ref = 0
             ratio: float | None = None
-            sharp_ps = [justas[s][clave] for s in sharps if s != casa and clave in justas.get(s, {})]
-            cons = [j[clave] for k, j in justas.items() if k != casa and clave in j]
+            sharp_ps = [
+                justas[s][clave] for s in sharps
+                if s != casa and clave in justas.get(s, {}) and a_tiempo(s)
+            ]
+            cons = [j[clave] for k, j in justas.items() if k != casa and clave in j and a_tiempo(k)]
             if sharp_ps:
                 p_ref, ref_kind, n_ref = statistics.median(sharp_ps), REF_SHARP, len(sharp_ps)
             elif len(cons) >= p.min_casas_consenso:
                 p_ref, ref_kind, n_ref = statistics.median(cons), REF_CONSENSO, len(cons)
-                ant = [j[clave] for k, j in justas_ant.items() if k != casa and clave in j]
+                ant = [
+                    j[clave] for k, j in justas_ant.items() if k != casa and clave in j and a_tiempo(k)
+                ]
                 p_ref_ant = _mediana(ant)
             elif otra is not None:
                 ref_kind, n_ref = REF_PAR, 1
@@ -353,7 +433,7 @@ def detectar(
             if edge is not None:
                 ratio = edge + 1
             else:
-                crudas = [float(o.price) for k, o in casas.items() if k != casa]
+                crudas = [float(o.price) for k, o in casas.items() if k != casa and a_tiempo(k)]
                 if len(crudas) >= p.min_casas_consenso:
                     ratio = float(x.price) / statistics.median(crudas)
                     n_ref = max(n_ref, len(crudas))

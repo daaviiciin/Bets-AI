@@ -57,6 +57,7 @@ from backend.services.odds_history import LineKey, OddsHistoryRecorder, line_key
 from backend.services.winamax_normalization import (
     TOTALS_MARKETS,
     canonical_market_key,
+    completar_por_eliminacion,
     normalize_match_outcome,
     parse_totals_line_from_label,
 )
@@ -687,14 +688,22 @@ class WinamaxOddsIngester:
             bet_line = self._line_from_special_value(bet.special_bet_value)
             home_n = db_match.home_team.name
             away_n = db_match.away_team.name
-            for oc in bet.outcomes:
+            # Todas las selecciones a la vez: en 1X2 y doble oportunidad la que no se reconozca
+            # por nombre ("Niza", "Colonia") se deduce de las otras dos.
+            nombres = completar_por_eliminacion(
+                canon,
+                [
+                    normalize_match_outcome(canon, oc.label, home_team=home_n, away_team=away_n)
+                    for oc in bet.outcomes
+                ],
+                home_team=home_n,
+                away_team=away_n,
+            )
+            for oc, out_name in zip(bet.outcomes, nombres):
                 price = Decimal(str(oc.odds))
                 if not self._is_storable_price(price):
                     result.odds_filtered += 1
                     continue
-                out_name = normalize_match_outcome(
-                    canon, oc.label, home_team=home_n, away_team=away_n,
-                )
                 line: float | None = bet_line
                 if canon in TOTALS_MARKETS and line is None:
                     line = (

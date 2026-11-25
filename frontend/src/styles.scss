@@ -256,6 +256,26 @@ a {
 }
 
 /*
+ * Ventaja frente al resto del mercado (comparador de Flashscore). No va en verde: el verde ya
+ * es "valor según el modelo" y son dos juicios distintos. Ámbar = más del 15 %, posible error
+ * de cuota que Winamax puede anular. En una línea ya en el boletín (relleno verde) hereda el
+ * color del texto para no perder contraste.
+ */
+.ventaja-mercado {
+  font-weight: 700;
+  color: var(--color-tv-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.ventaja-mercado.ventaja-dudosa {
+  color: var(--color-tv-doubt);
+}
+
+.linea-on .ventaja-mercado {
+  color: inherit;
+}
+
+/*
  * Marcador en miniatura de cada fila de Partidos: el marcador del partido en pequeño. Los
  * clubes ocupan casi toda la pieza y la hora va en la placa central, que pasa a oscura si
  * un club viste claro (la misma regla que el centro del marcador grande).

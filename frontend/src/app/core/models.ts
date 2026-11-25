@@ -182,6 +182,23 @@ export interface GradedOddsLine {
   implied_probability?: string | null;
   /** Bullets con el razonamiento del modelo (columna «resumen»). */
   model_summary_lines?: string[];
+  /** Solo si Winamax paga más que el resto de casas (comparador de Flashscore). */
+  mercado?: VentajaMercado | null;
+}
+
+/**
+ * Cuota de Winamax frente al consenso sin margen de las demás casas del comparador.
+ * `value` = ventaja de 3 a 15 %; `error_probable` = más del 15 % (Winamax puede anularla).
+ */
+export interface VentajaMercado {
+  clase: 'value' | 'surebet' | 'desfasada' | 'error_probable';
+  /** `cuota × p_mercado − 1`. */
+  ventaja: string;
+  /** P sin margen del consenso de las demás casas. */
+  p_mercado: string;
+  cuota_justa: string;
+  casas: number;
+  leido_at: string;
 }
 
 export interface SavedParlayLegPersist {
@@ -242,6 +259,12 @@ export interface PickLeg extends SavedParlayLegPersist {
   /** EV < 0: completa el mínimo de 3 simples aunque el modelo no le vea valor. */
   sin_valor?: boolean;
   aviso?: string | null;
+  /**
+   * Prop de jugador (tiros a puerta, goleador): aún sin historial de picks reales. En la
+   * combinada del partido desde el 13/11; en simples y combinada del día desde las reglas v5
+   * (17/11). Las filas anteriores no lo traen.
+   */
+  experimental?: boolean;
 }
 
 export interface PickCombo {
@@ -259,6 +282,36 @@ export interface PickCombo {
   cuota_minima_valor?: string;
   /** Resultado de la combinada (como `overall_result`); `pending` mientras se juega. */
   result?: string;
+  /** Lleva alguna pata de props de jugador (reglas v5; en la del partido, desde el 13/11). */
+  experimental?: boolean;
+}
+
+/**
+ * Pata de la combinada del partido (`pata_a_dict` + B14e): en los props trae el jugador en
+ * `player_name` y `experimental: true` (tiros a puerta, goleador o paradas del jugador).
+ */
+export interface MatchComboLeg extends PickLeg {
+  experimental: boolean;
+}
+
+/**
+ * Combinada del partido (`combinada_del_partido_a_dict`, desde el 13/11): 2–3 selecciones de
+ * un mismo partido con cuota estimada de 2,50 a 5,00. En Winamax va por MyMatch: la cuota real
+ * la pone Winamax y `combined_odds` es la estimación del modelo (producto corregido por la
+ * correlación entre patas).
+ */
+export interface MatchCombo extends PickCombo {
+  legs: MatchComboLeg[];
+  mismo_partido: true;
+  cuota_winamax: string;
+  cuota_minima_valor: string;
+  match_id: number;
+  home_team: string;
+  away_team: string;
+  league: string;
+  commence_time: string;
+  /** Lleva alguna pata de props de jugador. */
+  experimental: boolean;
 }
 
 /** Picks del día generados por el backend (métricas de transparencia de la app). */
@@ -266,14 +319,21 @@ export interface FeaturedDailyPickRow {
   pick_date: string;
   legs: PickLeg[];
   combo?: PickCombo | null;
-  /** `v1`: filas antiguas (sin combinada); `v2`: reglas 1,30–1,70 + combinada 3–6. */
+  /** Combinada del partido; `null` si no hubo (motivo en `selection_meta`) o en filas antiguas. */
+  match_combo?: MatchCombo | null;
+  /**
+   * `v1`: filas antiguas (sin combinada); `v2`: reglas 1,30–1,70 + combinada 3–6; `v4`: con la
+   * combinada del partido; `v5` (17/11): simples 1,30–2,00, variedad de mercados y props.
+   */
   rules_version?: string;
   model_version?: string | null;
   generated_at?: string | null;
   selection_meta?: {
     motivo_simples?: string;
     motivo_combinada?: string;
+    motivo_combinada_partido?: string;
     candidatas?: number;
+    candidatas_props?: number;
     [clave: string]: unknown;
   } | null;
   last_graded_at: string | null;
@@ -295,6 +355,8 @@ export interface RefreshAuto {
 export interface FeaturedToday {
   estado: 'listo' | 'pendiente' | 'sin_partidos';
   motivo: string | null;
+  /** Con `sin_partidos`: inicio del próximo partido programado (`null` = ninguno). */
+  proximo_partido?: string | null;
   /** Al generarlos hubo que descargar antes las cuotas de Winamax. */
   cuotas_actualizadas: boolean;
   pick: FeaturedDailyPickRow | null;
@@ -317,6 +379,9 @@ export interface FeaturedPicksMetrics {
   novalue_hits?: number;
   novalue_misses?: number;
   novalue_rate_pct?: number | null;
+  /** Simples de props de jugador (experimentales, reglas v5) y el resto; `{}` en backends viejos. */
+  simples_con_props?: PickCounts | Record<string, never>;
+  simples_sin_props?: PickCounts | Record<string, never>;
   combos_total?: number;
   combo_hits?: number;
   combo_misses?: number;
@@ -324,6 +389,19 @@ export interface FeaturedPicksMetrics {
   combo_rate_pct?: number | null;
   /** Acierto de cada versión del modelo por separado (`legacy-v1`, `dc-ridge-…`). */
   por_modelo?: Record<string, { simples: PickCounts; combinadas: PickCounts }>;
+  /** Combinada del partido, medida aparte (`metricas_combinada_del_partido`); `{}` si no hay. */
+  combinada_partido?: MatchComboMetrics | Record<string, never>;
+}
+
+/** Familia de los props (`FAMILIA_PROP` del backend); `otros` si el mercado no tiene familia. */
+export type FamiliaProp = 'player_sot' | 'goleador' | 'paradas' | 'otros';
+
+/** Acierto de las combinadas del partido: todas, con y sin props, y patas de props por familia. */
+export interface MatchComboMetrics extends PickCounts {
+  total: number;
+  con_props: PickCounts;
+  sin_props: PickCounts;
+  patas_props: Partial<Record<FamiliaProp, PickCounts>>;
 }
 
 export interface PickCounts {

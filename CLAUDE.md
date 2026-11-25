@@ -17,7 +17,8 @@ cd frontend; npm test                                   # Vitest
 ```
 
 Scripts CLI: `python -m backend.tools.<nombre>` desde la raíz. Los de la tarea programada:
-`daily_refresh`, `import_winamax_props`, `generar_picks_del_dia`. Manuales: `backtest_modelo`
+`daily_refresh`, `import_winamax_props`, `import_comparador_cuotas` (admite `--dry-run`: solo BD,
+sin peticiones), `generar_picks_del_dia`. Manuales: `backtest_modelo`
 (backtest + calibración + `--promover` del modelo v2), `diagnostico_modelo`, `set_password`,
 `reparar_partidos_en_directo`.
 
@@ -44,7 +45,10 @@ migrations/   Alembic
 
 Flujo de datos: `tools/daily_refresh` → Flashscore (calendario, resultados, clasificación, stats de
 equipo/jugador, bajas: `services/daily_refresh.py`) → `tools/import_winamax_props` (cuotas; los props
-se enlazan con los jugadores de Flashscore) → `graded_odds_service` calcula P(modelo) y EV →
+se enlazan con los jugadores de Flashscore) → `tools/import_comparador_cuotas` (comparador de
+Flashscore: bet365 y otras casas a `comparador_cuotas`; `COMPARADOR_CUOTAS_*`; un fallo no frena
+los picks; `ventaja_mercado.py` marca en la página de partido lo que Winamax paga de 3 a 15 % por
+encima del consenso) → `graded_odds_service` calcula P(modelo) y EV →
 `GET /dashboard/graded-odds`. Desde la app: el botón del dashboard refresca solo cuotas
 (`POST /refresh/odds`) y, al abrirla con sesión, `POST /refresh/auto` lanza en segundo plano el
 pipeline completo si los datos están viejos (`services/refresco_auto.py`, tabla `refresh_runs`). Sofascore (`403` desde 2026-10) y The Odds API se retiraron del código el 2026-10-28; las
@@ -71,9 +75,10 @@ al abrirse (`POST /featured-picks/today`). Una vez guardados no cambian (trigger
 - Rutas con `loadComponent` en `app.routes.ts`, con `title: '<Página> · Bets AI'`.
 - Formateo de cuotas, % y fechas solo con los helpers de `core/format.ts`.
 - Prettier: comillas simples, 100 columnas.
-- Tema oscuro. Los colores de marca están en `src/styles.scss` (`@theme`: `brand-bg-deep`, `brand-bg-panel`,
-  `brand-cyan`, `brand-blue`, `brand-muted`). En código nuevo usa estos tokens; muchas páginas antiguas
-  usan `slate-*`/`emerald-*` directamente y conviven ambos estilos.
+- Tema oscuro. Los colores están en `src/styles.scss` (`@theme`). En código nuevo usa la paleta
+  `tv-*` (`tv-night`, `tv-deep`, `tv-panel`, `tv-raised`, `tv-line`, `tv-ink`, `tv-muted`, `tv-go`,
+  `tv-alert`, `tv-doubt`), que es la de la portada y Transparencia. `brand-*` es la paleta anterior y
+  muchas páginas antiguas usan `slate-*`/`emerald-*` directamente: conviven hasta migrarlas.
 
 ## Cuidado con
 

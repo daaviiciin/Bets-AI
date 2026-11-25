@@ -1,26 +1,36 @@
-"""Selección de los picks del día (fase 3, bloque B10): simples 1,30–1,70 y combinada 4–6.
+"""Selección de los picks del día (fase 3, bloque B10): simples 1,30–2,00 y combinada 4–6.
 
-Funciones puras (sin BD) sobre líneas ya calificadas por el modelo. Reglas del usuario
-(2026-10-21; el 2026-11-05 se ajustaron a sus boletos ganados: 3–5 patas de 1,18 a 1,60,
-siempre con una doble oportunidad, nunca a pocos goles ni a la mitad con más goles):
+Funciones puras (sin BD) sobre líneas ya calificadas por el modelo. Reglas ``v5`` (decisión del
+usuario del 2026-11-17: **variedad** de mercados en lugar del perfil del 05/11, que obligaba a
+llevar una doble oportunidad y limitaba las patas de goles):
 
-- **Simples**: cuota entre ``odds_min`` y ``odds_max``; una por partido (la de mayor P del
-  modelo) y ordenadas por P, con como mucho :data:`MAX_SIMPLES_POR_GRUPO` del mismo grupo de
-  mercado (1X2, doble oportunidad, goles) para que no salgan todas del mismo. Primero las que
-  tienen valor (EV ≥ 0), hasta :data:`MAX_SIMPLES`; si quedan menos de :data:`MIN_SIMPLES` se
-  completa con las mejores sin valor, marcadas ``sin_valor`` (y con aviso si el EV es muy
-  negativo). La banda **no** se amplía: si no hay partidos suficientes en ella, salen menos
-  picks y se explica en ``selection_meta``.
-- **Combinada**: de 3 a 5 patas de 1,18 a 1,60 con cuota total entre ``combo_min`` y
-  ``combo_max``. Primero se buscan patas de **partidos distintos**; solo si así no se llega a la
-  banda, se admiten **varias selecciones de un mismo partido** (en Winamax, con MyMatch). Entre
-  todas gana la mejor según :func:`puntuar_combinada`, que antepone las que encajan con el
-  perfil del usuario (:func:`encaja_con_perfil`).
+- **Mercados**: 1X2, doble oportunidad, goles (del partido y de cada equipo, ambos marcan), mitad
+  con más goles y, con el modelo v2, props de jugador de las familias que habilita el backtest
+  de props (hoy goleador y tiros a puerta), marcados ``experimental``. Grupos de mercado:
+  :data:`GRUPO_DE_MERCADO`. Nunca "menos goles" ni "ambos marcan: No" (:func:`es_menos_goles`).
+- **Simples**: cuota entre ``odds_min`` y ``odds_max`` (1,30–2,00); una por partido (la de mayor
+  P del modelo) y ordenadas por P, con como mucho :data:`MAX_SIMPLES_POR_GRUPO` del mismo grupo
+  de mercado para que no salgan todas del mismo. Primero las que tienen valor (EV ≥ 0), hasta
+  :data:`MAX_SIMPLES`; si quedan menos de :data:`MIN_SIMPLES` se completa con las mejores sin
+  valor, marcadas ``sin_valor`` (y con aviso si el EV es muy negativo). La banda **no** se
+  amplía: si no hay partidos suficientes en ella, salen menos picks y se explica en
+  ``selection_meta``.
+- **Combinada del día**: de 3 a 5 patas de 1,18 a 1,80 con cuota total entre ``combo_min`` y
+  ``combo_max`` y **como mucho :data:`COMBO_MAX_PATAS_POR_GRUPO` patas del mismo grupo**.
+  Primero se buscan patas de **partidos distintos**; solo si así no se llega a la banda, se
+  admiten **varias selecciones de un mismo partido** (en Winamax, con MyMatch). Gana la mejor
+  según :func:`puntuar_combinada`: con valor → partidos distintos → P conjunta redondeada a 1
+  punto → más grupos distintos (las casi empatadas se deciden por variedad) → menos patas.
+- **Combinada del partido** (B14, pick aparte): 2–3 selecciones de un mismo partido con cuota
+  estimada 2,5–5, que puede llevar props.
 
 Selecciones de un mismo partido: no son independientes ("gana el local" y "más de 1,5 goles" van
 juntas), así que su probabilidad conjunta sale de la matriz de marcadores del modelo (λ local y
 visitante) y la cuota se estima corrigiendo el producto de cuotas con esa misma correlación. La
 cuota real la pone Winamax en MyMatch; por eso también se guarda la cuota mínima con valor (1/P).
+Solo se juntan mercados que la matriz sabe valorar (:func:`pesos_de_pata`): los del marcador
+final y los props con su P condicionada al marcador. La mitad con más goles no (depende de los
+goles de cada mitad), así que solo va como simple o como pata de otro partido.
 
 Ningún pick lleva importe: el modelo no sugiere cuánto apostar.
 """
@@ -30,11 +40,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
+from functools import total_ordering
 from itertools import combinations
 from types import SimpleNamespace
 from typing import Any
@@ -50,20 +61,25 @@ MAX_SIMPLES = 5
 EV_AVISO = Decimal("-0.08")
 AVISO_CUOTA_CORTA = "El modelo ve la cuota corta"
 
-# Patas candidatas de la combinada: las cuotas que juega el usuario (1,18–1,56 en sus boletos).
-# De cada partido entra, por grupo de mercado, la línea corta y la larga de mayor P, para que la
-# doble oportunidad compita con los goles y para que se pueda llegar a la banda con 3–5 patas.
+# Patas candidatas de la combinada: de 1,18 a 1,80 (reglas v5), en dos tramos de cuota. Por
+# partido entran, en cada tramo, las :data:`COMBO_PATAS_POR_TRAMO` de mayor P de grupos de mercado
+# distintos: la corta deja llegar a la banda con 4–5 patas y la larga, con 3 (1,59³ ≈ 4).
 COMBO_PATA_MIN = Decimal("1.18")
-COMBO_PATA_CORTE = Decimal("1.40")
-COMBO_PATA_MAX = Decimal("1.60")
+#: Corte entre el tramo corto (1,18–1,45) y el largo (1,45–1,80): ~ media geométrica de la banda.
+COMBO_PATA_CORTE = Decimal("1.45")
+COMBO_PATA_MAX = Decimal("1.80")
 COMBO_MIN_PATAS = 3
 COMBO_MAX_PATAS = 5
-#: Hasta 6 patas posibles por partido (3 grupos × 2 tramos): con 8 partidos y la poda de
-#: :func:`enumerar_combinadas` el peor caso ronda 1 s (con 10, casi 4 s).
+#: Patas por partido y tramo: como mucho 6 por partido (2 tramos × 3), las mismas que con las
+#: reglas v4 (3 grupos × 2 tramos), aunque ahora compitan 6 grupos. Con 8 partidos y la poda de
+#: :func:`enumerar_combinadas` el peor caso ronda 1 s; con 4 por tramo serían 8 por partido y
+#: unas 4 veces más combinaciones.
+COMBO_PATAS_POR_TRAMO = 3
 COMBO_MAX_PARTIDOS = 8
-#: Perfil de las combinadas del usuario: al menos una doble oportunidad y como mucho dos patas
-#: de goles (en sus boletos, de 0 a 2 de cada 4–5).
-COMBO_MAX_PATAS_GOLES = 2
+#: Variedad (reglas v5): como mucho estas patas del mismo grupo de mercado en la combinada.
+COMBO_MAX_PATAS_POR_GRUPO = 2
+#: Las combinadas con la misma P conjunta a esta precisión (1 punto) se deciden por variedad.
+PRECISION_P_COMBINADA = Decimal("0.01")
 #: Como mucho estas simples del mismo grupo de mercado.
 MAX_SIMPLES_POR_GRUPO = 2
 
@@ -88,13 +104,12 @@ UMBRAL_EXCLUYE = 0.01
 #: Goles por equipo de la matriz de marcadores (0..10): con λ ≤ 3 cubre > 99,9 % de la masa.
 TAMANO_REJILLA = 11
 
-#: Mercados que el modelo actual (``legacy-v1``) sabe calcular. Los props de jugador quedan
-#: fuera de los picks hasta que se validen (plan de la fase 3); tiros a puerta y goles por
-#: mitad entran con el modelo v2.
-#: La mitad con más goles quedó fuera el 2026-11-05: el usuario no la juega nunca.
-MERCADOS_PICKS: frozenset[str] = MERCADOS_MISMO_PARTIDO
+#: Mercados de equipo que pueden ser pick (los props de jugador van aparte, con el modelo v2).
+#: La mitad con más goles salió el 2026-11-05 y volvió con las reglas v5 (2026-11-17).
+MERCADOS_PICKS: frozenset[str] = MERCADOS_MISMO_PARTIDO | {"match_highest_scoring_half"}
 
-#: Grupo de cada mercado de los picks: limita las simples repetidas y define el perfil.
+#: Grupo de cada mercado de los picks: limita las simples y las patas repetidas de la combinada
+#: (variedad, reglas v5) y desempata las combinadas a favor de la más variada.
 GRUPO_DE_MERCADO: dict[str, str] = {
     "h2h": "1x2",
     "double_chance": "doble",
@@ -102,6 +117,14 @@ GRUPO_DE_MERCADO: dict[str, str] = {
     "team_home_totals_goals": "goles",
     "team_away_totals_goals": "goles",
     "btts": "goles",
+    "match_highest_scoring_half": "mitad",
+    "player_sot": "tiros",
+    "player_sot_alt": "tiros",
+    "player_anytime_scorer": "goleador",
+    "player_to_score_2plus": "goleador",
+    # Hoy no la habilita el backtest de props; si entrara, sería un grupo más.
+    "player_saves": "paradas",
+    "player_saves_alt": "paradas",
 }
 
 
@@ -146,8 +169,9 @@ class Candidata:
     #: Goles esperados del modelo; hacen falta para juntar selecciones del mismo partido.
     lambda_home: Decimal | None = None
     lambda_away: Decimal | None = None
-    #: Props (solo combinada del partido): jugador y P condicionada a los goles de un lado
-    #: (``("home"|"away", P(gana | k goles) para k = 0..10)``, B14d).
+    #: Props (experimentales; simples y combinadas desde las reglas v5): jugador y P
+    #: condicionada a los goles de un lado (``("home"|"away", P(gana | k goles) para
+    #: k = 0..10)``, B14d).
     player_name: str | None = None
     prop_condicional: tuple[str, tuple[float, ...]] | None = None
 
@@ -211,6 +235,23 @@ def _orden_por_probabilidad(c: Candidata) -> tuple:
     return (-c.p_model, -c.ev, c.match_id, c.market_key, c.outcome_name, c.outcome_point or 0)
 
 
+def orden_de_simples(c: Candidata) -> tuple:
+    """Clave de orden de las simples: decide qué línea sale de cada partido y qué partidos van
+    primero (las que tienen valor siguen yendo antes que las que no, en :func:`elegir_simples`).
+
+    Con «mayor P» (el comportamiento hasta ahora) dentro de la banda 1,30–2,00 casi siempre gana
+    la cuota más corta (~1,30, P ~75 %): por eso ampliar la banda no dio más variedad en la vista
+    previa del 21/11. A mano: ``c.p_model``, ``c.ev`` (cuota × P − 1), ``c.offered_odds``,
+    ``grupo_de_mercado(c.market_key)`` y ``es_prop(c)``. Más pequeño = va antes. Termina siempre
+    con algo determinista (p. ej. ``*_orden_por_probabilidad(c)``).
+
+    **Decidido (2026-11-18):** al usuario le es indiferente mientras salgan picks, así que se
+    queda «mayor P», el más prudente con un modelo aún no calibrado del todo. La variedad la
+    dan los topes por grupo de :func:`elegir_simples`, no el orden.
+    """
+    return _orden_por_probabilidad(c)
+
+
 def clave_seleccion(c: Candidata) -> tuple:
     """Identifica una selección (partido, mercado, resultado y línea), sin la cuota ni la P."""
     return (c.match_id, c.market_key, c.outcome_name, c.outcome_point)
@@ -239,9 +280,9 @@ def _mejor_por_partido(
     siguiente partido se toma su mejor línea de otro grupo (o se salta si no tiene).
     """
     por_partido: dict[int, list[Candidata]] = defaultdict(list)
-    for c in sorted(cands, key=_orden_por_probabilidad):
+    for c in sorted(cands, key=orden_de_simples):
         por_partido[c.match_id].append(c)
-    partidos = sorted(por_partido.values(), key=lambda g: _orden_por_probabilidad(g[0]))
+    partidos = sorted(por_partido.values(), key=lambda g: orden_de_simples(g[0]))
     elegidas: list[Candidata] = []
     usados: dict[str, int] = defaultdict(int)
     for lineas in partidos:
@@ -251,7 +292,7 @@ def _mejor_por_partido(
                 elegidas.append(c)
                 usados[g] += 1
                 break
-    return sorted(elegidas, key=_orden_por_probabilidad)
+    return sorted(elegidas, key=orden_de_simples)
 
 
 def elegir_simples(
@@ -300,18 +341,23 @@ def _tramo_pata(c: Candidata) -> int:
 
 
 def grupos_para_combinada(cands: Iterable[Candidata]) -> list[list[Candidata]]:
-    """Patas posibles por partido, de los mejores partidos: de cada grupo de mercado, la de mayor
-    P corta (1,18–1,40) y la de mayor P larga (1,40–1,60).
+    """Patas posibles por partido, de los mejores partidos: en cada tramo de cuota (1,18–1,45 y
+    1,45–1,80), las :data:`COMBO_PATAS_POR_TRAMO` de mayor P de grupos de mercado distintos.
 
     Solo con la de mayor P entrarían siempre las más cortas (~1,27) y, con pocos partidos, la
-    combinada no llegaría a la banda (1,27⁴ ≈ 2,6).
+    combinada no llegaría a la banda (1,27⁴ ≈ 2,6). El tope por tramo mantiene acotada la
+    búsqueda (:func:`enumerar_combinadas`) aunque compitan los seis grupos.
     """
-    mejor: dict[tuple[int, str, int], Candidata] = {}
+    por_tramo: dict[tuple[int, int], list[Candidata]] = defaultdict(list)
     for c in sorted(cands, key=_orden_por_probabilidad):
-        if _en_banda(c, COMBO_PATA_MIN, COMBO_PATA_MAX) and vc.is_recommendable_odds(c.offered_odds):
-            mejor.setdefault((c.match_id, grupo_de_mercado(c.market_key), _tramo_pata(c)), c)
+        if not (_en_banda(c, COMBO_PATA_MIN, COMBO_PATA_MAX) and vc.is_recommendable_odds(c.offered_odds)):
+            continue
+        tramo = por_tramo[(c.match_id, _tramo_pata(c))]
+        grupo = grupo_de_mercado(c.market_key)
+        if len(tramo) < COMBO_PATAS_POR_TRAMO and all(grupo_de_mercado(t.market_key) != grupo for t in tramo):
+            tramo.append(c)
     por_partido: dict[int, list[Candidata]] = defaultdict(list)
-    for c in sorted(mejor.values(), key=_orden_por_probabilidad):
+    for c in sorted((c for t in por_tramo.values() for c in t), key=_orden_por_probabilidad):
         por_partido[c.match_id].append(c)
     grupos = sorted(por_partido.values(), key=lambda g: _orden_por_probabilidad(g[0]))
     return grupos[:COMBO_MAX_PARTIDOS]
@@ -324,16 +370,21 @@ def enumerar_combinadas(
     total_max: Decimal,
     min_patas: int = COMBO_MIN_PATAS,
     max_patas: int = COMBO_MAX_PATAS,
+    max_por_grupo: int = COMBO_MAX_PATAS_POR_GRUPO,
 ) -> Iterator[Combinada]:
-    """Todas las combinadas de partidos distintos con cuota total en ``[total_min, total_max]``.
+    """Todas las combinadas de partidos distintos con cuota total en ``[total_min, total_max]`` y
+    como mucho ``max_por_grupo`` patas de cada grupo de mercado.
 
     Búsqueda en profundidad (cada partido: se salta o aporta una pata) que corta las ramas que
-    ya se pasan de ``total_max`` o que ni con patas de la cuota más alta llegarían a ``total_min``.
+    ya se pasan de ``total_max``, que ni con patas de la cuota más alta llegarían a ``total_min``
+    o que repetirían un grupo más veces de las permitidas.
     """
     # La poda va en float (rápido) con un margen; la banda exacta se comprueba en Decimal.
     cuotas = [[float(c.offered_odds) for c in g] for g in grupos]
+    nombres = [[grupo_de_mercado(c.market_key) for c in g] for g in grupos]
     tope = max((q for g in cuotas for q in g), default=1.0)
     lo, hi = float(total_min) * (1 - 1e-9), float(total_max) * (1 + 1e-9)
+    usados: Counter[str] = Counter()
 
     def buscar(i: int, patas: tuple[Candidata, ...], total: float) -> Iterator[Combinada]:
         n = len(patas)
@@ -345,9 +396,11 @@ def enumerar_combinadas(
         if libres <= 0 or n + libres < min_patas or total * tope**libres < lo:
             return
         for j in range(i, len(grupos)):
-            for c, q in zip(grupos[j], cuotas[j]):
-                if total * q <= hi:
+            for c, q, g in zip(grupos[j], cuotas[j], nombres[j]):
+                if total * q <= hi and usados[g] < max_por_grupo:
+                    usados[g] += 1
                     yield from buscar(j + 1, (*patas, c), total * q)
+                    usados[g] -= 1
 
     yield from buscar(0, (), 1.0)
 
@@ -399,16 +452,66 @@ def mascara_de_pata(c: Candidata, *, size: int = TAMANO_REJILLA) -> tuple[bool, 
     return tuple(mascara)
 
 
-def _p_conjunta(rejilla: tuple[float, ...], mascaras: list[tuple[bool, ...]]) -> float:
-    return math.fsum(p for p, *gana in zip(rejilla, *mascaras) if all(gana))
+def es_prop(c: Candidata) -> bool:
+    """Prop de jugador con su P condicionada al marcador (solo con el modelo v2)."""
+    return c.prop_condicional is not None
+
+
+def pesos_de_pata(c: Candidata, *, size: int = TAMANO_REJILLA) -> tuple[float, ...] | None:
+    """P de que gane la pata en cada marcador (local, visitante), aplanada como la rejilla.
+
+    Mercados del marcador: 1 o 0 (:func:`mascara_de_pata`). Props: la P condicionada a los
+    goles de su equipo o del rival (``prop_condicional``, B14d), p. ej. el goleador por
+    *thinning*: ``1 − (1 − q)^k`` con k goles de su equipo. ``None`` si la matriz no sabe
+    valorarla (la mitad con más goles, un prop sin vector): no se junta con otras del partido.
+    """
+    if c.prop_condicional is None:
+        m = mascara_de_pata(c, size=size)
+        return None if m is None else tuple(1.0 if x else 0.0 for x in m)
+    lado, v = c.prop_condicional
+    if len(v) < size or lado not in {"home", "away"}:
+        return None
+    return tuple(v[h] if lado == "home" else v[a] for h in range(size) for a in range(size))
+
+
+def _p_ponderada(rejilla: tuple[float, ...], pesos: list[tuple[float, ...]]) -> float:
+    return math.fsum(p * math.prod(ws) for p, *ws in zip(rejilla, *pesos))
+
+
+def _patas_distintas(patas: Iterable[Candidata]) -> bool:
+    """Sin repetir mercado (salvo props de jugadores distintos) ni jugador."""
+    patas = list(patas)
+    if len({(p.market_key, p.player_name if es_prop(p) else None) for p in patas}) != len(patas):
+        return False
+    jugadores = [p.player_name for p in patas if es_prop(p)]
+    return len(set(jugadores)) == len(jugadores)
+
+
+def _correlacion_bloque(
+    rejilla: tuple[float, ...], pesos: list[tuple[float, ...]],
+) -> float | None:
+    """``C = P(todas) / ∏P_i`` de varias selecciones de un partido según la matriz, o ``None``
+    si alguna no gana nunca, casi implica a otra o casi la excluye."""
+    marginales = [_p_ponderada(rejilla, [w]) for w in pesos]
+    if min(marginales) <= 0:
+        return None
+    for (i, wi), (j, wj) in combinations(enumerate(pesos), 2):
+        pij = _p_ponderada(rejilla, [wi, wj])
+        if pij < UMBRAL_EXCLUYE or pij >= UMBRAL_IMPLICA * min(marginales[i], marginales[j]):
+            return None
+    conjunta = _p_ponderada(rejilla, pesos)
+    if conjunta <= 0:
+        return None
+    return conjunta / math.prod(marginales)
 
 
 class _BloquesMismoPartido:
-    """Cachés de matrices y máscaras para valorar selecciones de un mismo partido."""
+    """Cachés de matrices, pesos y bloques para valorar selecciones de un mismo partido."""
 
     def __init__(self) -> None:
         self._rejillas: dict[int, tuple[float, ...] | None] = {}
-        self._mascaras: dict[Candidata, tuple[bool, ...] | None] = {}
+        self._pesos: dict[Candidata, tuple[float, ...] | None] = {}
+        self._bloques: dict[tuple[Candidata, ...], tuple[Decimal, Decimal] | None] = {}
 
     def rejilla(self, c: Candidata) -> tuple[float, ...] | None:
         if c.match_id not in self._rejillas:
@@ -418,10 +521,10 @@ class _BloquesMismoPartido:
             )
         return self._rejillas[c.match_id]
 
-    def mascara(self, c: Candidata) -> tuple[bool, ...] | None:
-        if c not in self._mascaras:
-            self._mascaras[c] = mascara_de_pata(c)
-        return self._mascaras[c]
+    def pesos(self, c: Candidata) -> tuple[float, ...] | None:
+        if c not in self._pesos:
+            self._pesos[c] = pesos_de_pata(c)
+        return self._pesos[c]
 
     def bloque(self, patas: list[Candidata]) -> tuple[Decimal, Decimal] | None:
         """``(P conjunta, cuota estimada)`` de varias selecciones de un partido, o ``None``.
@@ -429,27 +532,32 @@ class _BloquesMismoPartido:
         La matriz de marcadores solo aporta la **correlación** ``C = P(todas) / ∏P_i``; la P
         conjunta es el producto de las P de cada pata (ya calibradas y mezcladas con el mercado)
         por ``C``, y la cuota estimada, el producto de cuotas dividido por ``C``. Si las
-        selecciones van juntas, ``C > 1``: la P sube y la cuota baja, como en MyMatch.
+        selecciones van juntas, ``C > 1``: la P sube y la cuota baja, como en MyMatch. Un prop
+        entra con su P condicionada al marcador (:func:`pesos_de_pata`); sin ella, no se junta.
         """
-        if len({p.market_key for p in patas}) != len(patas):
+        clave = tuple(patas)
+        if clave not in self._bloques:
+            self._bloques[clave] = self._valorar(patas)
+        return self._bloques[clave]
+
+    def _valorar(self, patas: list[Candidata]) -> tuple[Decimal, Decimal] | None:
+        if not _patas_distintas(patas):
             return None
         rejilla = self.rejilla(patas[0])
-        mascaras = [self.mascara(p) for p in patas]
-        if rejilla is None or any(m is None for m in mascaras):
+        pesos = [self.pesos(p) for p in patas]
+        if rejilla is None or any(w is None for w in pesos):
             return None
-        marginales = [_p_conjunta(rejilla, [m]) for m in mascaras]
-        for (i, mi), (j, mj) in combinations(enumerate(mascaras), 2):
-            pij = _p_conjunta(rejilla, [mi, mj])
-            if pij < UMBRAL_EXCLUYE or pij >= UMBRAL_IMPLICA * min(marginales[i], marginales[j]):
-                return None
-        conjunta = _p_conjunta(rejilla, mascaras)
-        if conjunta <= 0:
+        correlacion = _correlacion_bloque(rejilla, [w for w in pesos if w is not None])
+        if correlacion is None:
             return None
-        correlacion = conjunta / math.prod(marginales)
         p_modelo = math.prod(float(p.p_model) for p in patas) * correlacion
         p_modelo = min(p_modelo, min(float(p.p_model) for p in patas))
         cuota = _producto(p.offered_odds for p in patas) / Decimal(str(round(correlacion, 9)))
         return Decimal(str(round(p_modelo, 9))), cuota
+
+
+def _excede_grupos(patas: Iterable[Candidata], max_por_grupo: int) -> bool:
+    return max(Counter(grupo_de_mercado(p.market_key) for p in patas).values(), default=0) > max_por_grupo
 
 
 def enumerar_combinadas_mismo_partido(
@@ -459,15 +567,17 @@ def enumerar_combinadas_mismo_partido(
     total_max: Decimal,
     min_patas: int = COMBO_MIN_PATAS,
     max_patas: int = COMBO_MAX_PATAS,
+    max_por_grupo: int = COMBO_MAX_PATAS_POR_GRUPO,
 ) -> Iterator[Combinada]:
-    """Combinadas que admiten varias selecciones (de mercados distintos) de un mismo partido."""
+    """Combinadas que admiten varias selecciones (de mercados distintos) de un mismo partido.
+
+    Entran todos los mercados, pero solo se juntan en un partido los que la matriz sabe valorar
+    (:func:`pesos_de_pata`); el resto (la mitad con más goles) solo va como la única pata de su
+    partido. Como en :func:`enumerar_combinadas`, como mucho ``max_por_grupo`` del mismo grupo.
+    """
     mejor: dict[tuple[int, str], Candidata] = {}
     for c in sorted(cands, key=_orden_por_probabilidad):
-        if (
-            c.market_key in MERCADOS_MISMO_PARTIDO
-            and _en_banda(c, COMBO_PATA_MIN, COMBO_PATA_MAX)
-            and vc.is_recommendable_odds(c.offered_odds)
-        ):
+        if _en_banda(c, COMBO_PATA_MIN, COMBO_PATA_MAX) and vc.is_recommendable_odds(c.offered_odds):
             mejor.setdefault((c.match_id, c.market_key), c)
     por_partido: dict[int, list[Candidata]] = defaultdict(list)
     for c in sorted(mejor.values(), key=_orden_por_probabilidad):
@@ -479,6 +589,8 @@ def enumerar_combinadas_mismo_partido(
     bloques = _BloquesMismoPartido()
     for n in range(min_patas, max_patas + 1):
         for patas in combinations(patas_posibles, n):
+            if _excede_grupos(patas, max_por_grupo):
+                continue
             por_bloque: dict[int, list[Candidata]] = defaultdict(list)
             for p in patas:
                 por_bloque[p.match_id].append(p)
@@ -511,35 +623,64 @@ def enumerar_combinadas_mismo_partido(
 # ---------------------------------------------------------------------------
 
 
-def encaja_con_perfil(combinada: Combinada) -> bool:
-    """Como las combinadas del usuario: con alguna doble oportunidad y pocas patas de goles."""
-    grupos = [grupo_de_mercado(p.market_key) for p in combinada.patas]
-    return "doble" in grupos and grupos.count("goles") <= COMBO_MAX_PATAS_GOLES
+def grupos_distintos(combinada: Combinada) -> int:
+    """Cuántos grupos de mercado distintos lleva la combinada (más = más variada)."""
+    return len({grupo_de_mercado(p.market_key) for p in combinada.patas})
 
 
-def afinidad_con_perfil(combinada: Combinada) -> tuple[bool, int]:
-    """Cuánto se parece al perfil, para cuando ninguna encaja del todo: primero que lleve doble
-    oportunidad y después cuantas menos patas de goles sobren, mejor."""
-    grupos = [grupo_de_mercado(p.market_key) for p in combinada.patas]
-    return "doble" in grupos, -max(0, grupos.count("goles") - COMBO_MAX_PATAS_GOLES)
+def _clave_determinista(combinada: Combinada) -> tuple[str, ...]:
+    """Las selecciones de la combinada, ordenadas: solo para que el desempate no dependa del
+    orden en que llegan las líneas."""
+    return tuple(sorted(
+        f"{p.match_id}|{p.market_key}|{p.outcome_name}|{p.outcome_point}|{p.player_name or ''}"
+        for p in combinada.patas
+    ))
+
+
+@total_ordering
+class _Desempate:
+    """Último elemento de la clave de orden: :func:`_clave_determinista`, calculada solo si
+    todo lo anterior empata (casi nunca). Con cientos de miles de combinadas en la banda,
+    calcularla para todas doblaba el tiempo de :func:`elegir_combinada`."""
+
+    __slots__ = ("_clave", "_combinada")
+
+    def __init__(self, combinada: Combinada) -> None:
+        self._combinada = combinada
+        self._clave: tuple[str, ...] | None = None
+
+    def clave(self) -> tuple[str, ...]:
+        if self._clave is None:
+            self._clave = _clave_determinista(self._combinada)
+        return self._clave
+
+    def __eq__(self, otro: object) -> bool:
+        return isinstance(otro, _Desempate) and self.clave() == otro.clave()
+
+    def __lt__(self, otro: _Desempate) -> bool:
+        return self.clave() < otro.clave()
+
+    __hash__ = None  # type: ignore[assignment]
 
 
 def puntuar_combinada(combinada: Combinada) -> tuple:
-    """Clave de orden de una combinada: gana la que dé la tupla **mayor**.
+    """Clave de orden de una combinada del día: gana la que dé la tupla **mayor**.
 
-    Primero las que más se parecen al perfil del usuario (:func:`afinidad_con_perfil`; las que
-    encajan del todo, :func:`encaja_con_perfil`, quedan arriba); después, con
-    valor; luego, partidos distintos antes que selecciones del mismo partido; luego la mayor
-    probabilidad conjunta y, a igualdad, menos patas. Se maximiza la probabilidad y no el EV a
-    propósito: con un modelo sin calibrar, la combinada de mayor EV es la que acumula sus
+    Con valor → partidos distintos antes que selecciones del mismo partido → mayor probabilidad
+    conjunta **redondeada a 1 punto** (:data:`PRECISION_P_COMBINADA`) → más grupos de mercado
+    distintos (así, entre dos casi empatadas gana la más variada) → menos patas → la P exacta y
+    las selecciones, para que el desempate sea determinista. Se maximiza la probabilidad y no el
+    EV a propósito: con un modelo sin calibrar, la combinada de mayor EV es la que acumula sus
     mayores errores ("maldición del optimizador"); la de mayor P es más robusta.
     """
     return (
-        afinidad_con_perfil(combinada),
         not combinada.sin_valor,
         not combinada.mismo_partido,
-        combinada.probabilidad,
+        combinada.probabilidad.quantize(PRECISION_P_COMBINADA, rounding=ROUND_HALF_UP),
+        grupos_distintos(combinada),
         -len(combinada.patas),
+        combinada.probabilidad,
+        _Desempate(combinada),
     )
 
 
@@ -593,7 +734,12 @@ def pata_a_dict(
     sin_valor: bool,
     aviso: str | None = None,
 ) -> dict[str, Any]:
-    """Pata congelada: compatible con ``grade_single_leg`` y con el boletín del frontend."""
+    """Pata congelada: compatible con ``grade_single_leg`` y con el boletín del frontend.
+
+    Los props llevan el jugador (la liquidación lo busca en ``player_match_stats``) y
+    ``experimental: true``: se miden aparte hasta tener picks reales (reglas v5).
+    """
+    prop = es_prop(c)
     return {
         "match_id": c.match_id,
         "home_team": c.home_team,
@@ -603,7 +749,7 @@ def pata_a_dict(
         "market_key": c.market_key,
         "outcome_name": c.outcome_name,
         "outcome_point": format(c.outcome_point, "f") if c.outcome_point is not None else None,
-        "player_name": None,
+        "player_name": c.player_name if prop else None,
         "offered_odds": format(c.offered_odds, "f"),
         "model_probability": format(c.p_model.quantize(Decimal("0.000001")), "f"),
         "model_ev": format(c.ev.quantize(Decimal("0.0001")), "f"),
@@ -611,12 +757,14 @@ def pata_a_dict(
         "odds_captured_at": odds_captured_at.isoformat() if odds_captured_at else None,
         "sin_valor": sin_valor,
         "aviso": aviso,
+        "experimental": prop,
     }
 
 
 def combinada_a_dict(
     combo: Combinada, *, model_version: str, odds_captured_at: datetime | None,
 ) -> dict[str, Any]:
+    """Combinada congelada; ``experimental`` si alguna pata es un prop."""
     return {
         "legs": [
             pata_a_dict(
@@ -632,6 +780,7 @@ def combinada_a_dict(
         "mismo_partido": combo.mismo_partido,
         "cuota_winamax": format(combo.cuota_winamax.quantize(Decimal("0.01")), "f"),
         "cuota_minima_valor": format(combo.cuota_minima_valor.quantize(Decimal("0.01")), "f"),
+        "experimental": any(es_prop(p) for p in combo.patas),
     }
 
 
@@ -659,30 +808,6 @@ PREFERENCIA_PROPS: dict[str, int] = {
 MERCADOS_PROPS_PARTIDO: frozenset[str] = frozenset(PREFERENCIA_PROPS)
 
 
-def es_prop(c: Candidata) -> bool:
-    return c.prop_condicional is not None
-
-
-def pesos_de_pata(c: Candidata, *, size: int = TAMANO_REJILLA) -> tuple[float, ...] | None:
-    """P de que gane la pata en cada marcador (local, visitante), aplanada como la rejilla.
-
-    Mercados del marcador: 1 o 0 (:func:`mascara_de_pata`). Props: la P condicionada a los
-    goles de su equipo o del rival (``prop_condicional``, B14d), p. ej. el goleador por
-    *thinning*: ``1 − (1 − q)^k`` con k goles de su equipo.
-    """
-    if c.prop_condicional is None:
-        m = mascara_de_pata(c, size=size)
-        return None if m is None else tuple(1.0 if x else 0.0 for x in m)
-    lado, v = c.prop_condicional
-    if len(v) < size or lado not in {"home", "away"}:
-        return None
-    return tuple(v[h] if lado == "home" else v[a] for h in range(size) for a in range(size))
-
-
-def _p_ponderada(rejilla: tuple[float, ...], pesos: list[tuple[float, ...]]) -> float:
-    return math.fsum(p * math.prod(ws) for p, *ws in zip(rejilla, *pesos))
-
-
 def combinada_del_partido(patas: tuple[Candidata, ...]) -> Combinada | None:
     """P conjunta y cuota estimada de 2–3 selecciones de un mismo partido (B14d).
 
@@ -693,12 +818,7 @@ def combinada_del_partido(patas: tuple[Candidata, ...]) -> Combinada | None:
     mismo partido, repiten mercado o jugador, alguna casi implica o excluye a otra, o falta la
     matriz.
     """
-    if len({p.match_id for p in patas}) != 1:
-        return None
-    if len({(p.market_key, p.player_name if es_prop(p) else None) for p in patas}) != len(patas):
-        return None
-    jugadores = [p.player_name for p in patas if es_prop(p)]
-    if len(set(jugadores)) != len(jugadores):
+    if len({p.match_id for p in patas}) != 1 or not _patas_distintas(patas):
         return None
     c0 = patas[0]
     if c0.lambda_home is None or c0.lambda_away is None:
@@ -707,18 +827,9 @@ def combinada_del_partido(patas: tuple[Candidata, ...]) -> Combinada | None:
     pesos = [pesos_de_pata(p) for p in patas]
     if any(w is None for w in pesos):
         return None
-    ws = [w for w in pesos if w is not None]
-    marginales = [_p_ponderada(rejilla, [w]) for w in ws]
-    if min(marginales) <= 0:
+    correlacion = _correlacion_bloque(rejilla, [w for w in pesos if w is not None])
+    if correlacion is None:
         return None
-    for (i, wi), (j, wj) in combinations(enumerate(ws), 2):
-        pij = _p_ponderada(rejilla, [wi, wj])
-        if pij < UMBRAL_EXCLUYE or pij >= UMBRAL_IMPLICA * min(marginales[i], marginales[j]):
-            return None
-    conjunta = _p_ponderada(rejilla, ws)
-    if conjunta <= 0:
-        return None
-    correlacion = conjunta / math.prod(marginales)
     p_modelo = min(math.prod(float(p.p_model) for p in patas) * correlacion,
                    min(float(p.p_model) for p in patas))
     cuota_winamax = _producto(p.offered_odds for p in patas)
@@ -792,11 +903,19 @@ def puntuar_combinada_del_partido(combinada: Combinada) -> tuple:
       paradas).
 
     Cualquier criterio debería cumplir: con la misma cuota, más P no puntúa menos; y la clave
-    es determinista (misma combinada, misma clave).
+    es determinista (misma combinada, misma clave). Desde las reglas v5, a igualdad de todo lo
+    anterior gana la más variada (más grupos de mercado) y, al final, un desempate determinista,
+    como en :func:`puntuar_combinada`.
     """
     # TODO(usuario): elige y ordena los criterios. Provisional: mayor EV conjunto y, a igualdad,
-    # mayor P conjunta y menos patas.
-    return (combinada.ev, combinada.probabilidad, -len(combinada.patas))
+    # mayor P conjunta, menos patas y más variada.
+    return (
+        combinada.ev,
+        combinada.probabilidad,
+        -len(combinada.patas),
+        grupos_distintos(combinada),
+        _Desempate(combinada),
+    )
 
 
 def elegir_combinada_del_partido(
@@ -814,12 +933,9 @@ def elegir_combinada_del_partido(
 def combinada_del_partido_a_dict(
     combo: Combinada, *, model_version: str, odds_captured_at: datetime | None,
 ) -> dict[str, Any]:
-    """Como :func:`combinada_a_dict`, con el partido, el jugador de cada prop y la marca
-    ``experimental`` (en cada pata de props y en la combinada si lleva alguno)."""
+    """Como :func:`combinada_a_dict` (que ya marca ``experimental`` y el jugador de cada prop),
+    con los datos del partido."""
     out = combinada_a_dict(combo, model_version=model_version, odds_captured_at=odds_captured_at)
-    for pata, c in zip(out["legs"], combo.patas):
-        pata["player_name"] = c.player_name if es_prop(c) else None
-        pata["experimental"] = es_prop(c)
     c0 = combo.patas[0]
     out.update({
         "match_id": c0.match_id,
@@ -827,7 +943,6 @@ def combinada_del_partido_a_dict(
         "away_team": c0.away_team,
         "league": c0.league,
         "commence_time": c0.commence_time.isoformat(),
-        "experimental": any(es_prop(c) for c in combo.patas),
     })
     return out
 
@@ -850,6 +965,8 @@ def huella_picks(
 
 
 __all__ = [
+    "COMBO_MAX_PATAS_POR_GRUPO",
+    "GRUPO_DE_MERCADO",
     "PARTIDO_TOTAL_MAX",
     "PARTIDO_TOTAL_MIN",
     "PREFERENCIA_PROPS",
@@ -870,10 +987,10 @@ __all__ = [
     "combinada_independiente",
     "elegir_combinada",
     "elegir_simples",
-    "encaja_con_perfil",
     "enumerar_combinadas",
     "enumerar_combinadas_mismo_partido",
     "grupo_de_mercado",
+    "grupos_distintos",
     "grupos_para_combinada",
     "huella_picks",
     "mascara_de_pata",

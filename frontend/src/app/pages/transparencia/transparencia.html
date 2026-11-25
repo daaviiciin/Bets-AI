@@ -38,6 +38,16 @@
           {{ m.hits }} de {{ m.hits + m.misses }} liquidadas · con valor {{ fmtPct(m.value_rate_pct ?? null) }}
           · sin valor {{ fmtPct(m.novalue_rate_pct ?? null) }}
         </dd>
+        <!-- Desde las reglas v5 hay simples de props (experimentales): se miden aparte. -->
+        @if (simplesProps(); as sp) {
+          <dd class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs tabular-nums text-tv-muted">
+            <span>
+              sin props {{ fmtPct(sp.sin.rate_pct) }} ({{ sp.sin.hits }} de {{ sp.sin.hits + sp.sin.misses }})
+              · con props {{ fmtPct(sp.con.rate_pct) }} ({{ sp.con.hits }} de {{ sp.con.hits + sp.con.misses }})
+            </span>
+            <span class="experimental">Experimental</span>
+          </dd>
+        }
       </div>
       <div class="tv-barrido bg-tv-panel px-4 py-4 sm:px-5" style="--tv-t: 160ms">
         <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Aciertos · fallos</dt>
@@ -77,6 +87,82 @@
         }
       </ul>
     </div>
+  }
+
+  <!-- Combinada del partido: se mide aparte, y sus props (experimentales) por familia. -->
+  @if (partido(); as cp) {
+    <section class="mt-8" aria-labelledby="partido-metricas">
+      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 id="partido-metricas" class="font-display text-base font-bold uppercase tracking-wide">
+          Combinada del partido
+        </h2>
+        <p class="text-sm text-tv-muted">
+          2–3 selecciones de un mismo partido. Se mide aparte de las simples y de la combinada
+          del día.
+        </p>
+      </div>
+      @if (cp.total) {
+        <dl class="mt-3 grid gap-px border border-tv-line bg-tv-line sm:grid-cols-3">
+          <div class="bg-tv-panel px-4 py-4 sm:px-5">
+            <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">Acierto</dt>
+            <dd class="rotulo mt-1 text-4xl tabular-nums" [tvCifra]="cp.rate_pct" [tvFormato]="fmtPct" [tvDesde]="0"></dd>
+            <dd class="mt-1 text-xs tabular-nums text-tv-muted">
+              {{ cp.hits }} de {{ cp.hits + cp.misses }} liquidadas · {{ cp.pending }} en juego
+              @if (cp.voids) {
+                · {{ cp.voids }} {{ cp.voids === 1 ? 'nula' : 'nulas' }}
+              }
+              @if (cp.needs_review) {
+                · {{ cp.needs_review }} a revisar
+              }
+            </dd>
+          </div>
+          <div class="bg-tv-panel px-4 py-4 sm:px-5">
+            <dt class="font-display text-xs font-bold uppercase tracking-wider text-tv-muted">
+              Solo mercados del partido
+            </dt>
+            <dd class="rotulo mt-1 text-4xl tabular-nums" [tvCifra]="cp.sin_props.rate_pct" [tvFormato]="fmtPct" [tvDesde]="0"></dd>
+            <dd class="mt-1 text-xs tabular-nums text-tv-muted">
+              {{ cp.sin_props.hits }} de {{ cp.sin_props.hits + cp.sin_props.misses }} liquidadas
+            </dd>
+          </div>
+          <div class="bg-tv-panel px-4 py-4 sm:px-5">
+            <dt class="flex flex-wrap items-center gap-2 font-display text-xs font-bold uppercase tracking-wider text-tv-muted">
+              Con props de jugador <span class="experimental">Experimental</span>
+            </dt>
+            <dd class="rotulo mt-1 text-4xl tabular-nums" [tvCifra]="cp.con_props.rate_pct" [tvFormato]="fmtPct" [tvDesde]="0"></dd>
+            <dd class="mt-1 text-xs tabular-nums text-tv-muted">
+              {{ cp.con_props.hits }} de {{ cp.con_props.hits + cp.con_props.misses }} liquidadas
+            </dd>
+          </div>
+        </dl>
+        @if (propsPartido().length) {
+          <div class="mt-3 text-sm text-tv-muted">
+            <p class="font-display text-xs font-bold uppercase tracking-wider">
+              Acierto de las patas de jugador, por mercado
+            </p>
+            <ul class="mt-1 space-y-0.5 tabular-nums">
+              @for (f of propsPartido(); track f.familia) {
+                <li>
+                  <span class="text-tv-ink">{{ f.label }}</span> · {{ f.hits }} de
+                  {{ f.hits + f.misses }} ({{ fmtPct(f.rate_pct) }})
+                  @if (f.pending) {
+                    · {{ f.pending }} en juego
+                  }
+                  @if (f.voids) {
+                    · {{ f.voids }} {{ f.voids === 1 ? 'nula' : 'nulas' }}
+                  }
+                </li>
+              }
+            </ul>
+          </div>
+        }
+      } @else {
+        <p class="mt-2 text-sm text-tv-muted">
+          Todavía no hay ninguna guardada: el modelo la propone desde el 13/11, los días en que
+          algún partido llega a una cuota estimada de 2,50 a 5,00.
+        </p>
+      }
+    </section>
   }
 
   @if (racha().length) {
@@ -122,6 +208,7 @@
             </p>
           }
           <ng-container [ngTemplateOutlet]="combinada" [ngTemplateOutletContext]="{ $implicit: t }" />
+          <ng-container [ngTemplateOutlet]="combinadaPartido" [ngTemplateOutletContext]="{ $implicit: t }" />
         } @else {
           <p class="mt-4 text-tv-muted">
             Los picks de hoy se generan la primera vez que se abre la portada (o en el refresh
@@ -146,6 +233,7 @@
               }
             </ul>
             <ng-container [ngTemplateOutlet]="combinada" [ngTemplateOutletContext]="{ $implicit: row }" />
+            <ng-container [ngTemplateOutlet]="combinadaPartido" [ngTemplateOutletContext]="{ $implicit: row }" />
           </section>
         }
       </div>
@@ -156,16 +244,29 @@
         <ul class="mt-3 space-y-2 text-sm text-tv-muted">
           <li>
             <span class="text-tv-ink">Al menos 3 simples</span> de partidos distintos, con cuota de
-            <span class="text-tv-ink">1,30 a 1,70</span> y la mayor probabilidad del modelo.
+            <span class="text-tv-ink">1,30 a 2,00</span> y la mayor probabilidad del modelo, y
+            como mucho dos del mismo tipo de mercado.
           </li>
           <li>
             Primero las que tienen valor (EV ≥ 0). Si no llegan a 3, se completa con las mejores
             sin valor, marcadas como <span class="sin-valor">Sin valor</span>.
           </li>
           <li>
-            Una <span class="text-tv-ink">combinada de cuota 3 a 6</span> con partidos distintos.
-            Si no hay partidos suficientes, con varias selecciones de un mismo partido (MyMatch en
-            Winamax). Nunca cambia las simples.
+            Una <span class="text-tv-ink">combinada de cuota 4 a 6</span> con 3–5 patas de 1,18 a
+            1,80 de partidos distintos y como mucho dos del mismo tipo de mercado; entre dos casi
+            iguales, la más variada. Si no hay partidos suficientes, con varias selecciones de un
+            mismo partido (MyMatch en Winamax). No repite ninguna simple.
+          </li>
+          <li>
+            Mercados: 1X2, doble oportunidad, goles (nunca «menos de»), mitad con más goles y
+            props de jugador (tiros a puerta, goleador), que son
+            <span class="experimental">Experimental</span> y se miden aparte.
+          </li>
+          <li>
+            Aparte, una <span class="text-tv-ink">combinada del partido</span>: 2–3 selecciones de
+            un mismo partido con cuota estimada de <span class="text-tv-ink">2,50 a 5,00</span>
+            (MyMatch). Puede llevar props de jugador (tiros a puerta, goleador, paradas), que son
+            experimentales y se miden por separado.
           </li>
           <li>
             Se generan una vez al día (refresh de la mañana o primera apertura) y se congelan: la
@@ -204,9 +305,14 @@
           <span class="text-sm text-tv-muted"> · {{ fmtTime(lg.commence_time) }}</span>
         }
       </p>
-      <p class="truncate text-sm text-tv-muted">
-        {{ legLabel(lg) }}
-        @if (lg.score_text) { · {{ lg.score_text }} }
+      <p class="flex min-w-0 items-center gap-1.5 text-sm text-tv-muted">
+        <span class="truncate">
+          {{ legLabel(lg) }}
+          @if (lg.score_text) { · {{ lg.score_text }} }
+        </span>
+        @if (lg.experimental) {
+          <span class="experimental shrink-0">Experimental</span>
+        }
       </p>
       @if (lg.aviso) {
         <p class="truncate text-xs text-tv-doubt">{{ lg.aviso }}</p>
@@ -243,6 +349,9 @@
           <span class="font-display text-sm font-bold uppercase tracking-wide">
             Combinada · {{ c.legs.length }} patas{{ c.mismo_partido ? ' · MyMatch' : '' }}
           </span>
+          @if (c.experimental) {
+            <span class="experimental">Experimental</span>
+          }
         </p>
         <p class="font-display text-xl font-bold tabular-nums">{{ fmtCuota(c.combined_odds) }}</p>
       </div>
@@ -258,6 +367,9 @@
                 }
               </span>
               {{ lg.home_team }} – {{ lg.away_team }} · {{ legLabel(lg) }}
+              @if (lg.experimental) {
+                <span class="experimental ml-1 align-middle">Experimental</span>
+              }
             </span>
             <span class="tabular-nums">{{ fmtCuota(lg.offered_odds) }}</span>
           </li>
@@ -274,5 +386,78 @@
     </div>
   } @else if (row.rules_version !== 'v1' && row.selection_meta?.motivo_combinada) {
     <p class="mt-3 text-sm text-tv-muted">Sin combinada: {{ row.selection_meta.motivo_combinada }}.</p>
+  }
+</ng-template>
+
+<!-- Combinada del partido (desde el 13/11); en las filas anteriores no hay. -->
+<ng-template #combinadaPartido let-row>
+  @if (row.match_combo; as c) {
+    <div class="mt-3 border border-tv-line bg-tv-panel px-4 py-3">
+      <div class="flex items-baseline justify-between gap-4">
+        <p class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <span class="marca" [attr.data-estado]="c.result ?? 'pending'" [attr.aria-label]="estadoPata(c.result)">
+            @switch (c.result) {
+              @case ('hit') { <app-icon name="check" [size]="16" /> }
+              @case ('miss') { <app-icon name="x" [size]="16" /> }
+              @case ('needs_review') { <app-icon name="alert" [size]="16" /> }
+              @default { <app-icon name="clock" [size]="16" /> }
+            }
+          </span>
+          <span class="font-display text-sm font-bold uppercase tracking-wide">
+            Del partido · {{ c.legs.length }} patas
+          </span>
+          @if (c.experimental) {
+            <span class="experimental">Experimental</span>
+          }
+        </p>
+        <p class="font-display text-xl font-bold tabular-nums">{{ fmtCuota(c.combined_odds) }}</p>
+      </div>
+      <p class="mt-1 truncate text-sm">
+        <a [routerLink]="['/partido', c.match_id]" class="underline-offset-4 hover:underline">
+          {{ c.home_team }} – {{ c.away_team }}
+        </a>
+        <span class="text-tv-muted"> · {{ fmtTime(c.commence_time) }}</span>
+      </p>
+      <ul class="mt-2 space-y-1 text-sm text-tv-muted">
+        @for (lg of c.legs; track $index) {
+          <li class="flex items-baseline justify-between gap-3">
+            <span class="min-w-0 [overflow-wrap:anywhere]">
+              <span class="marca align-middle" [attr.data-estado]="lg.result ?? 'pending'" [attr.aria-label]="estadoPata(lg.result)">
+                @switch (lg.result) {
+                  @case ('hit') { <app-icon name="check" [size]="12" /> }
+                  @case ('miss') { <app-icon name="x" [size]="12" /> }
+                  @case ('needs_review') { <app-icon name="alert" [size]="12" /> }
+                  @default { <app-icon name="clock" [size]="12" /> }
+                }
+              </span>
+              {{ legLabel(lg) }}
+              @if (lg.experimental) {
+                <span class="experimental ml-1 align-middle">Experimental</span>
+              }
+              @if (lg.result === 'void') {
+                · Nula
+              }
+            </span>
+            <span class="tabular-nums">{{ fmtCuota(lg.offered_odds) }}</span>
+          </li>
+        }
+      </ul>
+      <p class="mt-2 text-xs tabular-nums text-tv-muted">
+        P conjunta {{ fmtProb(c.joint_probability) }}
+        @if (c.sin_valor) {
+          · <span class="sin-valor">Sin valor</span>
+        } @else {
+          · EV {{ fmtEv(c.ev) }}
+        }
+        · con valor desde {{ fmtCuota(c.cuota_minima_valor) }}
+        @if (resumenPartido(c); as r) {
+          · {{ r }}
+        }
+      </p>
+    </div>
+  } @else if (row.selection_meta?.motivo_combinada_partido) {
+    <p class="mt-3 text-sm text-tv-muted">
+      Sin combinada del partido: {{ row.selection_meta.motivo_combinada_partido }}.
+    </p>
   }
 </ng-template>

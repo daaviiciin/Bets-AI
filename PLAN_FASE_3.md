@@ -32,6 +32,13 @@ se guarda aquí para no perderlo. El estado de cada bloque se lleva en
   Regla de elección (`puntuar_combinada`): con valor → partidos distintos → mayor P conjunta →
   menos patas (no el mayor EV: con un modelo sin calibrar, eso elige sus mayores errores).
   Donde abajo pone "4–6", léase 3–6.
+- **2026-11-17 (reglas v5):** el usuario quiere **variedad de mercados**, no picks atados a sus
+  mercados de siempre: fuera las reglas de perfil del 05/11 (doble oportunidad obligatoria, tope de
+  goles); como mucho 2 del mismo grupo de mercado y desempate a favor de la combinada más variada.
+  Vuelve la mitad con más goles; los props (tiros a puerta y goleador) entran también en las simples
+  y en la combinada del día como **experimentales**. Simples **1,30–2,00** y patas **1,18–1,80**
+  (donde abajo pone 1,30–1,70, léase 1,30–2,00). «Menos goles» y «ambos marcan: No», fuera. El
+  criterio de orden de las simples (`orden_de_simples`) queda pendiente del usuario.
 - **2026-10-27:** nuevo bloque **B14, "Combinada del partido"**: un pick extra aparte con 2–3
   selecciones de un mismo partido, que puede llevar props de jugador (tiros a puerta preferente,
   goleador, paradas del portero) como **experimentales**. Cambia la regla "picks globales sin

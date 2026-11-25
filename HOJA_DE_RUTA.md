@@ -1,6 +1,6 @@
 # Hoja de ruta — Bets AI
 
-Última actualización: 2026-11-05
+Última actualización: 2026-11-18
 
 | Fase | Objetivo | Estado |
 |---|---|---|
@@ -11,6 +11,93 @@
 Regla: no se empieza una fase hasta cerrar la anterior, salvo decisión explícita.
 
 ---
+
+## 📍 2026-11-18: por qué no salen picks, nombres de Winamax y ventaja frente al mercado
+
+- ☑ **«No salen picks»: no era un fallo.** El 18 y el 19/11 no hay partidos (parón de
+  selecciones); el siguiente es el viernes 20/11. Entre el 06 y el 08/11 y del 10 al 17/11 no se
+  generaron porque no hubo refresh ni se abrió la app. **La tarea programada no existe en este PC**
+  (comprobado con `Get-ScheduledTask`): sigue pendiente recrearla (ver 2026-11-05).
+- ☑ La portada decía «Mañana habrá picks nuevos» aunque mañana no hubiera partidos. Ahora
+  `GET/POST /featured-picks/today` devuelve `proximo_partido` con `sin_partidos` y la portada dice
+  «Próximos picks: el viernes 20 (primer partido a las 20:30)» (`fmtProximosPicks`). También en el
+  MCP (`picks_de_hoy`).
+- ☑ Los picks del 05/11 seguían «pendiente» con los partidos ya terminados: la corrección solo se
+  hace con «Comprobar» en Transparencia (`refresh_all_grading`). Hay que pulsarlo.
+- ☑ **`orden_de_simples` decidido:** al usuario le es indiferente mientras salgan picks → «mayor
+  P» (sin cambios en los picks).
+- ☑ **Nombres de Winamax sin casar (fallo de antes).** 88 de 267 líneas de 1X2 y doble oportunidad
+  (30 de 45 partidos) no se podían leer: Winamax escribe en español y abreviado («Leeds o empate»,
+  «Atl. Madrid», «PSG», «Nápoles», «B. Múnich»). Sin P del modelo, esas líneas no podían ser pick.
+  Además, en Alavés – Deportivo el 1X2 tenía **dos «Deportivo Alavés»** (la regla de subcadena
+  mandaba «Deportivo» al local), con EV inventado en la de 3,25. Arreglado en
+  `winamax_normalization`: parecido con `team_side_score`, «o» como separador de la doble
+  oportunidad, un nombre que encaja en los dos equipos ya no va al local y, al guardar,
+  `completar_por_eliminacion` deduce la selección que falta («Niza», «Colonia», «R. Santander»).
+  Con los datos del 18/11: 88 → 0 sin casar. Las filas guardadas se corrigen con el siguiente
+  refresh de Winamax (78 de las 88 ya se leen bien al vuelo).
+- ☑ **Ventaja frente al mercado en la página de partido** (decisión del usuario del 18/11: se
+  adelanta el detector, antes previsto para después de la fase 3). `ventaja_mercado.py` compara la
+  cuota de Winamax (la de nuestro scraper) con el consenso sin margen de las demás casas del
+  comparador (mediana de ≥ 3, leídas a ≤ 2 h de Winamax) y `odds_discrepancies` la clasifica con
+  el **baremo del usuario: 3–15 % = ventaja; > 15 % = posible error** (Winamax puede anularla).
+  `GET /dashboard/graded-odds` trae `mercado`; la página de partido marca «Mercado +6,3 %» (ámbar
+  «¿Error?» por encima del 15 %), con filtro «Sobre el mercado» y la explicación en el `title`.
+  Tests: `test_odds_discrepancies.py`, `ventaja-mercado.spec.ts`, `format.spec.ts`.
+- ☑ Comparador probado contra Flashscore (refresh del 18/11): 40 de 45 partidos, 0 fallos.
+  **Resultado real:** en 1.285 líneas comparables Winamax paga de mediana un **5,8 % menos** que el
+  consenso y **ninguna** cae en el 3–15 % (máximo +0,5 %). Las marcas saldrán cuando Winamax se
+  quede atrás en algún movimiento; con 3 lecturas al día serán raras.
+- ☐ `npm test` (`ng test`) falla en este PC con «Vitest failed to find the runner», también en
+  specs sin tocar (Node 24.22, `@angular/build` 21.2.27, vitest 4.1.12). Los specs puros pasan con
+  `npx vitest run --globals --environment node <specs>`. Pendiente de revisar.
+- ☐ Siguiente paso posible: un aviso en la lista de partidos con cuántas líneas van sobre el
+  mercado, para no tener que abrirlos uno a uno.
+
+## 📍 2026-11-17: migraciones, refresh, backtest, B14g y comparador
+
+- ☑ Migraciones `46826adbc73e` (comparador) y `c7d41e9a2b15` (combinada del partido) revisadas y
+  aplicadas.
+- ☑ Refresh manual (`logs/refresh_manual_2026-11-17.log`): 29 partidos del 21–23/11 con cuotas
+  de Winamax (11.270 cuotas) y stats de 40 partidos. 17 partidos UEFA del 05/11 seguían
+  `scheduled`: entre el 05 y el 09/11 no hubo refresh y el feed de resultados (y «Comprobar»)
+  solo mira 7 días atrás. ☑ Cerrados a mano con la página de clasificación de Europa League y
+  Conference (2 peticiones, solo partidos ya en BD, `SeasonHistoryIngester`); sus stats llegan
+  con el siguiente refresh. **Hueco:** el paso «histórico» del refresh solo lee las 5 ligas, así
+  que un partido UEFA con más de 7 días sin refresh se queda abierto.
+- ☑ Backtest (`logs/backtest_2026-11-17.log`): candidata `dc-ridge-20261117-082754` (σ 0,4,
+  semivida 60, 40 % goles, peso del mercado 0,7). Puntuación B 0,6092 frente a 0,6494 del
+  modelo antiguo y 0,6310 de la base → **pasa la puerta**, pero **no se ha promovido**: el 1X2
+  (y con él la doble oportunidad) queda fuera de las familias por ECE 0,0534 > 0,05, aunque su
+  log-loss (0,556) gana a la base (0,611). Entra «ambos marcan». **Decisión del usuario
+  pendiente:** no promover y repetir en 1–2 semanas, promover añadiendo el 1X2 a mano, o
+  revisar el umbral de ECE.
+- ☑ B14g hecho (ver B14).
+- ☑ **Comparador de cuotas: ingesta en el refresh.** Paso nuevo tras Winamax y antes de los
+  picks, en la tarea programada (`backend.tools.import_comparador_cuotas`) y en el refresh al
+  abrir la app (`ejecutar_paso_comparador` en `refresco_auto.ejecutar_pipeline`). Una petición
+  por partido con 1,5 s de pausa, como mucho `COMPARADOR_CUOTAS_MAX_PARTIDOS` (40) a
+  `COMPARADOR_CUOTAS_DAYS_AHEAD` (5, como Winamax) días, con los de Winamax primero. La tanda se corta tras 3
+  fallos seguidos. Un fallo se apunta como error del paso y no impide los picks. Se apaga con
+  `COMPARADOR_CUOTAS_ENABLED=false`. Probado contra Flashscore el 18/11 (40 partidos, 0 fallos).
+- ☑ **Reglas v5 de los picks del día (decisión del usuario: variedad, no perfil fijo).** Fuera el
+  perfil del 05/11 (doble oportunidad obligatoria y como mucho 2 patas de goles). Grupos `1x2`,
+  `doble`, `goles`, `mitad`, `tiros`, `goleador` (y `paradas`, hoy sin habilitar): como mucho 2
+  simples y 2 patas de la combinada del mismo grupo. `puntuar_combinada`: con valor → partidos
+  distintos → P conjunta redondeada a 1 punto → más grupos → menos patas. Vuelve la mitad con
+  más goles (solo como simple o como única pata de su partido). Props de tiros a puerta y
+  goleador también en simples y combinada del día, con `experimental` y `player_name`. Simples
+  1,30–2,00, patas 1,18–1,80 (tramos 1,18–1,45 / 1,45–1,80, 3 por tramo), combinada 4–6.
+  `rules_version = "v5"` (v4 era la del 13/11, con la combinada del partido). Transparencia separa
+  el acierto de las simples con y sin props. Peor caso de la enumeración (8 partidos × 6 patas):
+  ~1,1–1,75 s. «Menos goles» y «ambos marcan: No» siguen fuera.
+- ☑ **El criterio de orden de las simples** (`orden_de_simples`): «mayor P», decidido el 18/11. Vista previa
+  del 21/11 sin guardar: mismas simples que con v4. La combinada pasa a 4 patas de 3 grupos (antes
+  eran 5, con 3 de doble oportunidad). Ningún prop ni mitad gana, porque con «mayor P» siempre
+  gana la cuota más corta (mejor prop: 63,7 % con EV −7,6 %).
+- ☐ El criterio de `puntuar_combinada_del_partido` (TODO del usuario, sigue el EV provisional).
+- ☑ Comparador: detector de discrepancias conectado a la página de partido el 18/11 (el usuario
+  lo adelanta; ver 2026-11-18). Sigue sin registro en seco ni CLV (E6–E7 de la investigación).
 
 ## 💬 Chat MCP (2026-11-13)
 
@@ -706,19 +793,28 @@ en 8 de sus 10 partidos (hizo 3 remates y 1 a puerta en un mal partido de Osasun
 
 - [x] **B14a** Liquidar goleador (`player_anytime_scorer`, `player_to_score_2plus`) y paradas
   (`player_saves_alt`) con `player_match_stats` (antes quedaban "a revisar").
-- [~] **B14b** (módulo puro `player_props_model.py` hecho; minutos: media de las 6 últimas con minutos, semivida 3, mínimo 15; falta enchufarlo en `graded_odds_service`) Modelo de props ajustado al rival: hoy goleador y tiros a puerta usan solo el
+- [x] **B14b** (módulo puro `player_props_model.py`, enchufado en `graded_odds_service`; minutos: media de las 6 últimas con minutos, semivida 3, mínimo 15) Modelo de props ajustado al rival: antes goleador y tiros a puerta usaban solo el
   ritmo de temporada del jugador y no hay modelo de paradas. Goleador por *thinning*: P = 1 −
   exp(−q·λ_equipo), con q = parte de los goles del equipo que marca el jugador; tiros a puerta
   escalados por λ_equipo del partido / media; paradas con los tiros a puerta esperados del rival.
-- [ ] **B14c** Backtest walk-forward de props con `player_match_stats` (492 partidos): log-loss,
-  Brier y ECE por familia frente a la cuota de Winamax sin margen, y calibración como en B7.
-- [ ] **B14d** P conjunta en el mismo partido: rejilla de marcadores ampliada con los props
-  (goleador exacto por *thinning* sobre la rejilla; tiros a puerta y paradas condicionados a los
-  goles de su equipo o del rival).
-- [ ] **B14e** Selección de la combinada del partido (función pura en `daily_picks_v2.py`).
-- [ ] **B14f** Columna nueva en `featured_daily_picks` + migración (y el trigger de congelado),
-  corrección y métricas propias.
-- [ ] **B14g** Frontend: tarjeta en la portada y sección en Transparencia.
+- [x] **B14c** Backtest walk-forward de props con `player_match_stats`: log-loss, Brier y ECE por
+  familia frente a la cuota de Winamax sin margen, y calibración como en B7
+  (`backtest_modelo --solo-props`; se guarda en `backtest_metrics["props"]`; las versiones
+  anteriores usan `PROPS_POR_DEFECTO` de `model_registry.py`, del backtest del 13/11).
+- [x] **B14d** P conjunta en el mismo partido: rejilla de marcadores ampliada con los props
+  (`pesos_de_pata`: goleador por *thinning* sobre la rejilla; tiros a puerta y paradas
+  condicionados a los goles de su equipo o del rival).
+- [x] **B14e** Selección de la combinada del partido (`elegir_combinada_del_partido` en `daily_picks_v2.py`).
+- [x] **B14f** Columna `match_combo_json` + migración `c7d41e9a2b15` (trigger de congelado
+  ampliado; aplicada el 17/11), corrección y métricas propias (`/featured-picks/metrics` →
+  `combinada_partido`).
+- [x] **B14g** (2026-11-17) Frontend: tarjeta en la portada (debajo de la combinada del día,
+  insignia «Experimental» en los props, estado por pata) y sección en Transparencia (acierto
+  total, sin props y con props, y acierto por familia de prop). Lógica pura en
+  `core/combinada-partido.ts` con tests. Usa los tokens `tv-*` (la paleta nueva de `styles.scss`).
+- [ ] Validar con picks reales: los props siguen siendo experimentales. Ojo: frente a Winamax
+  ganan con holgura, pero el «mercado» de props tiene ECE 0,09–0,13 (Winamax solo ofrece el
+  «sí» y no se le puede quitar bien el margen), así que parte de esa ventaja es el margen.
 
 ### Modelo v2 en producción (2026-10-25, noche)
 

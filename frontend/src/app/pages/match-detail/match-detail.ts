@@ -51,6 +51,7 @@ import type {
   TeamPreview,
 } from '../../core/models';
 import { isLight, matchPaint } from '../../core/team-colors';
+import { type MarcaMercado, marcaMercado, rotuloMercado, textoMercado } from '../../core/ventaja-mercado';
 import { Icon } from '../../shared/icon';
 import { TeamCrest } from '../../shared/team-crest';
 import { TvCifra, TvEntra, flip } from '../../shared/tv-motion';
@@ -60,6 +61,8 @@ import { CompareRow, StatCompare } from './stat-compare';
 
 type Tab = 'previa' | 'alineaciones' | 'estadisticas' | 'cuotas' | 'jugadores';
 type PlayerSort = 'minutes' | 'sot90' | 'goals';
+/** Filtro de líneas en Cuotas; `mercado` = Winamax paga más que el resto de casas. */
+type LineFilter = 'todas' | 'modelo' | 'valor' | 'mercado';
 
 interface OuRow {
   point: string;
@@ -167,7 +170,7 @@ export class MatchDetail {
   protected readonly tab = signal<Tab>('previa');
   protected readonly group = signal<MarketGroup | 'todos'>('todos');
   /** Qué líneas se ven en Cuotas: todas, solo con P del modelo o solo con EV positivo. */
-  protected readonly lineFilter = signal<'todas' | 'modelo' | 'valor'>('todas');
+  protected readonly lineFilter = signal<LineFilter>('todas');
   protected readonly statsScope = signal<'venue' | 'overall'>('venue');
   protected readonly playerSort = signal<PlayerSort>('minutes');
   /** Mercados desplegados en Cuotas (por defecto cada uno enseña su resumen). */
@@ -262,6 +265,11 @@ export class MatchDetail {
 
   protected readonly valueCount = computed(() => this.lines().filter((l) => this.hasValue(l)).length);
 
+  /** Líneas en las que Winamax paga más que el resto del mercado (comparador de Flashscore). */
+  protected readonly mercadoCount = computed(
+    () => this.lines().filter((l) => marcaMercado(l) != null).length,
+  );
+
   /** Hay cuotas por encima del límite: la leyenda explica que son solo informativas. */
   protected readonly hasHighOdds = computed(() => this.lines().some((l) => !isRecommendable(l)));
 
@@ -274,9 +282,9 @@ export class MatchDetail {
     const g = this.group();
     const f = this.lineFilter();
     const open = this.openMarkets();
-    const pass = (l: GradedOddsLine | null): l is GradedOddsLine =>
-      !!l && (f === 'todas' || (f === 'modelo' ? l.model_probability != null : this.hasValue(l)));
-    const important = (l: GradedOddsLine | null) => this.hasValue(l) || this.picked(l);
+    const pass = (l: GradedOddsLine | null): l is GradedOddsLine => !!l && this.pasaFiltro(l, f);
+    const important = (l: GradedOddsLine | null) =>
+      this.hasValue(l) || this.picked(l) || marcaMercado(l) != null;
     const out: MarketView[] = [];
     for (const m of this.markets()) {
       if (g !== 'todos' && m.group !== g) continue;
@@ -494,7 +502,30 @@ export class MatchDetail {
       parts.push('sin modelo');
     }
     if (this.highOdds(l)) parts.push('cuota alta, solo informativa');
+    if (l.mercado) parts.push(textoMercado(l.mercado));
     return parts.join(', ');
+  }
+
+  private pasaFiltro(l: GradedOddsLine, f: LineFilter): boolean {
+    switch (f) {
+      case 'todas':
+        return true;
+      case 'modelo':
+        return l.model_probability != null;
+      case 'mercado':
+        return marcaMercado(l) != null;
+      case 'valor':
+        return this.hasValue(l);
+    }
+  }
+
+  protected marca(l: GradedOddsLine | null): MarcaMercado | null {
+    return marcaMercado(l);
+  }
+
+  /** "Mercado +6,3 %" (o "▲ +6,3 %" en las celdas estrechas de más/menos). */
+  protected rotulo(l: GradedOddsLine, compacto = false): string {
+    return l.mercado ? rotuloMercado(l.mercado, compacto) : '';
   }
 
   protected toggleMarket(key: string): void {

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
+from backend.app.config import Settings
 from backend.models import RefreshRun
+from backend.services import comparador_cuotas_ingester as cci
 from backend.services import refresco_auto as ra
 
 AHORA = datetime(2026, 11, 5, 9, 0, tzinfo=timezone.utc)
@@ -162,3 +166,69 @@ class TestNecesitaRefresh:
     def test_calendario_vacio_respeta_la_espera_entre_intentos(self) -> None:
         inicio = AHORA - timedelta(minutes=10)
         assert not self._toca(ultimo_inicio=inicio, ultimo_fin=inicio, calendario_vacio=True)
+
+
+class TestEjecutarPipeline:
+    """Orden de los pasos y que un fallo del comparador no corte el pipeline (todo con dobles)."""
+
+    @pytest.fixture
+    def pasos(self, monkeypatch) -> list[str]:
+        orden: list[str] = []
+
+        class Flashscore:
+            def __init__(self, _s, *, log) -> None: ...
+
+            def run(self):
+                orden.append("flashscore")
+                return SimpleNamespace(errors=[])
+
+        class Winamax:
+            def __init__(self, _s, **_kw) -> None: ...
+
+            def ingest_upcoming(self, **_kw):
+                orden.append("winamax")
+                return SimpleNamespace(errors=[])
+
+        def picks(_s, *, log):
+            orden.append("picks")
+            return SimpleNamespace(motivo=None, estado="generados")
+
+        monkeypatch.setattr(ra, "DailyRefreshOrchestrator", Flashscore)
+        monkeypatch.setattr(ra, "WinamaxOddsIngester", Winamax)
+        monkeypatch.setattr(ra, "asegurar_picks_de_hoy", picks)
+        monkeypatch.setattr(ra, "get_settings", lambda: Settings(_env_file=None))
+        monkeypatch.setattr(cci, "get_settings", lambda: Settings(_env_file=None))
+        return orden
+
+    def _comparador(self, monkeypatch, pasos: list[str], fallo: Exception | None = None) -> None:
+        class Comparador:
+            def __init__(self, _s, *, log) -> None: ...
+
+            def ingest(self, **_kw):
+                pasos.append("comparador")
+                if fallo:
+                    raise fallo
+                return cci.ComparadorIngestResult(started_at=AHORA, finished_at=AHORA)
+
+        monkeypatch.setattr(cci, "ComparadorCuotasIngester", Comparador)
+
+    def test_comparador_va_tras_winamax_y_antes_de_los_picks(self, monkeypatch, pasos) -> None:
+        self._comparador(monkeypatch, pasos)
+        errores = ra.ejecutar_pipeline(_SesionFalsa(), log=logging.getLogger("t"))
+        assert pasos == ["flashscore", "winamax", "comparador", "picks"]
+        assert errores == []
+
+    def test_un_bloqueo_del_comparador_no_impide_los_picks(self, monkeypatch, pasos) -> None:
+        self._comparador(monkeypatch, pasos, fallo=RuntimeError("HTTP 403"))
+        errores = ra.ejecutar_pipeline(_SesionFalsa(), log=logging.getLogger("t"))
+        assert pasos[-1] == "picks"
+        assert errores == ["comparador: HTTP 403"]
+
+    def test_apagado_se_salta_el_paso(self, monkeypatch, pasos) -> None:
+        self._comparador(monkeypatch, pasos)
+        monkeypatch.setattr(
+            cci, "get_settings", lambda: Settings(_env_file=None, comparador_cuotas_enabled=False),
+        )
+        errores = ra.ejecutar_pipeline(_SesionFalsa(), log=logging.getLogger("t"))
+        assert pasos == ["flashscore", "winamax", "picks"]
+        assert errores == []

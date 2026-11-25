@@ -134,6 +134,9 @@
                 } @else {
                   Sin cuota todavía
                 }
+                @if (marca(o.line); as k) {
+                  · <b class="ventaja-mercado" [class.ventaja-dudosa]="k === 'error'">{{ rotulo(o.line!) }}</b>
+                }
               </span>
             </span>
             <!-- La cifra sube cuando llega la cuota (las cuotas se cargan después del partido). -->
@@ -316,6 +319,9 @@
                               }
                             } @else {
                               Sin modelo
+                            }
+                            @if (marca(l); as k) {
+                              · <b class="ventaja-mercado" [class.ventaja-dudosa]="k === 'error'">{{ rotulo(l) }}</b>
                             }
                           </span>
                         </span>
@@ -572,7 +578,8 @@
                   @for (f of [
                     { id: 'todas', label: 'Todas', n: null },
                     { id: 'modelo', label: 'Con modelo', n: null },
-                    { id: 'valor', label: 'Con valor', n: valueCount() }
+                    { id: 'valor', label: 'Con valor', n: valueCount() },
+                    { id: 'mercado', label: 'Sobre el mercado', n: mercadoCount() }
                   ]; track f.id) {
                     <button
                       type="button"
@@ -592,6 +599,13 @@
                 <span class="flex items-center gap-1.5"><span class="leyenda con-valor"></span> Con valor (EV positivo)</span>
                 <span class="flex items-center gap-1.5"><span class="leyenda sin-modelo"></span> Sin modelo</span>
                 <span>% = probabilidad del modelo · EV = cuota × P − 1</span>
+                @if (mercadoCount()) {
+                  <span>
+                    <b class="ventaja-mercado">Mercado</b> = Winamax paga de 3 a 15 % más que la cuota justa del
+                    resto de casas · <b class="ventaja-mercado ventaja-dudosa">¿Error?</b> = más del 15 %, puede
+                    anularse
+                  </span>
+                }
                 @if (hasHighOdds()) {
                   <span>Más de {{ fmtCuota(maxRecommendable) }}: solo informativa, nunca se marca como valor</span>
                 }
@@ -666,6 +680,9 @@
                                               · <b [class.ev-valor]="valueMark(l)">EV {{ fmtEv(l.model_ev) }}</b>
                                             }
                                           }
+                                          @if (marca(l); as k) {
+                                            <b class="ventaja-mercado block" [class.ventaja-dudosa]="k === 'error'">{{ rotulo(l, true) }}</b>
+                                          }
                                         </span>
                                         <span class="font-display text-lg font-bold">{{ fmtCuota(l.offered_odds) }}</span>
                                       </button>
@@ -694,11 +711,17 @@
                               [class.sin-modelo]="l.model_probability == null">
                               <span class="min-w-0">
                                 <span class="block text-sm font-semibold leading-snug">{{ label(l) }}</span>
-                                @if (l.model_probability != null) {
+                                @if (l.model_probability != null || marca(l)) {
                                   <span class="block text-xs text-tv-muted">
-                                    {{ fmtProb(l.model_probability) }}
-                                    @if (hasValue(l)) {
-                                      · <b [class.ev-valor]="valueMark(l)">EV {{ fmtEv(l.model_ev) }}</b>
+                                    @if (l.model_probability != null) {
+                                      {{ fmtProb(l.model_probability) }}
+                                      @if (hasValue(l)) {
+                                        · <b [class.ev-valor]="valueMark(l)">EV {{ fmtEv(l.model_ev) }}</b>
+                                      }
+                                    }
+                                    @if (marca(l); as k) {
+                                      @if (l.model_probability != null) { · }
+                                      <b class="ventaja-mercado" [class.ventaja-dudosa]="k === 'error'">{{ rotulo(l) }}</b>
                                     }
                                   </span>
                                 }

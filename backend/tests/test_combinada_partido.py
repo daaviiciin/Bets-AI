@@ -190,6 +190,10 @@ class TestCandidatasProps:
     def test_equipos_con_pocos_partidos_fuera(self) -> None:
         assert self._n(linea_prop(partidos_min=2)) == 0
 
+    def test_el_lado_menos_de_un_prop_queda_fuera(self) -> None:
+        # Como "menos goles" en los mercados del partido: solo el lado "más de" / "sí".
+        assert self._n(linea_prop(outcome_name="Lewandowski under 0.5")) == 0
+
 
 class TestCorreccionCombinadaDelPartido:
     def test_sin_corregir_sale_pendiente(self) -> None:

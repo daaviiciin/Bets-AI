@@ -315,7 +315,11 @@ def picks_de_hoy(session: Session) -> dict[str, Any]:
                      "tarea programada; desde el chat no se generan.",
         }
     if res.estado == "sin_partidos":
-        return {"estado": "sin_partidos", "motivo": res.motivo}
+        return f.sin_vacios({
+            "estado": "sin_partidos",
+            "motivo": res.motivo,
+            "proximo_partido": f.fmt_fecha(res.proximo_partido),
+        })
     return {"estado": "listo", **_fila_picks(res.fila), "aviso": AVISO}
 
 

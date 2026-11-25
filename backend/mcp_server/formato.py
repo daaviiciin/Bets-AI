@@ -224,6 +224,9 @@ def pata_compacta(lg: dict[str, Any]) -> dict[str, Any]:
     }
     if lg.get("sin_valor"):
         out["sin_valor"] = True
+    if lg.get("experimental"):
+        # Prop de jugador (reglas v5): aún sin historial de picks reales.
+        out["experimental"] = True
     if lg.get("aviso"):
         out["aviso"] = sanear(lg.get("aviso"), 120)
     if "result" in lg:

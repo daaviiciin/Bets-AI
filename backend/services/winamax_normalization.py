@@ -7,6 +7,7 @@ import re
 from backend.services.team_name_matching import (
     basic_names_match as _names_match,
     basic_normalize_team_name as _nm,
+    team_side_score,
 )
 
 # Mercados Winamax conocidos → clave canónica en tabla ``markets`` / detector.
@@ -81,11 +82,88 @@ def normalize_h2h_outcome(label: str, *, home_team: str, away_team: str) -> str:
         return "Draw"
     hn = _nm(home_team)
     an = _nm(away_team)
-    if _names_match(hn, _nm(raw)) or _substring_team(raw, home_team):
+    nr = _nm(raw)
+    if nr and nr == hn:
         return home_team
-    if _names_match(an, _nm(raw)) or _substring_team(raw, away_team):
+    if nr and nr == an:
+        return away_team
+    encaja_local = _names_match(hn, nr) or _substring_team(raw, home_team)
+    encaja_visitante = _names_match(an, nr) or _substring_team(raw, away_team)
+    # "Deportivo" está dentro de "Deportivo Alavés" y de "Deportivo de A Coruña": no se
+    # elige el local por ir primero (antes se guardaban dos «Deportivo Alavés» en el 1X2).
+    if encaja_local and not encaja_visitante:
+        return home_team
+    if encaja_visitante and not encaja_local:
+        return away_team
+    lado = _lado_parecido(raw, home_team, away_team)
+    if lado == "home":
+        return home_team
+    if lado == "away":
         return away_team
     return raw
+
+
+def _lado_parecido(nombre: str, home_team: str, away_team: str) -> str | None:
+    """Winamax en español frente al nombre de Flashscore ("Nápoles" ~ "SSC Napoli",
+    "B. Múnich" ~ "FC Bayern München", "Leeds" ~ "Leeds United"): el equipo del partido que
+    se parece **más** (:func:`team_side_score`). Empate o ninguno = ``None``."""
+    h, a = team_side_score(nombre, home_team), team_side_score(nombre, away_team)
+    if h > a:
+        return "home"
+    if a > h:
+        return "away"
+    return None
+
+
+_RE_SEPARADOR_DOBLE = re.compile(r"\sor?\s|/", re.I)
+
+
+def _doble_por_partes(label: str, *, home_team: str, away_team: str) -> str | None:
+    """«Werder o empate» / «Leverkusen o  Paderborn» → forma canónica, o ``None``.
+
+    Cada parte es «empate» o un equipo (por parecido). Si en «equipo o equipo» solo se
+    reconoce uno, el otro es el rival ("Alavés o Deportivo" con dos «Deportivo»).
+    """
+    partes = [p.strip() for p in _RE_SEPARADOR_DOBLE.split(label) if p.strip()]
+    if len(partes) != 2:
+        return None
+    lados: list[str | None] = []
+    for p in partes:
+        tok = {_normalize_piece(x) for x in p.lower().split()}
+        lados.append("draw" if tok <= _EMPATE else _lado_parecido(p, home_team, away_team))
+    if "draw" not in lados and lados.count(None) == 1:
+        conocido = next(x for x in lados if x is not None)
+        lados = [x if x is not None else ("away" if conocido == "home" else "home") for x in lados]
+    hn, an = home_team.strip(), away_team.strip()
+    return {
+        frozenset({"home", "draw"}): f"{hn} or Draw",
+        frozenset({"home", "away"}): f"{hn} or {an}",
+        frozenset({"draw", "away"}): f"Draw or {an}",
+    }.get(frozenset(lados)) if None not in lados else None
+
+
+def completar_por_eliminacion(
+    canon: str, nombres: list[str], *, home_team: str, away_team: str,
+) -> list[str]:
+    """1X2 y doble oportunidad de un partido: si solo queda **una** selección sin reconocer
+    y solo falta **un** resultado, es ese ("Niza" en Niza–PSG, "Colonia" en Bayern–Köln).
+
+    ``nombres`` son las tres selecciones ya normalizadas, en el orden de Winamax.
+    """
+    hn, an = home_team.strip(), away_team.strip()
+    esperados = {
+        "h2h": [home_team, "Draw", away_team],
+        "double_chance": [f"{hn} or Draw", f"{hn} or {an}", f"Draw or {an}"],
+    }.get(canon)
+    if esperados is None or len(nombres) != 3:
+        return nombres
+    faltan = [e for e in esperados if e not in nombres]
+    sin_reconocer = [i for i, n in enumerate(nombres) if n not in esperados]
+    if len(faltan) != 1 or len(sin_reconocer) != 1:
+        return nombres
+    out = list(nombres)
+    out[sin_reconocer[0]] = faltan[0]
+    return out
 
 
 def _normalize_piece(s: str) -> str:
@@ -170,4 +248,4 @@ def normalize_double_chance_outcome(label: str, *, home_team: str, away_team: st
     if has_home and has_away and not has_draw:
         return f"{hn} or {an}"
 
-    return ll
+    return _doble_por_partes(ll, home_team=hn, away_team=an) or ll

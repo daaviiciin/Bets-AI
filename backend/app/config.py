@@ -65,9 +65,10 @@ class Settings(BaseSettings):
     #: Usa el modelo v2 (Dixon–Coles con encogimiento + calibración) si hay una versión activa.
     model_v2_enabled: bool = Field(default=True)
 
-    # Picks del día (fase 3, B10): reglas del usuario del 2026-10-21.
+    # Picks del día (fase 3, B10): reglas del usuario del 2026-10-21; el máximo de las simples
+    # pasó de 1,70 a 2,00 con las reglas v5 (2026-11-17).
     picks_odds_min: float = Field(default=1.30, ge=1.01, le=10.0, description="Cuota mínima de las simples.")
-    picks_odds_max: float = Field(default=1.70, ge=1.01, le=10.0, description="Cuota máxima de las simples.")
+    picks_odds_max: float = Field(default=2.00, ge=1.01, le=10.0, description="Cuota máxima de las simples.")
     picks_combo_odds_min: float = Field(default=4.0, ge=1.5, le=50.0, description="Cuota total mínima de la combinada.")
     picks_combo_odds_max: float = Field(default=6.0, ge=1.5, le=50.0, description="Cuota total máxima de la combinada.")
     picks_kickoff_margin_minutes: int = Field(
@@ -77,6 +78,17 @@ class Settings(BaseSettings):
     picks_odds_max_age_minutes: int = Field(
         default=120, ge=5, le=1440,
         description="Al abrir la app, si las cuotas de hoy son más viejas, se actualizan antes de generar.",
+    )
+
+    # Comparador de cuotas de Flashscore (bet365 y otras casas españolas): paso del refresh entre
+    # Winamax y los picks. Cada partido es 1 petición más 1,5 s de pausa.
+    comparador_cuotas_enabled: bool = Field(default=True)
+    comparador_cuotas_days_ahead: int = Field(
+        default=5, ge=1, le=7, description="Días vista de los partidos a leer (como Winamax).",
+    )
+    comparador_cuotas_max_partidos: int = Field(
+        default=40, ge=1, le=200,
+        description="Tope de partidos (= peticiones) por tanda; van primero los de Winamax.",
     )
 
     # Chat por MCP (``backend/mcp_server/``, solo lectura). "Mis apuestas" lleva importes y resultados

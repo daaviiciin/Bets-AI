@@ -11,7 +11,13 @@ Flujo, por partido (una petición ``oce`` cada uno, con pausa entre partidos):
    cambia el precio, si no se alarga ``last_seen_at``.
 
 Cada partido hace commit por separado: un fallo no pierde lo ya descargado. Las cuotas
-suspendidas (``active = false``) no se guardan.
+suspendidas (``active = false``) no se guardan. Tras ``MAX_FALLOS_SEGUIDOS`` partidos fallidos
+seguidos se corta la tanda: suele ser un bloqueo o un cambio de formato y seguir solo suma
+peticiones.
+
+``ejecutar_paso_comparador`` es el paso del refresh (después de Winamax y antes de los picks),
+común a la tarea programada (``backend/tools/import_comparador_cuotas.py``) y al refresh al
+abrir la app (``services/refresco_auto.py``). Nunca lanza: los fallos vuelven como errores.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from typing import Callable
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from backend.app.config import Settings, get_settings
 from backend.models import Bookmaker, ComparadorCuota, Market, Match, Odds, Snapshot
 from backend.models.bookmaker import BOOKMAKER_ROLE_SOFT
 from backend.models.match import MATCH_STATUS_SCHEDULED
@@ -41,6 +48,8 @@ REQUEST_SLEEP_SECONDS = 1.5
 #: Con 3 refrescos al día, como mucho una lectura por partido y refresco.
 REFETCH_AFTER = timedelta(hours=2)
 WINAMAX_SOURCE = "winamax_es"
+#: Partidos fallidos seguidos tras los que se corta la tanda (bloqueo, timeout, formato nuevo).
+MAX_FALLOS_SEGUIDOS = 3
 
 #: Casas conocidas del comparador (id de Flashscore → clave en ``bookmakers``). Winamax.es
 #: reutiliza la fila ``winamax_es`` del scraper propio. Las que no estén aquí se crean con una
@@ -100,6 +109,8 @@ class ComparadorIngestResult:
     cuotas_por_casa: dict[str, int] = field(default_factory=dict)
     fetch_errors: int = 0
     errors: list[str] = field(default_factory=list)
+    #: Se cortó la tanda por ``MAX_FALLOS_SEGUIDOS`` fallos seguidos.
+    cortado: bool = False
 
     @property
     def duration_seconds(self) -> float:
@@ -130,6 +141,7 @@ class ComparadorCuotasIngester:
         days_ahead: int = 3,
         max_matches: int = 8,
         match_ids: list[int] | None = None,
+        max_fallos_seguidos: int = MAX_FALLOS_SEGUIDOS,
     ) -> ComparadorIngestResult:
         """Lee el comparador de como mucho ``max_matches`` partidos.
 
@@ -142,9 +154,10 @@ class ComparadorCuotasIngester:
             batch = list(self.session.scalars(select(Match).where(Match.id.in_(match_ids))).all())
             result.matches_eligible = len(batch)
         else:
-            eligible = self._eligible_matches(now=started, days_ahead=days_ahead)
+            eligible = self.partidos_elegibles(now=started, days_ahead=days_ahead)
             result.matches_eligible = len(eligible)
             batch = eligible[:max_matches]
+        seguidos = 0
         for i, match in enumerate(batch):
             if i and self._sleep_seconds:
                 time.sleep(self._sleep_seconds)
@@ -161,14 +174,24 @@ class ComparadorCuotasIngester:
                 result.fetch_errors += 1
                 result.errors.append(f"match={match.id} fs={fs_id}: {exc}")
                 self.log.warning("Comparador: error en match=%s fs=%s: %s", match.id, fs_id, exc)
+                seguidos += 1
+                if seguidos >= max_fallos_seguidos:
+                    result.cortado = True
+                    self.log.warning(
+                        "Comparador: %d fallos seguidos, se corta la tanda (%d partidos sin leer).",
+                        seguidos, len(batch) - i - 1,
+                    )
+                    break
                 continue
+            seguidos = 0
             result.matches_fetched += 1
         result.finished_at = datetime.now(timezone.utc)
         return result
 
     # ------------------------------------------------------------------ selección
 
-    def _eligible_matches(self, *, now: datetime, days_ahead: int) -> list[Match]:
+    def partidos_elegibles(self, *, now: datetime, days_ahead: int) -> list[Match]:
+        """Partidos que tocaría leer, en orden (con Winamax primero, luego por hora). Solo BD."""
         candidatos = self.session.scalars(
             select(Match)
             .where(Match.external_id.like(f"{FLASHSCORE_EXTERNAL_PREFIX}%"))
@@ -281,3 +304,70 @@ class ComparadorCuotasIngester:
             self.session.flush()
         self._mercados[market_key] = mercado
         return mercado
+
+
+# ---------------------------------------------------------------------- paso del refresh
+
+
+@dataclass
+class PasoComparador:
+    """Lo que devuelve el paso del refresh: el resultado (si llegó a correr) y sus errores."""
+
+    result: ComparadorIngestResult | None = None
+    #: Ya con el prefijo ``comparador:``, listos para ``refresh_runs.errores``.
+    errores: list[str] = field(default_factory=list)
+    #: Apagado con ``COMPARADOR_CUOTAS_ENABLED=false``.
+    omitido: bool = False
+
+
+def errores_del_paso(result: ComparadorIngestResult) -> list[str]:
+    """Resume los fallos de una tanda en **una** línea (no uno por partido).
+
+    Con Flashscore bloqueando fallarían todos los partidos y llenarían ``refresh_runs.errores``.
+    """
+    if not result.fetch_errors:
+        return []
+    intentados = result.matches_fetched + result.fetch_errors
+    linea = f"comparador: {result.fetch_errors} de {intentados} partidos fallaron"
+    if result.cortado:
+        linea += f" (cortado tras {MAX_FALLOS_SEGUIDOS} seguidos)"
+    if result.errors:
+        linea += f"; primero: {result.errors[0]}"
+    return [linea[:500]]
+
+
+def ejecutar_paso_comparador(
+    session: Session,
+    *,
+    log: logging.Logger,
+    settings: Settings | None = None,
+    days_ahead: int | None = None,
+    max_matches: int | None = None,
+    ingester_factory: Callable[..., ComparadorCuotasIngester] | None = None,
+) -> PasoComparador:
+    """Paso «comparador de cuotas» del refresh. **Nunca lanza**: un fallo no corta el pipeline.
+
+    ``days_ahead`` y ``max_matches`` salen de la configuración si no se pasan
+    (``COMPARADOR_CUOTAS_DAYS_AHEAD`` y ``COMPARADOR_CUOTAS_MAX_PARTIDOS``).
+    """
+    try:
+        settings = settings or get_settings()
+        if not settings.comparador_cuotas_enabled:
+            log.info("Comparador de cuotas: apagado (COMPARADOR_CUOTAS_ENABLED=false).")
+            return PasoComparador(omitido=True)
+        dias = settings.comparador_cuotas_days_ahead if days_ahead is None else days_ahead
+        tope = settings.comparador_cuotas_max_partidos if max_matches is None else max_matches
+        log.info("Comparador de cuotas (próximos %d días, como mucho %d partidos)...", dias, tope)
+        factory = ingester_factory or ComparadorCuotasIngester
+        res = factory(session, log=log).ingest(days_ahead=dias, max_matches=tope)
+    except Exception as exc:  # noqa: BLE001
+        session.rollback()
+        log.exception("Comparador de cuotas: fallo")
+        return PasoComparador(errores=[f"comparador: {exc}"[:500]])
+    log.info(
+        "Comparador de cuotas: %d de %d partidos elegibles leídos, %d filas nuevas, "
+        "%d alargadas, %d fallidos%s (%.1fs).",
+        res.matches_fetched, res.matches_eligible, res.filas_nuevas, res.filas_extendidas,
+        res.fetch_errors, ", tanda cortada" if res.cortado else "", res.duration_seconds,
+    )
+    return PasoComparador(result=res, errores=errores_del_paso(res))

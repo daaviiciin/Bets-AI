@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
-from backend.app.schemas.responses import GradedOddsLineOut
+from backend.app.schemas.responses import GradedOddsLineOut, VentajaMercadoOut
 from backend.services.graded_odds_service import list_graded_winamax_odds
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -64,6 +64,17 @@ def list_graded_dashboard_odds(
             lambda_away=r.lambda_away,
             implied_probability=r.implied_probability,
             model_summary_lines=list(r.model_summary_lines),
+            mercado=(
+                VentajaMercadoOut(
+                    clase=r.mercado.clase,
+                    ventaja=r.mercado.ventaja,
+                    p_mercado=r.mercado.p_mercado,
+                    cuota_justa=r.mercado.cuota_justa,
+                    casas=r.mercado.casas,
+                    leido_at=r.mercado.leido_at,
+                )
+                if r.mercado is not None else None
+            ),
         )
         for r in rows
     ]

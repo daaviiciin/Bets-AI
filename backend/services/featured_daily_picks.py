@@ -12,6 +12,11 @@ Desde el 2026-11-13 (reglas ``v4``) hay además una **combinada del partido** (B
 selecciones de un mismo partido con cuota 2,5–5, que puede llevar props de jugador
 **experimentales** (solo de las familias que el backtest de props no deja peor que la tasa base).
 Es un pick aparte: no cambia las simples ni la combinada, y se mide por separado.
+
+Desde el 2026-11-17 (reglas ``v5``) se busca **variedad** en vez del perfil del 05/11: vuelve la
+mitad con más goles, los props experimentales compiten también en las simples y en la combinada
+del día, las simples van de 1,30 a 2,00 y las patas de la combinada de 1,18 a 1,80, con como
+mucho dos del mismo grupo de mercado (``daily_picks_v2``).
 """
 
 from __future__ import annotations
@@ -48,7 +53,7 @@ from backend.services.saved_parlay_grading import (
 )
 
 MADRID = ZoneInfo("Europe/Madrid")
-RULES_VERSION = "v4"
+RULES_VERSION = "v5"
 #: Sin versión v2 activa, las P salen del Poisson actual.
 MODEL_VERSION_LEGACY = "legacy-v1"
 # Alguien espera delante de la pantalla: descargas en paralelo, como el botón "Actualizar cuotas".
@@ -108,7 +113,9 @@ def candidatas_desde_lineas(
     hasta: datetime,
     reglas: ReglasModelo | None = None,
 ) -> list[dp.Candidata]:
-    """Líneas que pueden competir: con P del modelo, sin props de jugador, dentro de la ventana.
+    """Líneas de equipo que pueden competir (``MERCADOS_PICKS``, con la mitad con más goles desde
+    las reglas v5): con P del modelo, sin "menos goles", dentro de la ventana. Los props van
+    aparte (:func:`candidatas_props_desde_lineas`).
 
     Con el modelo v2, además: solo sus líneas, de familias habilitadas, con los dos equipos con
     bastantes partidos y mezcladas con el mercado. UEFA entra (decisión del 2026-11-04) salvo los
@@ -164,7 +171,8 @@ def candidatas_props_desde_lineas(
     hasta: datetime,
     modelo: ModeloActivo | None,
 ) -> list[dp.Candidata]:
-    """Props de jugador que pueden entrar (experimentales) en la combinada del partido.
+    """Props de jugador que pueden entrar (experimentales) en las simples, la combinada del día
+    (reglas v5) y la combinada del partido.
 
     Solo con el modelo v2: líneas "más de" con P del modelo de props, de familias habilitadas
     por el backtest (``modelo.familias_props``), con la P condicionada al marcador (B14d), los
@@ -232,6 +240,18 @@ def partidos_del_dia(session: Session, desde: datetime, hasta: datetime) -> list
     )
 
 
+def proximo_partido(session: Session, desde: datetime) -> datetime | None:
+    """Inicio del primer partido de fútbol programado desde ``desde`` (para «Próximos picks»)."""
+    inicio = session.scalar(
+        select(func.min(Match.commence_time))
+        .join(Match.league)
+        .where(Match.commence_time >= desde)
+        .where(Match.status == MATCH_STATUS_SCHEDULED)
+        .where(~League.sport_key.ilike("%basketball%")),
+    )
+    return _aware(inicio) if inicio is not None else None
+
+
 def ultima_toma_por_partido(session: Session, match_ids: list[int]) -> dict[int, datetime]:
     """Hora de la última toma de cuotas de Winamax de cada partido (los que tienen cuotas)."""
     if not match_ids:
@@ -291,14 +311,19 @@ def generar_picks_v2(
     reglas = reglas_del_modelo(modelo)
     version = reglas.model_version
     cands = candidatas_desde_lineas(lineas, desde=desde, hasta=hasta, reglas=reglas)
-    tomas = ultima_toma_por_partido(session, sorted({c.match_id for c in cands}))
+    # Reglas v5: los props (experimentales) compiten en todos los picks, no solo en la
+    # combinada del partido.
+    props = candidatas_props_desde_lineas(lineas, desde=desde, hasta=hasta, modelo=modelo)
+    todas = [*cands, *props]
+    tomas = ultima_toma_por_partido(session, sorted({c.match_id for c in todas}))
 
     simples, meta = dp.elegir_simples(
-        cands,
+        todas,
         odds_min=Decimal(str(cfg.picks_odds_min)),
         odds_max=Decimal(str(cfg.picks_odds_max)),
     )
     meta["candidatas"] = len(cands)
+    meta["candidatas_props"] = len(props)
     if modelo is not None:
         meta["modelo"] = {
             "familias": sorted(modelo.familias),
@@ -318,7 +343,7 @@ def generar_picks_v2(
 
     combo_json: dict[str, Any] | None = None
     combo = dp.elegir_combinada(
-        dp.sin_selecciones(cands, (s.candidata for s in simples)),
+        dp.sin_selecciones(todas, (s.candidata for s in simples)),
         total_min=Decimal(str(cfg.picks_combo_odds_min)),
         total_max=Decimal(str(cfg.picks_combo_odds_max)),
     )
@@ -338,10 +363,8 @@ def generar_picks_v2(
     # Combinada del partido (pick aparte): marcador + props experimentales; sin repetir ninguna
     # selección de las simples (la misma regla que la combinada normal).
     partido_json: dict[str, Any] | None = None
-    props = candidatas_props_desde_lineas(lineas, desde=desde, hasta=hasta, modelo=modelo)
-    meta["candidatas_props"] = len(props)
     partido = dp.elegir_combinada_del_partido(
-        dp.sin_selecciones([*cands, *props], (s.candidata for s in simples)),
+        dp.sin_selecciones(todas, (s.candidata for s in simples)),
     )
     if partido is not None:
         partido_json = dp.combinada_del_partido_a_dict(
@@ -382,9 +405,18 @@ class PicksDeHoy:
     fila: FeaturedDailyPick | None = None
     motivo: str | None = None
     cuotas_actualizadas: bool = False
+    #: Con ``sin_partidos``: inicio del próximo partido programado (``None`` si no hay ninguno).
+    proximo_partido: datetime | None = None
 
 
 MOTIVO_SIN_PARTIDOS = "Hoy no quedan partidos por empezar"
+
+
+def _sin_partidos(session: Session, hasta: datetime) -> PicksDeHoy:
+    """``sin_partidos`` con el próximo partido a partir de mañana (los de hoy ya no valen)."""
+    return PicksDeHoy(
+        "sin_partidos", motivo=MOTIVO_SIN_PARTIDOS, proximo_partido=proximo_partido(session, hasta),
+    )
 
 
 def consultar_picks_de_hoy(session: Session, ahora: datetime | None = None) -> PicksDeHoy | None:
@@ -400,7 +432,7 @@ def consultar_picks_de_hoy(session: Session, ahora: datetime | None = None) -> P
         return PicksDeHoy("listo", fila)
     desde, hasta = ventana_del_dia(ahora, get_settings().picks_kickoff_margin_minutes)
     if not partidos_del_dia(session, desde, hasta):
-        return PicksDeHoy("sin_partidos", motivo=MOTIVO_SIN_PARTIDOS)
+        return _sin_partidos(session, hasta)
     return None
 
 
@@ -427,7 +459,7 @@ def asegurar_picks_de_hoy(
     desde, hasta = ventana_del_dia(ahora, cfg.picks_kickoff_margin_minutes)
     ids = partidos_del_dia(session, desde, hasta)
     if not ids:
-        return PicksDeHoy("sin_partidos", motivo=MOTIVO_SIN_PARTIDOS)
+        return _sin_partidos(session, hasta)
 
     actualizadas = False
     if actualizar_cuotas and cuotas_viejas(
@@ -599,8 +631,21 @@ def _tasa(hits: int, misses: int) -> float | None:
     return round(1000.0 * hits / settled) / 10.0 if settled > 0 else None
 
 
+def metricas_simples_por_props(simples: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Acierto de las simples de props (experimentales, reglas v5) y del resto, por separado."""
+    def resumen(legs: list[dict[str, Any]]) -> dict[str, Any]:
+        c = _cuenta([str(lg.get("result") or "pending") for lg in legs])
+        return {**c, "rate_pct": _tasa(c["hits"], c["misses"])}
+
+    return {
+        "simples_con_props": resumen([lg for lg in simples if lg.get("experimental")]),
+        "simples_sin_props": resumen([lg for lg in simples if not lg.get("experimental")]),
+    }
+
+
 def aggregate_leg_metrics(session: Session) -> dict[str, Any]:
-    """Acierto de las simples (todas, con valor y sin valor) y de las combinadas."""
+    """Acierto de las simples (todas, con valor y sin valor, con y sin props) y de las
+    combinadas."""
 
     rows = session.scalars(select(FeaturedDailyPick)).all()
     simples = [lg for row in rows for lg in simples_corregidas(row)]
@@ -639,6 +684,7 @@ def aggregate_leg_metrics(session: Session) -> dict[str, Any]:
         "novalue_hits": sin_valor["hits"],
         "novalue_misses": sin_valor["misses"],
         "novalue_rate_pct": _tasa(sin_valor["hits"], sin_valor["misses"]),
+        **metricas_simples_por_props(simples),
         "combos_total": len(combos),
         "combo_hits": combo["hits"],
         "combo_misses": combo["misses"],
@@ -664,6 +710,7 @@ __all__ = [
     "combinada_corregida",
     "combinada_del_partido_corregida",
     "metricas_combinada_del_partido",
+    "metricas_simples_por_props",
     "consultar_picks_de_hoy",
     "cuotas_viejas",
     "dia_de_picks",

@@ -7,7 +7,10 @@ hilo lo mismo que ``refresh_programado.ps1``, en el mismo orden:
 
 1. ``DailyRefreshOrchestrator``: calendario, resultados, clasificación, stats y bajas (Flashscore).
 2. Cuotas de Winamax de los próximos 5 días, todas las ligas.
-3. Picks del día si faltan. Van al final porque se congelan: así salen con las stats al día.
+3. Comparador de cuotas de Flashscore (bet365 y otras casas), solo ingesta: va tras Winamax para
+   que los partidos con cuotas de Winamax ya estén y se lean primero. Se apaga con
+   ``COMPARADOR_CUOTAS_ENABLED=false``.
+4. Picks del día si faltan. Van al final porque se congelan: así salen con las stats al día.
 
 Quién está corriendo lo sabe el proceso (un único uvicorn, como el limitador de peticiones). Si
 la API se reinicia a mitad (``--reload``), el hilo muere y su fila se queda sin ``finished_at``.
@@ -29,6 +32,7 @@ from backend.app.database import get_session_factory
 from backend.models import Match, RefreshRun
 from backend.models.match import MATCH_STATUS_SCHEDULED
 from backend.models.refresh_run import REFRESH_ORIGEN_APP
+from backend.services.comparador_cuotas_ingester import ejecutar_paso_comparador
 from backend.services.daily_refresh import DailyRefreshOrchestrator
 from backend.services.featured_daily_picks import asegurar_picks_de_hoy
 from backend.services.winamax_odds_ingester import WinamaxOddsIngester
@@ -116,7 +120,7 @@ def historial_de_refresh(session: Session) -> Historial:
 
 
 def ejecutar_pipeline(session: Session, *, log: logging.Logger) -> list[str]:
-    """Los tres pasos de ``refresh_programado.ps1``. Si uno falla, siguen los demás."""
+    """Los pasos de ``refresh_programado.ps1``, en su orden. Si uno falla, siguen los demás."""
     errores = list(DailyRefreshOrchestrator(session, log=log).run().errors)
 
     log.info("Cuotas Winamax (próximos %d días)...", WINAMAX_DIAS)
@@ -136,6 +140,9 @@ def ejecutar_pipeline(session: Session, *, log: logging.Logger) -> list[str]:
         session.rollback()
         log.exception("Cuotas Winamax: fallo")
         errores.append(f"winamax: {exc}")
+
+    # No lanza: sus fallos vuelven como errores y los picks salen igual.
+    errores.extend(ejecutar_paso_comparador(session, log=log).errores)
 
     log.info("Picks del día...")
     try:

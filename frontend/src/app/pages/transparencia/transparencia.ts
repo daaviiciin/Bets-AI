@@ -5,9 +5,21 @@ import { forkJoin, of } from 'rxjs';
 import { catchError, finalize, map, switchMap, tap } from 'rxjs/operators';
 
 import { ApiService } from '../../core/api.service';
+import {
+  estadoLabel,
+  filasProps,
+  metricasCombinadaPartido,
+  resumenPatas,
+  simplesPorProps,
+} from '../../core/combinada-partido';
 import { fmtCuota, fmtDayName, fmtEv, fmtProb, fmtTime } from '../../core/format';
 import { selectionLabel } from '../../core/markets';
-import type { FeaturedDailyPickRow, FeaturedPicksMetrics, PickLeg } from '../../core/models';
+import type {
+  FeaturedDailyPickRow,
+  FeaturedPicksMetrics,
+  MatchCombo,
+  PickLeg,
+} from '../../core/models';
 import { Icon } from '../../shared/icon';
 import { TvCifra, TvEntra } from '../../shared/tv-motion';
 
@@ -25,9 +37,11 @@ const ESTADO: Record<string, string> = {
 };
 
 /**
- * Transparencia: los picks que el modelo elige cada día (simples y combinada), congelados antes
- * de los partidos y liquidados después con los marcadores. No se borra ningún fallo: es el
- * historial con el que se mide el modelo.
+ * Transparencia: los picks que el modelo elige cada día (simples, combinada y combinada del
+ * partido), congelados antes de los partidos y liquidados después con los marcadores. No se
+ * borra ningún fallo: es el historial con el que se mide el modelo. La combinada del partido se
+ * mide aparte, y sus props (experimentales) por familia; las simples de props (reglas v5),
+ * aparte de las demás.
  */
 @Component({
   selector: 'app-transparencia',
@@ -69,6 +83,19 @@ const ESTADO: Record<string, string> = {
     .sin-valor {
       font-weight: 700;
       color: var(--color-tv-doubt);
+    }
+
+    /* Props de jugador (simples, combinadas): aún sin historial de picks reales. */
+    .experimental {
+      padding: 0 4px;
+      font-family: var(--font-sans);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 16px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--color-tv-doubt);
+      border: 1px solid color-mix(in oklab, var(--color-tv-doubt) 45%, transparent);
     }
   `,
 })
@@ -118,6 +145,13 @@ export class Transparencia {
     return `Modelo v2 (${version})`;
   }
   protected readonly fmtEntero = (v: number | null) => (v == null ? '—' : String(Math.round(v)));
+
+  /** Combinada del partido, medida aparte (null si el backend no trae sus métricas). */
+  protected readonly partido = computed(() => metricasCombinadaPartido(this.metrics()));
+  /** Acierto de sus patas de props por familia (tiros a puerta, goleador, paradas). */
+  protected readonly propsPartido = computed(() => filasProps(this.partido()));
+  /** Simples con y sin props (reglas v5); null hasta que haya alguna simple de props. */
+  protected readonly simplesProps = computed(() => simplesPorProps(this.metrics()));
 
   constructor() {
     this.reload();
@@ -170,6 +204,16 @@ export class Transparencia {
 
   protected estado(r: string | undefined): string {
     return ESTADO[r ?? 'pending'] ?? 'Pendiente';
+  }
+
+  /** Estado de una pata de la combinada del partido ("Nula", en femenino). */
+  protected estadoPata(r: string | undefined): string {
+    return estadoLabel(r);
+  }
+
+  /** "1 de 2 acertadas · 1 pendiente"; null mientras ninguna tiene resultado. */
+  protected resumenPartido(c: MatchCombo): string | null {
+    return resumenPatas(c.legs);
   }
 
   private load$() {

@@ -87,6 +87,16 @@ export function fmtEv(v: string | number | null | undefined): string {
   return `${n > 0 ? '+' : ''}${n} %`;
 }
 
+/**
+ * Ventaja frente al mercado con un decimal: ``0.0625`` → ``"+6,3 %"``. En el baremo de 3 a
+ * 15 % el decimal importa (``fmtEv`` redondearía 3,4 y 3,6 a 3 y 4).
+ */
+export function fmtVentaja(v: string | number | null | undefined): string {
+  if (v == null || v === '') return '–';
+  const n = Math.round(toNumber(v) * 1000) / 10;
+  return `${n > 0 ? '+' : ''}${n.toFixed(1).replace('.', ',')} %`;
+}
+
 /** Clave de día local (``2026-10-16``) para agrupar partidos. */
 export function dayKey(iso: string): string {
   const d = new Date(iso);
@@ -104,6 +114,17 @@ export function fmtDayName(iso: string, now = new Date()): string {
   const d = new Date(iso);
   const weekday = d.toLocaleDateString('es-ES', { weekday: 'long' });
   return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${d.getDate()}`;
+}
+
+/**
+ * Cuándo habrá picks si hoy no queda ningún partido: "Próximos picks: mañana (primer partido a
+ * las 20:30)" / "Próximos picks: el viernes 20 (…)". Sin calendario, lo dice.
+ */
+export function fmtProximosPicks(iso: string | null | undefined, now = new Date()): string {
+  if (!iso) return 'Aún no hay partidos en el calendario';
+  const dia = fmtDayName(iso, now);
+  const cuando = dia === 'Mañana' ? 'mañana' : `el ${dia.toLowerCase()}`;
+  return `Próximos picks: ${cuando} (primer partido a las ${fmtTime(iso)})`;
 }
 
 /** "Viernes 16 oct · 21:00". */

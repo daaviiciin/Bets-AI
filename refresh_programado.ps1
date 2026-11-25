@@ -1,7 +1,8 @@
 ﻿# Bets AI - refresh programado (lo lanza el Programador de tareas de Windows).
 # Ejecuta el pipeline diario de Flashscore (calendario, resultados, clasificación,
 # stats de equipo/jugador y bajas) con los límites por refresh del CLI, después
-# las cuotas Winamax de los próximos 5 días y, si faltan, los picks del día.
+# las cuotas Winamax de los próximos 5 días, el comparador de cuotas de Flashscore
+# (bet365 y otras casas, solo ingesta) y, si faltan, los picks del día.
 # NO toca la Odds API (de pago).
 # Log por día en logs\refresh_AAAA-MM-DD.log
 
@@ -77,6 +78,14 @@ Write-Log 'Cuotas Winamax (próximos 5 días)...'
     ForEach-Object { "$_" } | Out-File -Append -Encoding utf8 $log
 $oddsCode = $LASTEXITCODE
 if ($code -eq 0) { $code = $oddsCode }
+
+# Comparador de cuotas de Flashscore (bet365, Winamax y otras casas españolas), solo ingesta.
+# Después de Winamax (sus partidos van primero) y antes de los picks. 1 petición por partido,
+# tope COMPARADOR_CUOTAS_MAX_PARTIDOS; se apaga con COMPARADOR_CUOTAS_ENABLED=false.
+# Un fallo aquí se apunta en el log pero no cambia el código de salida ni frena los picks.
+Write-Log 'Comparador de cuotas (Flashscore)...'
+& $python -m backend.tools.import_comparador_cuotas 2>&1 | ForEach-Object { "$_" } | Out-File -Append -Encoding utf8 $log
+if ($LASTEXITCODE -ne 0) { Write-Log "AVISO: el comparador de cuotas terminó con código $LASTEXITCODE (se sigue)." }
 
 # Picks del día (día de Madrid): se generan y congelan una vez, con las cuotas recién bajadas.
 # Si ya se abrió la app hoy, ya existen y esto no hace nada.

@@ -54,6 +54,7 @@ def _today_out(res: PicksDeHoy) -> FeaturedTodayOut:
     return FeaturedTodayOut(
         estado=res.estado,
         motivo=res.motivo,
+        proximo_partido=res.proximo_partido,
         cuotas_actualizadas=res.cuotas_actualizadas,
         pick=_serialize(res.fila) if res.fila is not None else None,
     )

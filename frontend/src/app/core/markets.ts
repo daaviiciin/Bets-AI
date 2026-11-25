@@ -132,6 +132,7 @@ const MARKETS: Record<string, MarketMeta> = {
   player_sot_alt: { label: 'Tiros a puerta del jugador', group: 'jugadores', order: 65 },
   player_shots: { label: 'Tiros del jugador', group: 'jugadores', order: 66 },
   player_shots_alt: { label: 'Tiros del jugador', group: 'jugadores', order: 66 },
+  player_saves: { label: 'Paradas del portero', group: 'jugadores', order: 66 },
   player_saves_alt: { label: 'Paradas del portero', group: 'jugadores', order: 66 },
   player_card_yes_no: { label: 'Tarjeta al jugador', group: 'jugadores', order: 67 },
   player_assists_alt: { label: 'Asistencias del jugador', group: 'jugadores', order: 68 },
@@ -240,6 +241,7 @@ const PLAYER_LADDERS: Record<string, { noun: string; plus: boolean }> = {
   player_sot_alt: { noun: 'tiros a puerta', plus: true },
   player_shots: { noun: 'tiros', plus: true },
   player_shots_alt: { noun: 'tiros', plus: true },
+  player_saves: { noun: 'paradas', plus: false },
   player_saves_alt: { noun: 'paradas', plus: false },
 };
 
